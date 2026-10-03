@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#070809"><title>STAYLOUD / Music Radar</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap');
+:root{--bg:#050607;--panel:#0b0e12;--panel2:#0f1318;--line:#27303a;--red:#e50914;--red2:#ff2733;--white:#f5f5f5;--muted:#8e99a5;--soft:#c6ccd2;--max:1440px}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at 50% -10%,#15191e 0,#050607 35%);color:var(--white);font-family:Inter,Arial,sans-serif;min-height:100vh}.sticky-shell{position:sticky;top:0;z-index:1000;background:#050607;box-shadow:0 8px 22px rgba(0,0,0,.42)}.sticky-shell .wrap{padding-bottom:0}.nav-wrap{background:#050607}.nav-container{padding-top:0;padding-bottom:0}.top-controls{padding-top:0;padding-bottom:14px}.content-wrap{padding-top:1px}a{color:inherit}.wrap{max-width:var(--max);margin:auto;padding:0 22px 90px}.hero{position:relative;overflow:hidden;border-bottom:1px solid #20262d;background:#050607}.hero-img{display:block;width:100%;height:auto;min-height:105px;max-height:230px;object-fit:cover;object-position:center}.brand{display:none}.brand-main{font:900 clamp(58px,9vw,118px)/.76 'Barlow Condensed';letter-spacing:-.025em;text-transform:uppercase}.brand-main .white{color:#eee}.brand-main .red{color:var(--red)}.brand-sub{font:700 clamp(16px,2vw,26px)/1 'Barlow Condensed';letter-spacing:.38em;margin:13px 0 0 10px;color:#ddd}.tagline{font:600 11px 'Barlow Condensed';letter-spacing:.35em;color:#aab0b6;margin:12px 0 0 12px}.slash{color:var(--red);margin:0 8px}.searchbar{position:relative;z-index:50;display:flex;gap:10px;margin-top:18px}.searchbar input,.select{height:48px;pointer-events:auto;user-select:text;-webkit-user-select:text;background:rgba(8,11,14,.95);border:1px solid var(--line);color:#fff;border-radius:10px;padding:0 15px;outline:none;width:100%}.searchbar input:focus,.select:focus{border-color:var(--red)}.btn{height:48px;border:0;border-radius:10px;padding:0 24px;background:linear-gradient(180deg,var(--red2),#b90009);color:white;font-weight:800;white-space:nowrap;cursor:pointer}.status{font-size:12px;color:var(--muted);margin:9px 0}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#36d58a;margin-right:7px}.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin:16px 0}.nav button{height:52px;border:1px solid var(--line);background:var(--panel);color:#d6d9dc;border-radius:9px;font:600 14px Inter,Arial,sans-serif;cursor:pointer;letter-spacing:0}.nav button.active{background:linear-gradient(180deg,#e51620,#b60008);border-color:#ff3b43;color:white}.section{display:none}.section.active{display:block}.eyebrow{font:800 20px 'Barlow Condensed';letter-spacing:.14em;text-transform:uppercase;border-left:5px solid var(--red);padding-left:12px;margin:22px 0 12px}.subtitle{font-size:12px;color:var(--muted);margin:-5px 0 14px 17px}.layout3{display:grid;grid-template-columns:1.35fr .85fr .78fr;gap:14px}.panel{background:linear-gradient(145deg,#0c1015,#07090b);border:1px solid var(--line);border-radius:11px;overflow:hidden}.panel-head{padding:13px 14px;border-bottom:1px solid #202830;display:flex;gap:10px;justify-content:space-between;align-items:center}.panel-head .select{height:38px;width:auto;min-width:150px}.news-card{display:grid;grid-template-columns:150px 1fr auto;gap:13px;padding:11px;border-bottom:1px solid #20262c}.thumb{height:88px;border-radius:8px;background-size:cover;background-position:center;filter:grayscale(.65) contrast(1.08)}.cat{font:800 12px 'Barlow Condensed';color:var(--red);letter-spacing:.12em}.news-title{font-weight:800;font-size:15px;line-height:1.25;margin:3px 0}.desc{font-size:12px;color:#9da6af;line-height:1.35}.meta{text-align:right;white-space:nowrap;font-size:11px;color:#b7bdc4}.meta strong{display:block;color:#fff;font-size:12px}.open{font-size:20px;color:#fff;text-decoration:none;display:inline-block;margin-top:12px}.event{display:grid;grid-template-columns:62px 48px 1fr 18px;gap:9px;align-items:center;padding:10px;border-bottom:1px solid #20262c}.event-date{font:900 24px/1 'Barlow Condensed';text-align:center}.event-date small{display:block;font-size:10px;color:#9ca5ae;letter-spacing:.08em}.event-img{width:48px;height:48px;border-radius:6px;background-size:cover;background-position:center;filter:grayscale(.6)}.event-name{font-weight:800;font-size:12px}.event-place{font-size:10px;color:#929ca6;margin-top:4px}.clip{display:grid;grid-template-columns:95px 1fr;gap:9px;padding:9px;border-bottom:1px solid #20262c}.clip-img{height:65px;border-radius:6px;background-size:cover;background-position:center;position:relative}.play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:rgba(229,9,20,.92);display:grid;place-items:center}.clip-title{font-size:12px;font-weight:800;line-height:1.25}.clip-age{font-size:10px;color:#89939d;margin-top:5px}.wide-btn{display:block;margin:10px;border:1px solid var(--line);border-radius:8px;text-align:center;padding:10px;text-decoration:none;font-size:12px;font-weight:800}.styles{display:grid;grid-template-columns:repeat(10,1fr);gap:8px}.style-card{height:135px;border:1px solid var(--line);border-radius:9px;overflow:hidden;position:relative;background-size:cover;background-position:center;cursor:pointer}.style-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 20%,rgba(0,0,0,.9))}.style-card .sname{position:absolute;z-index:2;left:9px;bottom:27px;font:800 17px 'Barlow Condensed';letter-spacing:.04em}.style-card .scount{position:absolute;z-index:2;left:9px;bottom:9px;color:#aab2ba;font-size:10px}.groups-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.group-card{border:1px solid var(--line);background:var(--panel);border-radius:9px;overflow:hidden}.group-img{height:115px;background-size:cover;background-position:center;filter:grayscale(.5)}.group-body{padding:9px}.group-name{font:800 19px 'Barlow Condensed'}.group-style{font-size:10px;color:var(--red);margin-top:3px}.group-actions{display:flex;gap:5px;margin-top:8px}.mini{border:1px solid var(--line);background:#0b0e12;color:#fff;border-radius:7px;padding:6px 9px;cursor:pointer}.filters{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.empty{padding:35px;text-align:center;color:var(--muted)}.style-list{display:grid;grid-template-columns:1fr;gap:14px}.style-row{border:1px solid var(--line);background:var(--panel);border-radius:9px;overflow:hidden}.style-summary{list-style:none;cursor:pointer;padding:14px;display:flex;align-items:center;justify-content:space-between;gap:12px}.style-summary::-webkit-details-marker{display:none}.style-summary:after{content:'+';font:700 22px 'Barlow Condensed';color:var(--red)}.style-row[open] .style-summary:after{content:'−'}.style-summary h3{font:800 24px 'Barlow Condensed';margin:0 0 4px}.style-summary p{margin:0;color:var(--muted);font-size:12px}.style-groups{padding:0 12px 12px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}.style-group{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#080b0e;cursor:pointer;transition:border-color .15s,transform .15s}.style-group:hover{border-color:#59636d;transform:translateY(-1px)}.style-group-img{height:145px;background-size:cover;background-position:center}.style-group-body{padding:8px}.style-group-name{font:800 20px 'Barlow Condensed'}.style-group-meta{font-size:10px;color:var(--muted);margin-top:3px}.style-group select{margin-top:7px;width:100%;height:32px;background:#0b0e12;border:1px solid var(--line);color:#fff;border-radius:6px;padding:0 7px;font-size:11px}.article-photo{background-size:cover;background-position:center;filter:none}.photo-credit{font-size:9px;color:#737d87;margin-top:4px}.style-empty{grid-column:1/-1;padding:10px;color:var(--muted);font-size:12px}.artist-profile{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.5fr);gap:18px}.profile-hero{min-height:360px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:linear-gradient(145deg,#0c1015,#07090b)}.profile-photo{width:100%;height:360px;background-size:cover;background-position:center}.profile-photo-empty{height:360px;display:grid;place-items:center;color:var(--muted);font-size:13px}.profile-body{border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#0c1015,#07090b);padding:22px}.profile-title{font:900 48px/.95 'Barlow Condensed';margin:0 0 8px}.profile-meta{font-size:12px;color:var(--muted);margin-bottom:18px}.profile-desc{font-size:14px;line-height:1.6;color:#d5d9dd;white-space:pre-line}.profile-links{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}.profile-delete{border-color:#7c1118;background:#25090c;color:#ff7c84}.profile-link{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:8px 11px;text-decoration:none;font-size:11px;font-weight:800;background:#0b0e12;color:#ff7c84}.profile-links .profile-link:not(.profile-add){color:#ff7c84}.profile-add{background:linear-gradient(180deg,var(--red2),#b90009);border-color:#ff3b43;color:#fff;cursor:pointer}.profile-add:disabled{opacity:.75;cursor:default}.profile-albums{margin-top:18px}.profile-section-title{font:800 24px 'Barlow Condensed';border-left:4px solid var(--red);padding-left:9px;margin:0 0 10px}.album-latest{border:1px solid var(--line);border-radius:10px;padding:14px;background:#080b0e;margin-bottom:12px;display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:center}.album-cover{width:110px;height:110px;border-radius:8px;object-fit:cover;background:#11161b;border:1px solid var(--line)}.album-label{font:800 11px 'Barlow Condensed';letter-spacing:.12em;color:var(--red);text-transform:uppercase}.album-name{font:900 28px 'Barlow Condensed';margin-top:4px}.album-year{font-size:11px;color:var(--muted);margin-top:4px}.album-list{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.album-item{border:1px solid var(--line);border-radius:8px;padding:10px;background:#080b0e;display:grid;grid-template-columns:90px 1fr;gap:10px;align-items:center}.album-cover-small{width:90px;height:90px;border-radius:7px;object-fit:cover;background:#11161b;border:1px solid var(--line)}.album-item-name{font:800 17px 'Barlow Condensed'}.album-item-year{font-size:10px;color:var(--muted);margin-top:3px}.album-play{margin-top:8px;border:1px solid #343c45;background:#0b0e12;color:#fff;border-radius:7px;padding:6px 9px;font-size:10px;font-weight:800;cursor:pointer}.album-play:hover{border-color:#e50914}.album-player{margin-top:8px;padding:9px;border:1px solid #252c34;border-radius:8px;background:#06080a}.album-player audio{width:100%;height:32px;display:block}.album-preview-note{font-size:9px;color:#737d87;margin-top:4px}.album-player-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;font-weight:800}.album-player-title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.album-player-close{border:1px solid #343c45;background:#0b0e12;color:#fff;border-radius:6px;padding:3px 7px;cursor:pointer}.album-player-controls{display:flex;gap:6px;margin-top:7px}.album-player-nav{border:1px solid #343c45;background:#0b0e12;color:#fff;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:10px;font-weight:800}.album-player-nav:disabled{opacity:.35;cursor:default}.album-player-count{margin-left:auto;color:#737d87;font-size:9px;align-self:center}.back-btn{margin-bottom:12px}.profile-loading{padding:40px;text-align:center;color:var(--muted)}.profile-name-btn{display:block;width:100%;border:0;background:none;color:#fff;text-align:left;padding:0;margin:0;cursor:pointer}.profile-name-btn:hover{color:#ff5861}
+.mobile-bottom{display:none}.discover-head{display:flex;justify-content:space-between;align-items:end;gap:12px;flex-wrap:wrap;position:relative;z-index:100}.discover-tools{display:flex;gap:8px;align-items:center;position:relative;z-index:1000}.discover-tools .select{width:auto;min-width:180px}.location-input{height:48px;width:220px;min-width:220px;position:relative;z-index:1001;pointer-events:auto!important;user-select:text!important;-webkit-user-select:text!important;cursor:text;background:rgba(8,11,14,.98);border:1px solid var(--line);color:#fff;border-radius:10px;padding:0 15px;outline:none;font:inherit}.location-input:focus{border-color:var(--red);box-shadow:0 0 0 2px rgba(229,9,20,.18)}.discover-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}.discover-card{display:grid;grid-template-columns:110px 1fr;gap:10px;border-bottom:1px solid #20262c;padding:10px}.discover-img{height:90px;border-radius:8px;background-size:cover;background-position:center}.discover-name{font:800 21px 'Barlow Condensed'}.discover-style{font-size:11px;color:var(--red);margin-top:3px}.discover-meta{font-size:11px;color:var(--muted);margin-top:5px}.location-box{padding:13px;border-bottom:1px solid #20262c;color:var(--muted);font-size:12px}.location-box strong{color:#fff}.discover-event{display:grid;grid-template-columns:58px 1fr 18px;gap:9px;padding:10px;border-bottom:1px solid #20262c}.discover-event-date{font:900 21px/1 'Barlow Condensed';text-align:center}.discover-event-date small{display:block;font-size:9px;color:#9ca5ae}.discover-event-name{font-weight:800;font-size:12px}.discover-event-place{font-size:10px;color:#929ca6;margin-top:4px}.discover-style-block{margin-bottom:14px}.discover-style-title{font:800 22px 'Barlow Condensed';border-left:4px solid var(--red);padding-left:9px;margin:0 0 7px}.discover-style-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.discover-status{color:var(--muted);font-size:12px;padding:12px}.location-btn{height:38px}.discover-empty{padding:25px;text-align:center;color:var(--muted)}.festival-event{display:grid;grid-template-columns:58px 1fr 18px;gap:9px;padding:10px;border-bottom:1px solid #20262c}.festival-date{font:900 21px/1 'Barlow Condensed';text-align:center}.festival-date small{display:block;font-size:9px;color:#9ca5ae}.festival-name{font-weight:800;font-size:12px}.festival-place{font-size:10px;color:#929ca6;margin-top:4px}.festival-badge{display:inline-block;margin-top:5px;padding:2px 6px;border:1px solid #5d1c22;border-radius:999px;color:#ff5861;font-size:9px;font-weight:800}.festival-note{padding:10px;color:var(--muted);font-size:11px;border-bottom:1px solid #20262c}
+@media(max-width:1050px){.layout3{grid-template-columns:1fr 1fr}.layout3>.panel:first-child{grid-column:1/-1}.styles{grid-template-columns:repeat(5,1fr)}.groups-grid{grid-template-columns:repeat(4,1fr)}.style-groups{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:700px){.wrap{padding:0 12px 84px}.hero-img{min-height:88px;object-fit:cover}.brand{display:none}.searchbar{gap:7px}.searchbar input{height:45px}.btn{height:45px;padding:0 15px}.nav{display:none}.layout3{display:block}.panel{margin-bottom:12px}.news-card{grid-template-columns:78px 1fr;gap:9px}.news-card .meta{grid-column:2;text-align:left}.thumb{height:78px}.news-title{font-size:14px}.desc{display:none}.panel-head .select{min-width:0;max-width:150px}.styles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px}.style-card{min-width:145px;scroll-snap-align:start}.groups-grid{grid-template-columns:repeat(2,1fr)}.group-img{height:100px}.style-list{grid-template-columns:1fr}.style-groups{grid-template-columns:repeat(3,minmax(0,1fr))}.discover-grid{display:block}.discover-tools{width:100%}.discover-tools .select{flex:1;min-width:0}.location-input{flex:1;min-width:0;width:auto}.discover-style-cards{grid-template-columns:repeat(2,1fr)}.discover-card{grid-template-columns:82px 1fr}.discover-img{height:76px}.discover-event{grid-template-columns:52px 1fr 16px}.artist-profile{grid-template-columns:1fr}.profile-photo,.profile-photo-empty{height:300px}.profile-title{font-size:40px}.album-list{grid-template-columns:1fr}.filters{grid-template-columns:1fr}.mobile-bottom{display:grid;position:fixed;z-index:20;left:0;right:0;bottom:0;grid-template-columns:repeat(5,1fr);background:rgba(7,9,11,.96);border-top:1px solid #252c33;padding:7px 6px calc(7px + env(safe-area-inset-bottom));backdrop-filter:blur(10px)}.mobile-bottom button{background:none;border:0;color:#9fa7af;font-size:10px;font-weight:800}.mobile-bottom button.active{color:#fff}.mobile-bottom span{display:block;font-size:18px;margin-bottom:2px}}
+@media(max-width:900px){.artist-profile{grid-template-columns:1fr}.profile-photo,.profile-photo-empty{height:300px}.album-list{grid-template-columns:1fr}.style-groups{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:560px){.style-groups{grid-template-columns:1fr}.style-group-img{height:170px}.album-latest{grid-template-columns:90px 1fr}.album-cover{width:90px;height:90px}}
+/* Ajustement espacement haut de page : le grand vide venait du padding-bottom global de .wrap. */
+.wrap.top-controls{padding-bottom:8px!important;}
+.top-controls .status{margin-bottom:0;}
+.content-wrap{padding-top:0!important;}
+
+.add-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);z-index:5000;display:none;align-items:center;justify-content:center;padding:20px}.add-modal-backdrop.open{display:flex}.add-modal{width:min(920px,100%);max-height:min(88vh,820px);overflow:auto;background:linear-gradient(145deg,#10151b,#07090b);border:1px solid #303944;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.65);padding:22px}.add-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:18px}.add-modal-title{font:900 30px/.95 'Barlow Condensed';margin:0}.add-modal-sub{font-size:12px;color:var(--muted);margin-top:7px}.add-modal-close{border:1px solid var(--line);background:#0b0e12;color:#fff;border-radius:7px;padding:7px 10px;cursor:pointer}.candidate-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.candidate-card{border:1px solid var(--line);background:#090c10;border-radius:10px;padding:14px;text-align:left;color:#fff;cursor:pointer;transition:border-color .15s,transform .15s}.candidate-card:hover{border-color:#68727d;transform:translateY(-1px)}.candidate-name{font:800 23px 'Barlow Condensed'}.candidate-meta{font-size:11px;color:#aab2ba;line-height:1.5;margin-top:5px}.candidate-score{font-size:9px;color:#737d87;margin-top:8px}.candidate-card{display:grid;grid-template-columns:auto 1fr;column-gap:12px;row-gap:3px}.candidate-card .candidate-name,.candidate-card .candidate-meta,.candidate-card .candidate-source,.candidate-card .candidate-desc,.candidate-card .candidate-score{grid-column:2}.candidate-avatar{grid-column:1;grid-row:1 / span 6;width:76px;height:76px;object-fit:cover;border-radius:8px;background:#111}.candidate-source{font-size:9px;color:#7f8a95;line-height:1.35;margin-top:2px}.candidate-desc{font-size:10px;color:#c0c7ce;line-height:1.35;margin-top:5px}.candidate-card:has(.candidate-avatar){min-height:100px}.auto-photo-wrap{display:flex;justify-content:center}.auto-photo-card{width:min(360px,100%);border:1px solid var(--line);background:#090c10;border-radius:12px;overflow:hidden}.auto-photo-card img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#11161b}.auto-photo-info{display:flex;flex-direction:column;gap:3px;padding:12px}.auto-photo-info strong{font:800 22px 'Barlow Condensed'}.auto-photo-info span{font-size:10px;color:#89939d}.photo-choice-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.photo-choice-source{display:block;padding:0 8px 8px;font-size:8px;color:#707b86;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}.photo-choice{border:1px solid var(--line);border-radius:10px;background:#080b0e;overflow:hidden;cursor:pointer;position:relative;min-width:0;color:#fff;padding:0}.photo-choice:hover{border-color:#68727d}.photo-choice.selected{border-color:var(--red);box-shadow:0 0 0 2px rgba(229,9,20,.35)}.photo-choice img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;background:#11161b}.photo-choice-info{display:block;padding:8px;font-size:9px;color:#9da6af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}.photo-choice-check{position:absolute;right:7px;top:7px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#090c10d9;border:1px solid #56616c;font-size:13px}.photo-choice.selected .photo-choice-check{background:var(--red);border-color:var(--red);color:#fff}.add-modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid #202830}.add-modal-note{font-size:11px;color:var(--muted);margin-top:12px}.add-modal-loading{padding:40px;text-align:center;color:var(--muted)}.add-modal-error{padding:15px;border:1px solid #662027;background:#210a0d;color:#ff9aa0;border-radius:8px;font-size:12px}.modal-primary{height:42px;border:0;border-radius:8px;padding:0 18px;background:linear-gradient(180deg,var(--red2),#b90009);color:#fff;font-weight:800;cursor:pointer}.modal-primary:disabled{opacity:.45;cursor:default}.photo-none{display:flex;align-items:center;justify-content:center;aspect-ratio:1/1;padding:15px;text-align:center;color:#89939d;font-size:11px}.photo-choice-date{display:block;padding:0 8px 7px;font-size:8px;color:#89939d;text-align:left}.photo-refresh{margin-right:auto}.profile-photo-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.photo-edit-current{font-size:10px;color:var(--muted);margin-bottom:10px}.photo-edit-current strong{color:#fff}
+
+/* v7.12 — optimisation iPhone : conserve le bureau inchangé */
+@media (max-width: 700px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%;}
+  body{padding-bottom:env(safe-area-inset-bottom);}
+  .wrap{width:100%;max-width:100%;padding-left:12px;padding-right:12px;}
+  .hero-img{width:100%;height:82px;min-height:0;object-fit:cover;}
+  .searchbar{display:grid;grid-template-columns:1fr;gap:8px;}
+  .searchbar input,.searchbar .btn{width:100%;min-width:0;}
+  .discover-head{display:block;}
+  .discover-tools{display:grid;grid-template-columns:1fr;gap:8px;width:100%;}
+  .discover-tools .select,.location-input,.location-btn,.discover-tools button{width:100%;min-width:0;max-width:none;}
+  .panel-head{padding:11px 12px;}
+  .panel-head .select{max-width:48%;}
+  .discover-card{grid-template-columns:76px minmax(0,1fr);}
+  .discover-img{height:76px;}
+  .discover-event,.festival-event{grid-template-columns:50px minmax(0,1fr) 16px;gap:8px;}
+  .discover-event-name,.festival-name{font-size:13px;line-height:1.2;}
+  .discover-event-place,.festival-place{font-size:10px;}
+  .artist-profile{display:block;}
+  .profile-hero,.profile-body{width:100%;}
+  .profile-photo,.profile-photo-empty{height:min(78vw,330px);min-height:230px;}
+  .profile-body{margin-top:12px;padding:15px;}
+  .profile-title{font-size:38px;overflow-wrap:anywhere;}
+  .profile-desc{font-size:14px;}
+  .profile-links{display:grid;grid-template-columns:1fr;gap:8px;}
+  .profile-links .profile-link,.profile-links button{width:100%;text-align:center;min-height:42px;display:flex;align-items:center;justify-content:center;}
+  .album-latest{grid-template-columns:82px minmax(0,1fr);gap:11px;padding:11px;}
+  .album-cover{width:82px;height:82px;}
+  .candidate-grid{grid-template-columns:1fr;}
+  .add-modal-backdrop{padding:10px;}
+  .add-modal{max-height:92vh;padding:15px;border-radius:12px;}
+  .add-modal-title{font-size:26px;}
+  .photo-choice-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+  .auto-photo-card{width:100%;max-width:320px;}
+  .add-modal-footer{display:grid;grid-template-columns:1fr;gap:8px;}
+  .add-modal-footer button{width:100%;min-height:42px;}
+  .mobile-bottom{padding-bottom:calc(8px + env(safe-area-inset-bottom));}
+}
+@media (max-width: 390px){
+  .wrap{padding-left:9px;padding-right:9px;}
+  .profile-title{font-size:34px;}
+  .panel-head .select{max-width:45%;font-size:12px;}
+  .discover-card{grid-template-columns:68px minmax(0,1fr);}
+  .discover-img{height:68px;}
+}
+
+
+/* v7.13 — responsive refinement for iPhone portrait + landscape */
+@media (max-width: 700px) and (orientation: portrait){
+  .hero-img{height:clamp(72px,22vw,105px);min-height:0;max-height:105px;object-position:center;}
+  .wrap{padding-left:10px;padding-right:10px;}
+  .top-controls{padding-top:8px!important;}
+  .searchbar{gap:8px;}
+  .searchbar input,.searchbar .btn{min-height:46px;height:46px;}
+  .eyebrow{font-size:19px;margin-top:18px;}
+  .panel-head{min-height:48px;}
+  .style-groups{grid-template-columns:1fr 1fr;}
+  .style-group-img{height:130px;}
+  .groups-grid{grid-template-columns:1fr 1fr;}
+  .group-img{height:110px;}
+  .profile-photo,.profile-photo-empty{height:min(72vw,320px);min-height:210px;}
+  .add-modal-backdrop{padding:8px;}
+  .add-modal{width:100%;max-height:calc(100dvh - 16px);padding:14px;}
+}
+
+@media (min-width: 701px) and (max-width: 950px) and (orientation: landscape){
+  html,body{width:100%;max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%;}
+  body{padding-bottom:env(safe-area-inset-bottom);}
+  .wrap{width:100%;max-width:100%;padding-left:14px;padding-right:14px;padding-bottom:78px;}
+  .hero-img{height:72px;min-height:0;max-height:88px;object-fit:cover;object-position:center;}
+  .nav{display:none;}
+  .top-controls{padding-top:8px!important;padding-bottom:8px!important;}
+  .searchbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:8px;}
+  .searchbar input{height:44px;min-width:0;}
+  .searchbar .btn{height:44px;padding:0 18px;}
+  .layout3{display:block;}
+  .layout3>.panel{margin-bottom:10px;}
+  .styles{grid-template-columns:repeat(4,minmax(0,1fr));}
+  .groups-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .style-groups{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .style-group-img{height:125px;}
+  .discover-head{display:block;}
+  .discover-tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%;}
+  .discover-tools .select,.discover-tools .location-input,.discover-tools .location-btn,.discover-tools button{width:100%;min-width:0;max-width:none;}
+  .discover-grid{display:block;}
+  .artist-profile{display:grid;grid-template-columns:minmax(220px,.85fr) minmax(0,1.4fr);gap:12px;}
+  .profile-photo,.profile-photo-empty{height:250px;min-height:0;}
+  .profile-body{padding:16px;}
+  .profile-title{font-size:38px;}
+  .profile-links{gap:6px;}
+  .album-latest{grid-template-columns:82px minmax(0,1fr);gap:10px;padding:10px;}
+  .album-cover{width:82px;height:82px;}
+  .filters{grid-template-columns:1fr 1fr;}
+  .mobile-bottom{display:grid;position:fixed;z-index:4000;left:0;right:0;bottom:0;grid-template-columns:repeat(5,1fr);background:rgba(7,9,11,.96);border-top:1px solid #252c33;padding:6px 6px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(10px);}
+  .mobile-bottom button{background:none;border:0;color:#9fa7af;font-size:10px;font-weight:800;min-height:34px;}
+  .mobile-bottom button.active{color:#fff;}
+  .mobile-bottom span{display:block;font-size:17px;margin-bottom:1px;}
+  .add-modal-backdrop{padding:8px;}
+  .add-modal{width:min(920px,100%);max-height:calc(100dvh - 16px);padding:14px;}
+}
+
+@media (min-width: 701px) and (max-width: 950px) and (orientation: portrait){
+  .wrap{padding-left:14px;padding-right:14px;}
+  .nav{display:none;}
+  .mobile-bottom{display:grid;position:fixed;z-index:4000;left:0;right:0;bottom:0;grid-template-columns:repeat(5,1fr);background:rgba(7,9,11,.96);border-top:1px solid #252c33;padding:6px 6px calc(6px + env(safe-area-inset-bottom));backdrop-filter:blur(10px);}
+  .mobile-bottom button{background:none;border:0;color:#9fa7af;font-size:10px;font-weight:800;min-height:34px;}
+  .mobile-bottom button.active{color:#fff;}
+  .mobile-bottom span{display:block;font-size:17px;margin-bottom:1px;}
+}
+
+
+/* v7.13.4 — portrait: centered/cropped fixed banner; landscape: normal scrolling banner */
+@media (max-width:700px) and (orientation:portrait){
+  body{padding-top:82px;}
+  .sticky-shell{position:fixed;top:0;left:0;right:0;width:100%;z-index:4500;}
+  .hero{height:82px;}
+  .hero-img{width:100%;height:82px;min-height:0;max-height:none;object-fit:cover;object-position:center center;display:block;}
+}
+@media (min-width:701px) and (max-width:950px) and (orientation:landscape){
+  body{padding-top:0;}
+  .sticky-shell{position:static;}
+  .hero-img{width:100%;height:auto;min-height:0;max-height:none;object-fit:contain;object-position:center;display:block;}
+}
+
+/* v7.13.4 — STAYLOUD navigation icons: selected proposal + responsive banner */
+.nav button,.mobile-bottom button{color:#f1f3f5;}
+.nav button{display:flex;align-items:center;justify-content:center;gap:7px;background:var(--panel);}
+.nav button.active{background:var(--panel);border-color:var(--line);color:var(--red);}
+.nav-icon{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;flex:0 0 28px;}
+.nav-icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+.mobile-bottom button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#f1f3f5;}
+.mobile-bottom button.active{color:var(--red);}
+.mobile-bottom .nav-icon{width:30px;height:30px;}
+.mobile-bottom .nav-label{font-size:10px;font-weight:800;line-height:1.1;}
+@media(max-width:700px){.mobile-bottom .nav-icon{width:29px;height:29px}.mobile-bottom .nav-label{font-size:10px}.mobile-bottom button{min-height:44px;}}
+
+.auth-gate{position:fixed;inset:0;z-index:100000;background:radial-gradient(circle at 50% -10%,#15191e 0,#050607 45%);display:grid;place-items:center;padding:22px}.auth-gate.hidden{display:none}.auth-box{width:min(430px,100%);background:linear-gradient(145deg,#0d1116,#07090b);border:1px solid #2a333d;border-radius:14px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.6)}.auth-logo{font:900 58px/.8 'Barlow Condensed';letter-spacing:-.02em;margin-bottom:5px}.auth-logo .red{color:var(--red)}.auth-sub{color:var(--muted);font-size:12px;margin-bottom:20px}.auth-title{font:800 25px 'Barlow Condensed';margin:0 0 12px}.auth-form{display:grid;gap:10px}.auth-form input{height:48px;background:#090c10;border:1px solid var(--line);border-radius:9px;color:#fff;padding:0 13px;font:600 14px Inter,Arial,sans-serif;outline:none}.auth-form input:focus{border-color:var(--red)}.auth-error{min-height:18px;color:#ff727b;font-size:12px}.auth-note{color:#858f99;font-size:11px;line-height:1.45;margin-top:12px}.auth-switch{margin-top:16px;text-align:center;color:#9ba4ad;font-size:12px}.auth-switch button{border:0;background:none;color:#ff5a62;font-weight:800;cursor:pointer}.auth-forgot{margin-top:8px;text-align:center}.auth-forgot button{border:0;background:none;color:#aab2ba;font-size:11px;cursor:pointer}.auth-forgot button:hover{color:#fff}.auth-extra{display:none}.auth-extra.open{display:grid}.auth-email-note{font-size:10px;color:#89939d;line-height:1.4}.account-pill{display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#c7cdd3;font-size:11px}.account-pill button{border:1px solid #343d47;background:#0b0e12;color:#fff;border-radius:7px;padding:4px 8px;cursor:pointer}@media(max-width:700px){.auth-box{padding:20px}.auth-logo{font-size:52px}}
+</style></head><body>
+<div id="authGate" class="auth-gate"><div class="auth-box"><div class="auth-logo">STAY<span class="red">LOUD</span></div><div class="auth-sub">MUSIC RADAR · votre espace personnel</div><h1 id="authTitle" class="auth-title">Se connecter</h1><form id="authForm" class="auth-form"><input id="authUser" name="username" type="text" autocomplete="username" placeholder="Nom d'utilisateur" minlength="3" maxlength="32" required><input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Adresse e-mail" required><input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="6" required><div id="authError" class="auth-error"></div><button id="authSubmit" class="btn" type="submit">SE CONNECTER</button></form><div id="authForgot" class="auth-forgot"><button type="button" onclick="showForgotPassword()">Mot de passe oublié ?</button></div><div id="forgotBox" class="auth-extra"><input id="forgotEmail" type="email" autocomplete="email" placeholder="Votre adresse e-mail"><button id="forgotSubmit" class="btn" type="button" onclick="requestPasswordReset()">ENVOYER LE LIEN</button><div id="forgotMsg" class="auth-email-note"></div><button type="button" class="mini" onclick="hideForgotPassword()">Retour à la connexion</button></div><div id="authNote" class="auth-note">Chaque compte possède ses propres groupes, photos, descriptions, actualités et concerts associés.</div><div class="auth-switch"><span id="authSwitchText">Pas encore de compte ?</span> <button id="authSwitch" type="button">Créer un compte</button></div></div></div>
+<div id="resetGate" class="auth-gate hidden"><div class="auth-box"><div class="auth-logo">STAY<span class="red">LOUD</span></div><div class="auth-sub">RÉCUPÉRATION DU COMPTE</div><h1 class="auth-title">Nouveau mot de passe</h1><form id="resetForm" class="auth-form"><input id="resetPass" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe" minlength="6" required><input id="resetPass2" type="password" autocomplete="new-password" placeholder="Confirmer le mot de passe" minlength="6" required><div id="resetError" class="auth-error"></div><button class="btn" type="submit">ENREGISTRER LE NOUVEAU MOT DE PASSE</button></form><div class="auth-note">Le lien de récupération est temporaire et utilisable une seule fois.</div></div></div>
+<div class="sticky-shell">
+<header class="hero"><img class="hero-img" src="/stayloud-banner.png" alt="STAYLOUD Music Radar"></header>
+<div class="nav-wrap"><div class="wrap nav-container"><nav class="nav"><button class="active" data-s="radar"><span class="nav-icon"><i data-lucide="radar" aria-hidden="true"></i></span><span>Radar</span></button><button data-s="live"><span class="nav-icon"><i data-lucide="ticket" aria-hidden="true"></i></span><span>Concerts</span></button><button data-s="clips"><span class="nav-icon"><i data-lucide="clapperboard" aria-hidden="true"></i></span><span>Clips</span></button><button data-s="styles"><span class="nav-icon"><i data-lucide="mic" aria-hidden="true"></i></span><span>Styles/Groupes</span></button><button data-s="discover"><span class="nav-icon"><i data-lucide="scan-eye" aria-hidden="true"></i></span><span>Découvrir</span></button></nav></div></div>
+</div>
+<div class="wrap top-controls">
+<form class="searchbar" id="artistForm" autocomplete="off"><input id="name" type="text" inputmode="text" autocomplete="off" autocapitalize="words" spellcheck="false" tabindex="1" placeholder="Ajouter un groupe / artiste…" aria-label="Ajouter un groupe ou artiste"><button class="btn" id="add" type="submit">+ AJOUTER</button></form>
+<div id="status" class="status"><span class="dot"></span>Chargement…</div>
+</div>
+<div class="wrap content-wrap">
+<section id="radar" class="section active"><div class="eyebrow">Actualités récentes</div><div class="subtitle">Toute l'actualité de vos groupes suivis · Multi-sources</div><div class="layout3"><div class="panel"><div class="panel-head"><b>RADAR</b><select id="ra" class="select"></select></div><div id="feed"></div></div><div class="panel"><div class="panel-head"><b>Concerts à venir</b></div><div class="filters"><select id="la" class="select"></select><select id="co" class="select"></select></div><div id="eventsMini"></div><a class="wide-btn" href="#" onclick="show('live');return false">Voir tous les concerts →</a></div><div class="panel"><div class="panel-head"><b>Derniers clips</b></div><div id="clipsMini"></div><a class="wide-btn" href="#" onclick="show('clips');return false">Voir tous les clips →</a></div></div><div class="eyebrow">Explorer par style</div><div class="subtitle">Découvrez et classez vos groupes par scène musicale</div><div id="stylesHome" class="styles"></div></section>
+<section id="live" class="section"><div class="eyebrow">Concerts à venir</div><div class="subtitle">Vos groupes suivis · Bandsintown + InfoConcert + line-up</div><div class="filters"><select id="la2" class="select"></select><select id="co2" class="select"></select><button class="btn" id="refreshLiveBtn" type="button">↻ Actualiser les concerts</button></div><div class="panel"><div id="events"></div></div></section>
+<section id="clips" class="section"><div class="eyebrow">Clips vidéo</div><div class="subtitle">Accès direct aux clips et vidéos de vos groupes suivis</div><div id="clipsGrid" class="groups-grid"></div></section>
+
+<section id="styles" class="section"><div class="eyebrow">Styles / Groupes</div><div class="subtitle">Vos groupes suivis, classés par scène musicale. Déployez un style pour voir les groupes.</div><div id="stylesList" class="style-list"></div></section>
+<section id="artistProfile" class="section"><button id="profileBackBtn" class="mini back-btn" onclick="backFromProfile()">← Retour à Styles/Groupes</button><div id="artistProfileContent" class="profile-loading">Chargement du profil…</div></section>
+<section id="discover" class="section"><div class="discover-head"><div><div class="eyebrow">Découvrir</div><div class="subtitle">De nouveaux groupes, les concerts métal et les festivals proches de vous.</div></div><div class="discover-tools"><select id="discoverStyle" class="select"><option value="all">Tous les styles métal</option><option value="Metalcore">Metalcore</option><option value="Deathcore">Deathcore</option><option value="Hardcore">Hardcore</option><option value="Nu Metal">Nu Metal</option><option value="Death Metal">Death Metal</option><option value="Black Metal">Black Metal</option><option value="Thrash Metal">Thrash Metal</option><option value="Alternative">Alternative</option><option value="Post-Hardcore">Post-Hardcore</option><option value="Progressif">Progressif</option></select><input id="discoverLocation" class="location-input" type="text" inputmode="text" autocomplete="off" autocapitalize="words" spellcheck="false" tabindex="2" placeholder="Ville ou lieu (ex. Nantes)" aria-label="Ville ou lieu"> <select id="discoverRadius" class="select" aria-label="Distance autour de vous"><option value="5">5 km</option><option value="10">10 km</option><option value="20">20 km</option><option value="50" selected>50 km</option><option value="100">100 km</option></select><button class="btn location-btn" id="locate">Utiliser ma position</button><button class="btn location-btn" id="searchLocation" style="background:#171b20;border:1px solid #303942">Rechercher</button></div></div><div class="discover-grid"><div class="panel"><div class="panel-head"><b>Nouveaux groupes à découvrir</b></div><div id="discoverArtists"></div></div><div><div class="panel"><div class="panel-head"><b>Concerts métal près de vous</b></div><div id="locationBox" class="location-box">Position non chargée.</div><div id="discoverEvents"></div></div><div class="panel" style="margin-top:14px"><div class="panel-head"><b>Festivals proches</b></div><div class="location-box">Festivals musicaux repérés autour de vous. Le badge <strong>Métal détecté</strong> apparaît lorsque la source associe une programmation métal au festival.</div><div id="discoverFestivals"></div></div></div></div></section></div>
+<div id="addModal" class="add-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="addModalTitle"><div class="add-modal"><div class="add-modal-head"><div><h2 id="addModalTitle" class="add-modal-title">Ajouter un groupe</h2><div id="addModalSub" class="add-modal-sub"></div></div><button class="add-modal-close" type="button" onclick="closeAddModal()">✕</button></div><div id="addModalBody"></div><div id="addModalFooter" class="add-modal-footer"></div></div></div>
+<div id="bitHarvest" style="position:fixed;left:0;top:0;width:100vw;min-height:120px;height:80vh;max-height:80vh;overflow:auto;opacity:0.01;pointer-events:none;z-index:-1"></div>
+<div class="mobile-bottom"><button class="active" data-s="radar"><span class="nav-icon"><i data-lucide="radar" aria-hidden="true"></i></span><span class="nav-label">Radar</span></button><button data-s="live"><span class="nav-icon"><i data-lucide="ticket" aria-hidden="true"></i></span><span class="nav-label">Concerts</span></button><button data-s="clips"><span class="nav-icon"><i data-lucide="clapperboard" aria-hidden="true"></i></span><span class="nav-label">Clips</span></button><button data-s="styles"><span class="nav-icon"><i data-lucide="mic" aria-hidden="true"></i></span><span class="nav-label">Styles/Groupes</span></button><button data-s="discover"><span class="nav-icon"><i data-lucide="scan-eye" aria-hidden="true"></i></span><span class="nav-label">Découvrir</span></button></div>
+<script src="https://unpkg.com/lucide@0.468.0"></script>
+<script>
+// STAYLOUD 7.18 — manual city search is intentionally isolated from GPS.
+lucide.createIcons();
+let A=[],N=[],E=[],limit=5,currentProfileId=null,profileReturnSection='styles',discoverArtistsData=[],addWizard={rawName:'',candidate:null,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]},photoEdit={artistId:null,artist:null,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]},discoverEventsData=[],discoverFestivalsData=[],userPlace=null,userCoords=null,discoverRadius=50,locationMode='auto',currentDiscoverArtist=null;
+const styles=[['Alternative','alternative'],['Black Metal','black metal'],['Death Metal','death metal'],['Deathcore','deathcore'],['Hardcore','hardcore'],['Metalcore','metalcore'],['Nu Metal','nu metal'],['Post-Hardcore','post-hardcore'],['Progressif','progressive'],['Thrash Metal','thrash metal']];
+const photos={};
+const albumCovers={};
+const profileData={};
+const fallbackPhoto='';
+const KNOWN_PHOTOS={
+  gojira:'https://upload.wikimedia.org/wikipedia/commons/d/d2/Gojira_-_Rock_im_Park_2023_18.jpg'
+};
+const PHOTO_CACHE_KEY='stayloud-photo-cache-v2';
+function photoCacheGet(key){try{const d=JSON.parse(localStorage.getItem(PHOTO_CACHE_KEY)||'{}');const x=d[key];if(x&&x.ts&&Date.now()-x.ts<1000*60*60*24*30)return x.url||''}catch{}return null}
+function photoCacheSet(key,url){try{const d=JSON.parse(localStorage.getItem(PHOTO_CACHE_KEY)||'{}');d[key]={url:url||'',ts:Date.now()};localStorage.setItem(PHOTO_CACHE_KEY,JSON.stringify(d))}catch{}}
+async function findRealPhoto(name){
+  const clean=String(name||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').trim();
+  const key=clean.toLowerCase();
+  if(!clean)return '';
+  const cached=photoCacheGet(key); if(cached!==null)return cached;
+  try{
+    // Une seule requête Commons par groupe, avec un classement strict. Cela évite
+    // les 5 recherches successives qui rendaient Découvrir très lent.
+    const q=`"${clean}" band`;
+    const url='https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch='+encodeURIComponent(q)+'&gsrnamespace=6&gsrsort=relevance&gsrlimit=20&prop=imageinfo&iiprop=url|mime|extmetadata|timestamp&iiurlwidth=900&format=json&origin=*';
+    const r=await fetch(url,{cache:'force-cache'}); if(!r.ok){photoCacheSet(key,'');return ''}
+    const d=await r.json();
+    const pages=Object.values(d?.query?.pages||{});
+    const exact=new RegExp('(^|[^a-z0-9])'+key.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'([^a-z0-9]|$)','i');
+    const scored=pages.map(x=>{
+      const info=x.imageinfo?.[0]||{},meta=info.extmetadata||{};
+      const title=String(x.title||'').replace(/^File:/i,'').toLowerCase();
+      const desc=String(meta.ImageDescription?.value||'').replace(/<[^>]+>/g,' ').toLowerCase();
+      const all=title+' '+desc; let score=0;
+      if(exact.test(all))score+=20; else score-=12;
+      if(/live|concert|festival|tour|stage|band|groupe/.test(all))score+=8;
+      if(/logo|wordmark|icon|symbol|poster|flyer|album cover|pochette|portrait of|portrait d|single cover/.test(all))score-=30;
+      const mime=String(info.mime||''); if(!/^image\/(jpeg|png|webp)$/i.test(mime))score-=40;
+      return {...x,score,stamp:String(info.timestamp||'')};
+    }).sort((a,b)=>b.score-a.score || b.stamp.localeCompare(a.stamp));
+    const img=scored.find(x=>x.score>=20 && x.imageinfo?.[0]?.thumburl && /^image\/(jpeg|png|webp)$/i.test(String(x.imageinfo[0].mime||'')));
+    const out=img?.imageinfo?.[0]?.thumburl||''; photoCacheSet(key,out); return out;
+  }catch{photoCacheSet(key,'');return ''}
+}
+async function loadRealPhotos(){
+  // Chargement progressif pour ne jamais bloquer l'interface. Les profils/album
+  // restent disponibles indépendamment des photos.
+  const queue=[...A]; const workers=Array.from({length:3},async()=>{while(queue.length){const a=queue.shift();if(!a)break;try{
+    const p=await api('/api/artists/'+a.id+'/profile');
+    profileData[a.id]=p||{}; if(p?.latestAlbum?.coverUrl) albumCovers[a.id]=p.latestAlbum.coverUrl;
+  }catch{}
+  const k=String(a.name||'').toLowerCase(); if(a.photo_url)photos[a.id]=a.photo_url; else photos[a.id]=KNOWN_PHOTOS[k]||await findRealPhoto(a.name); renderStyles();radar();liveMini();live();clips();}});
+  await Promise.all(workers);
+}
+
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function cleanDiscoverText(value){let v=String(value??'');v=v.replace(/!\[\s*Image[^\]]*\]\([^)]*\)/gi,' ');v=v.replace(/\[\s*Image[^\]]*\]\([^)]*\)/gi,' ');v=v.replace(/\[([^\]]+)\]\(([^)]*)\)/g,'$1');v=v.replace(/\((?:https?:\/\/|www\.)[^)]*\)/gi,' ');v=v.replace(/https?:\/\/\S+/gi,' ');v=v.replace(/!\s*(?=\])/g,' ');v=v.replace(/[\[\]]/g,' ');v=v.replace(/\(([^)]*)\)/g,' ');return v.replace(/\s{2,}/g,' ').trim();}
+async function api(u,o){const r=await fetch(u,o);if(r.status===401){showAuthGate();throw Error('Connexion requise')}if(!r.ok){let msg='Erreur serveur';try{const d=await r.json();msg=d?.error||msg}catch{try{msg=await r.text()}catch{}}throw Error(msg)}return r.status===204?null:r.json()}
+function status(t){$('status').innerHTML='<span class="dot"></span>'+esc(t)+(authUser?'<span class="account-pill">· '+esc(authUser.username)+' <button type="button" onclick="accountSettings()">Compte</button> <button type="button" onclick="logout()">Déconnexion</button></span>':'')}
+function imgFor(i=0){const a=A[i]||A[0];return a&&photos[a.id]||fallbackPhoto}
+function imgForArtist(a){return a&&(a.photo_url||photos[a.id]||albumCovers[a.id])||fallbackPhoto}
+function usableArticleImage(url){const s=String(url||'').trim();return !!s&&!/(news\.google\.|gstatic\.com|googleusercontent\.com|google\.com|favicon|placeholder|google-news)/i.test(s)}
+function articleImage(x){const a=A.find(a=>a.id===x?.artist_id);return usableArticleImage(x?.image_url)?x.image_url:(photos[a?.id]||albumCovers[a?.id]||fallbackPhoto)}
+function photoStyle(url){return url ? ` style="background-image:url('${esc(url)}')"` : ''}
+function opts(sel,all=true){const v=$(sel).value;$(sel).innerHTML=(all?'<option value="">Tous les groupes</option>':'')+A.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');if(A.some(a=>String(a.id)===v))$(sel).value=v}
+function countries(sel){const v=$(sel).value;const base=['France','Allemagne','Belgique','Royaume-Uni','Suisse','Espagne','Italie','Pays-Bas','Portugal','Irlande','Autriche','Suède','Danemark','Norvège','Finlande','Pologne','Canada','États-Unis'];const C=[...new Set([...base,...E.map(e=>e.country).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'fr'));$(sel).innerHTML='<option value="">Tous les pays</option>'+C.map(c=>`<option>${esc(c)}</option>`).join('');if(C.includes(v))$(sel).value=v}
+function renderSelects(){['ra','la','la2'].forEach(id=>opts(id));['co','co2'].forEach(countries)}
+function newsAllowed(x){
+  const a=A.find(v=>v.id===x.artist_id), name=String(a?.name||x.artist||'').trim().toLowerCase();
+  const text=String((x.title||'')+' '+(x.source||'')+' '+(x.url||'')).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  // Safety net in the UI as well as the backend: Korn Ferry/golf stories are never Korn-band news.
+  if(name==='korn' && /\bkorn\s+ferry\b|\bgolf\b|\bpga\b|\bkft\b|\bgolfeur|\bgolfeuse|\bchampionship\b.*\bgolf\b|\bgolf\b.*\bchampionship\b/.test(text)) return false;
+  return true;
+}
+function radar(){const id=+$('ra').value||0,all=N.filter(x=>(!id||x.artist_id===id)&&newsAllowed(x)),rows=all.slice(0,limit);$('feed').innerHTML=rows.length?rows.map((x,i)=>`<article class="news-card"><div class="thumb article-photo" ${photoStyle(articleImage(x))}></div><div><div class="cat">${esc(x.provider==='google-news'?'Actualité':'Presse')}</div><div class="news-title">${esc(x.title)}</div><div class="desc">${esc(x.source||x.provider)} · ${x.published_at?new Date(x.published_at).toLocaleDateString('fr-FR'):'date inconnue'}${usableArticleImage(x.image_url)?' · photo de l’article':(photos[x.artist_id]?' · photo du groupe':(albumCovers[x.artist_id]?' · pochette du dernier album':''))}</div></div><div class="meta"><strong>${x.published_at?new Date(x.published_at).toLocaleDateString('fr-FR'):'—'}</strong>${esc(x.source||x.provider)}<a class="open" href="${esc(x.url)}" target="_blank">↗</a></div></article>`).join(''):'<div class="empty">Aucun article.</div>'}
+function liveRows(id,c){return E.filter(x=>(!id||x.artist_id===id)&&(!c||x.country===c))}
+function eventHTML(rows,mini=false){return rows.slice(0,mini?5:500).map((x,i)=>`<article class="event"><div class="event-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div class="event-img" ${photoStyle(imgForArtist(A.find(a=>a.id===x.artist_id)))}></div><div><div class="event-name">${esc(x.artist)} · ${esc(x.title)}</div><div class="event-place">${esc(String(x.venue||'').replace(/^[\[\]]|[\[\]]$/g,''))} ${x.city?'· '+esc(String(x.city).replace(/^[\[\]]|[\[\]]$/g,'')):''} ${x.country?'· '+esc(String(x.country).replace(/^[\[\]]|[\[\]]$/g,'')):''}</div></div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join('')||'<div class="empty">Aucun concert avec ces filtres.</div>'}
+function live(){const id=+$('la2').value||0,c=$('co2').value;$('events').innerHTML=eventHTML(liveRows(id,c))}
+function liveMini(){const id=+$('la').value||0,c=$('co').value;$('eventsMini').innerHTML=eventHTML(liveRows(id,c),true)}
+function clipData(){return A.map((a,i)=>({artist:a,href:'https://www.youtube.com/results?search_query='+encodeURIComponent(a.name+' official music video'),title:'Clips de '+a.name,photo:imgForArtist(a)}))}
+function clips(){const rows=clipData();$('clipsMini').innerHTML=rows.slice(0,5).map(x=>`<a class="clip" href="${x.href}" target="_blank"><div class="clip-img" ${photoStyle(x.photo)}><span class="play">▶</span></div><div><div class="clip-title">${esc(x.title)}</div><div class="clip-age">Rechercher les clips officiels →</div></div></a>`).join('')||'<div class="empty">Ajoute des groupes pour afficher leurs clips.</div>';$('clipsGrid').innerHTML=rows.map(x=>`<a class="group-card" href="${x.href}" target="_blank" style="text-decoration:none"><div class="group-img" ${photoStyle(x.photo)}></div><div class="group-body"><div class="group-name">${esc(x.artist.name)}</div><div class="group-style">CLIPS VIDÉO · YOUTUBE ↗</div></div></a>`).join('')||'<div class="empty">Aucun groupe.</div>'}
+function knownStyle(name){return styles.some(s=>s[0].toLowerCase()===String(name||'').toLowerCase())}
+function styleOf(a){const s=String(a.style||'').trim();return s&&knownStyle(s)?s:'À classer'}
+function styleOptions(selected){const current=knownStyle(selected)?String(selected):'__unclassify__';return '<option value="__unclassify__" '+(current==='__unclassify__'?'selected':'')+'>À classer</option>'+styles.map(s=>`<option value="${esc(s[0])}" ${current===s[0]?'selected':''}>${esc(s[0])}</option>`).join('')}
+async function setStyle(id,value){const style=value==='__unclassify__'?null:String(value||'').trim()||null;try{await api('/api/artists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({style})});const a=A.find(x=>x.id===id);if(a)a.style=style;render();}catch(e){status('Erreur de classement : '+e.message)}}
+function renderStyles(){
+ const counts={};A.forEach(a=>{const s=styleOf(a);counts[s]=(counts[s]||0)+1});
+ $('stylesHome').innerHTML=styles.map((s,i)=>{
+   const group=A.find(a=>styleOf(a).toLowerCase()===s[0].toLowerCase());
+   return `<div class="style-card" ${photoStyle(imgForArtist(group))} onclick="showStyle('${esc(s[0])}')"><div class="sname">${esc(s[0])}</div><div class="scount">${counts[s[0]]||0} groupe(s)</div></div>`;
+ }).join('');
+ const blocks=styles.map((s,i)=>{
+   const groups=A.filter(a=>styleOf(a).toLowerCase()===s[0].toLowerCase()).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'fr',{sensitivity:'base'}));
+   const cards=groups.length?groups.map(a=>`<div class="style-group" role="button" tabindex="0" onclick="openArtistProfile(${a.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openArtistProfile(${a.id})}"><div class="style-group-img" ${photoStyle(imgForArtist(a))}></div><div class="style-group-body"><div class="style-group-name">${esc(a.name)}</div><div class="style-group-meta">${esc(s[0])} · cliquer pour ouvrir le profil</div><select onclick="event.stopPropagation()" onchange="setStyle(${a.id},this.value)">${styleOptions(a.style)}</select><div class="group-actions"><button class="mini" onclick="event.stopPropagation();removeA(${a.id})">Supprimer</button></div></div></div>`).join(''):'<div class="style-empty">Aucun groupe dans ce style.</div>';
+   return `<details class="style-row" id="style-${i}" open><summary class="style-summary"><div><h3>${esc(s[0])}</h3><p>${groups.length} groupe(s)</p></div></summary><div class="style-groups">${cards}</div></details>`;
+ }).join('');
+ const un=A.filter(a=>styleOf(a)==='À classer').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'fr',{sensitivity:'base'}));
+ $('stylesList').innerHTML=blocks+`<details class="style-row" open id="style-unclassified"><summary class="style-summary"><div><h3>À classer</h3><p>${un.length} groupe(s) · classement manuel</p></div></summary><div class="style-groups">${un.length?un.map(a=>`<div class="style-group" role="button" tabindex="0" onclick="openArtistProfile(${a.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openArtistProfile(${a.id})}"><div class="style-group-img" ${photoStyle(imgForArtist(a))}></div><div class="style-group-body"><div class="style-group-name">${esc(a.name)}</div><div class="style-group-meta">Classement manuel · cliquer pour ouvrir le profil</div><select onclick="event.stopPropagation()" onchange="setStyle(${a.id},this.value)">${styleOptions(a.style)}</select><div class="group-actions"><button class="mini" onclick="event.stopPropagation();removeA(${a.id})">Supprimer</button></div></div></div>`).join(''):'<div class="style-empty">Aucun groupe à classer.</div>'}</div></details>`;
+}
+function showStyle(s){show('styles');const i=styles.findIndex(x=>x[0]===s);setTimeout(()=>{const d=document.getElementById('style-'+i);if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},50)}
+
+
+function googleImagesUrl(name){return 'https://www.google.com/search?tbm=isch&q='+encodeURIComponent(String(name||'').trim())}
+function profileDate(v){return v?String(v).slice(0,4):'—'}
+function albumCover(x,small=false){const u=x?.coverUrl||'';return u?`<img class="${small?'album-cover-small':'album-cover'}" src="${esc(u)}" alt="Pochette ${esc(x.title||'album')}" loading="lazy" onerror="this.style.display='none'">`:`<div class="${small?'album-cover-small':'album-cover'}"></div>`}
+let activeAlbumPlayer=null;
+function albumListenButtons(x,artistName,small=false){if(!x?.title||!artistName)return '';const q=encodeURIComponent(`${artistName} ${x.title}`);return `<button class="album-play" type="button" data-artist="${esc(artistName)}" data-album="${esc(x.title)}" onclick="playAlbumPreview(this)">▶ ÉCOUTER UN EXTRAIT</button><a class="profile-link" style="display:inline-block;margin-top:8px;font-size:10px;padding:6px 9px" href="https://www.deezer.com/search/${q}" target="_blank" rel="noopener">DEEZER ↗</a><a class="profile-link" style="display:inline-block;margin-top:8px;font-size:10px;padding:6px 9px" href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">SPOTIFY ↗</a><div class="album-player"></div>`}
+function closeAlbumPlayer(box){if(!box)return;const audio=box.querySelector('audio');if(audio){audio.pause();audio.removeAttribute('src');audio.load();}box.innerHTML='';const b=box.parentElement?.querySelector('.album-play');if(b){b.disabled=false;b.textContent='▶ ÉCOUTER UN EXTRAIT';b.dataset.loaded='';}if(activeAlbumPlayer===box)activeAlbumPlayer=null;}
+function renderAlbumPlayer(box,state){if(!box||!state?.tracks?.length)return;const t=state.tracks[state.index];if(!t)return;box.innerHTML=`<div class="album-player-head"><div class="album-player-title">🎵 ${esc(t.title)}</div><button class="album-player-close" type="button" onclick="closeAlbumPlayer(this.closest('.album-player'))">✕</button></div>${t.preview?`<audio controls preload="none" playsinline src="${esc(t.preview)}"></audio>`:'<div class="album-preview-note">Extrait indisponible pour ce morceau.</div>'}<div class="album-player-controls"><button class="album-player-nav" type="button" onclick="albumPrev(this.closest('.album-player'))" ${state.index<=0?'disabled':''}>◀ PRÉCÉDENT</button><button class="album-player-nav" type="button" onclick="albumNext(this.closest('.album-player'))" ${state.index>=state.tracks.length-1?'disabled':''}>SUIVANT ▶</button><span class="album-player-count">${state.index+1} / ${state.tracks.length}</span></div><div class="album-preview-note">Extrait Deezer${t.preview?' · 30 s':''}</div>`;const audio=box.querySelector('audio');if(audio){audio.addEventListener('ended',()=>{if(state.index<state.tracks.length-1)albumNext(box);});audio.play().catch(()=>{});}}
+async function playAlbumPreview(btn){const artist=btn?.dataset?.artist||'',album=btn?.dataset?.album||'';const box=btn?.parentElement?.querySelector('.album-player');if(!artist||!album||!box)return;if(activeAlbumPlayer&&activeAlbumPlayer!==box)closeAlbumPlayer(activeAlbumPlayer);activeAlbumPlayer=box;if(btn.dataset.loaded==='1'&&box.dataset.tracks){try{const state=JSON.parse(box.dataset.tracks);state.index=0;box.dataset.tracks=JSON.stringify(state);renderAlbumPlayer(box,state);return;}catch(_){}}btn.disabled=true;btn.textContent='RECHERCHE…';box.innerHTML='';try{const r=await fetch('/api/music/album-tracks?artist='+encodeURIComponent(artist)+'&album='+encodeURIComponent(album),{cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d?.ok||!Array.isArray(d.tracks)||!d.tracks.length)throw Error(d?.error||'Album introuvable');const state={tracks:d.tracks,index:0};box.dataset.tracks=JSON.stringify(state);btn.dataset.loaded='1';btn.textContent='▶ REJOUER L’EXTRAIT';renderAlbumPlayer(box,state);}catch(e){box.innerHTML='<div class="album-preview-note">Extrait indisponible pour cet album. Les liens Spotify/Deezer restent disponibles.</div>';btn.disabled=false;btn.textContent='▶ ÉCOUTER UN EXTRAIT';btn.dataset.loaded='';if(activeAlbumPlayer===box)activeAlbumPlayer=null;}}
+function albumPrev(box){if(!box?.dataset?.tracks)return;try{const state=JSON.parse(box.dataset.tracks);if(state.index<=0)return;state.index--;box.dataset.tracks=JSON.stringify(state);renderAlbumPlayer(box,state);}catch(_){}}
+function albumNext(box){if(!box?.dataset?.tracks)return;try{const state=JSON.parse(box.dataset.tracks);if(state.index>=state.tracks.length-1)return;state.index++;box.dataset.tracks=JSON.stringify(state);renderAlbumPlayer(box,state);}catch(_){}}
+function profileAlbumItem(x,artistName){return `<div class="album-item">${albumCover(x,true)}<div><div class="album-item-name">${esc(x.title)}</div><div class="album-item-year">${esc(profileDate(x.date))}</div>${albumListenButtons(x,artistName,true)}</div></div>`}
+async function openArtistProfile(id){
+ currentProfileId=id;profileReturnSection='styles';$('profileBackBtn').textContent='← Retour à Styles/Groupes';show('artistProfile');
+ const a=A.find(x=>x.id===id);$('artistProfileContent').innerHTML='<div class="profile-loading">Chargement du profil de '+esc(a?.name||'ce groupe')+'…</div>';
+ try{
+  const p=await api('/api/artists/'+id+'/profile');
+  const latest=p.latestAlbum;
+  const previous=(p.albums||[]).slice(1);
+  const meta=[p.country,p.formed?('Depuis '+profileDate(p.formed)):'' ,p.disambiguation].filter(Boolean).join(' · ');
+  const aRef=A.find(x=>Number(x.id)===Number(id)); const recentPhoto=photos[id]||aRef?.photo_url||p.photoUrl||albumCovers[id]||p.latestAlbum?.coverUrl||'';
+  const photo=recentPhoto?`<div class="profile-photo" style="background-image:url('${esc(recentPhoto)}')"></div>`:'<div class="profile-photo-empty">Aucune photo de référence disponible</div>';
+  $('artistProfileContent').innerHTML=`<div class="artist-profile"><div><div class="profile-hero">${photo}</div></div><div class="profile-body"><h1 class="profile-title">${esc(p.name)}</h1><div class="profile-meta">${esc(meta||'Groupe suivi')}</div><div class="profile-desc">${esc(p.description||'Aucun descriptif disponible pour le moment.')}</div><div class="profile-links">${p.officialUrl?`<a class="profile-link" href="${esc(p.officialUrl)}" target="_blank" rel="noopener">SITE OFFICIEL ↗</a>`:''}<a class="profile-link" href="${googleImagesUrl(p.name)}" target="_blank" rel="noopener">IMAGE ↗</a><button class="profile-link" onclick="openPhotoEditor(${id})">📷 CHANGER LA PHOTO</button><button class="profile-link" onclick="document.getElementById('artistPhotoFile_${id}').click()">📁 IMPORTER UNE PHOTO</button><input id="artistPhotoFile_${id}" type="file" accept="image/*" style="display:none" onchange="importArtistPhotoFile(event,${id})"><button class="profile-link" onclick="openDescriptionEditor(${id})">✏️ MODIFIER LA DESCRIPTION</button><button class="profile-link profile-delete" onclick="removeA(${id})">SUPPRIMER LE GROUPE</button></div><div class="profile-albums"><h2 class="profile-section-title">Dernier album</h2>${latest?`<div class="album-latest">${albumCover(latest)}<div><div class="album-label">Dernière sortie · album</div><div class="album-name">${esc(latest.title)}</div><div class="album-year">${esc(profileDate(latest.date))}</div>${albumListenButtons(latest,p.name)}</div></div>`:'<div class="album-latest"><div class="album-year">Aucun album référencé.</div></div>'}<h2 class="profile-section-title">Albums précédents</h2>${previous.length?`<div class="album-list">${previous.map(x=>profileAlbumItem(x,p.name)).join('')}</div>`:'<div class="album-latest"><div class="album-year">Aucun album précédent référencé.</div></div>'}</div></div></div>`;
+ }catch(e){$('artistProfileContent').innerHTML='<div class="empty">Impossible de charger le profil pour le moment.<br><br><button class="mini" onclick="openArtistProfile('+id+')">Réessayer</button></div>';status('Profil indisponible : '+e.message)}
+}
+function renderDiscoverProfile(p){
+ const latest=p.latestAlbum, previous=(p.albums||[]).slice(1);
+ const meta=[p.country,p.formed?('Depuis '+profileDate(p.formed)):'' ,p.disambiguation].filter(Boolean).join(' · ');
+ const recentPhoto=photos['discover-profile:'+String(p.name||'').toLowerCase()]||p.photoUrl||latest?.coverUrl||'';
+ const photo=recentPhoto?`<div class="profile-photo" style="background-image:url('${esc(recentPhoto)}')"></div>`:'<div class="profile-photo-empty">Aucune photo de référence disponible</div>';
+ const followed=A.some(x=>String(x.name||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase());
+ const addButton=followed?`<button class="profile-link profile-add" id="discoverAddBtn" disabled>✓ AJOUTÉ À MES GROUPES</button>`:`<button class="profile-link profile-add" id="discoverAddBtn" onclick="addDiscoverArtist()">+ AJOUTER À MES GROUPES</button>`;
+ $('artistProfileContent').innerHTML=`<div class="artist-profile"><div><div class="profile-hero">${photo}</div></div><div class="profile-body"><h1 class="profile-title">${esc(p.name)}</h1><div class="profile-meta">${esc(meta||'Groupe à découvrir')}</div><div class="profile-desc">${esc(p.description||'Aucun descriptif disponible pour le moment.')}</div><div class="profile-links">${addButton}${p.officialUrl?`<a class="profile-link" href="${esc(p.officialUrl)}" target="_blank" rel="noopener">SITE OFFICIEL ↗</a>`:''}<a class="profile-link" href="${googleImagesUrl(p.name)}" target="_blank" rel="noopener">IMAGE ↗</a></div><div class="profile-albums"><h2 class="profile-section-title">Dernier album</h2>${latest?`<div class="album-latest">${albumCover(latest)}<div><div class="album-label">Dernière sortie · album</div><div class="album-name">${esc(latest.title)}</div><div class="album-year">${esc(profileDate(latest.date))}</div>${albumListenButtons(latest,p.name)}</div></div>`:'<div class="album-latest"><div class="album-year">Aucun album référencé.</div></div>'}<h2 class="profile-section-title">Albums précédents</h2>${previous.length?`<div class="album-list">${previous.map(x=>profileAlbumItem(x,p.name)).join('')}</div>`:'<div class="album-latest"><div class="album-year">Aucun album précédent référencé.</div></div>'}</div></div></div>`;
+}
+async function addDiscoverArtist(){
+ const c=currentDiscoverArtist||{},name=String(c.name||'').trim();
+ if(!name)return;
+ const btn=$('discoverAddBtn');
+ if(btn){btn.disabled=true;btn.textContent='AJOUT EN COURS…'}
+ status('Ajout de '+name+' à vos groupes…');
+ try{
+   const discoveredMbid=String(c.mbid||c.id||'').trim();
+   const mbid=discoveredMbid && !discoveredMbid.startsWith('fallback-') ? discoveredMbid : '';
+   const identityKey=mbid?`mbid:${mbid}`:(c.metalArchiveUrl||c.spiritUrl||`${c.source||'unknown'}|${normUi(c.name)}|${normUi(c.country||c.area||'')}|${normUi(c.style||c.genre||'')}`);
+   const cachedPhoto=photos['discover:'+String(c.id||'')]||albumCovers['discover:'+String(c.id||'')]||c.imageUrl||'';
+   const r=await api('/api/artists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,mbid,photoUrl:cachedPhoto,identitySource:c.source||'MusicBrainz',identityKey,disambiguation:c.disambiguation||'',country:c.country||c.area||'',style:c.style||c.genre||'',identityLocked:true,bandsintownUrl:c.bandsintownUrl||''})});
+   if(r?.artist){
+     const existing=A.findIndex(x=>Number(x.id)===Number(r.artist.id));
+     if(existing>=0)A[existing]=r.artist;else A.push(r.artist);
+   }
+   if(btn){btn.textContent='✓ AJOUTÉ À MES GROUPES'}
+   status(name+' a été ajouté à vos groupes.');
+   render();
+ }catch(e){
+   if(btn){btn.disabled=false;btn.textContent='+ AJOUTER À MES GROUPES'}
+   status('Ajout impossible : '+e.message);
+ }
+}
+async function openDiscoverProfile(a){
+ currentDiscoverArtist=a||null;
+ profileReturnSection='discover';$('profileBackBtn').textContent='← Retour à Découvrir';show('artistProfile');
+ $('artistProfileContent').innerHTML='<div class="profile-loading">Chargement du profil de '+esc(a?.name||'ce groupe')+'…</div>';
+ try{const mbid=a?.mbid||(!String(a?.id||'').startsWith('fallback-')?a?.id:'');const q='?name='+encodeURIComponent(a?.name||'')+(mbid?'&mbid='+encodeURIComponent(mbid):'');const p=await api('/api/discover/profile'+q);renderDiscoverProfile(p);}catch(e){$('artistProfileContent').innerHTML='<div class="empty">Impossible de charger le profil pour le moment.<br><br><button class="mini" onclick="openDiscoverProfile('+JSON.stringify(a).replace(/</g,'\u003c')+')">Réessayer</button></div>';status('Profil découverte indisponible : '+e.message)}
+}
+function backFromProfile(){show(profileReturnSection)}
+
+function groups(){ $('groupsList').innerHTML=A.map((a,i)=>`<div class="group-card"><div class="group-img" ${photoStyle(imgForArtist(a))}></div><div class="group-body"><div class="group-name">${esc(a.name)}</div><div class="group-style">${esc(styleOf(a))}</div><select class="select" style="height:32px;margin-top:7px;font-size:11px" onchange="setStyle(${a.id},this.value)">${styleOptions(a.style)}</select><div class="group-actions"><button class="mini" onclick="refresh(${a.id})">↻</button><button class="mini" onclick="openPhotoEditor(${a.id})">📷</button><button class="mini" onclick="removeA(${a.id})">×</button><a class="mini" href="https://www.youtube.com/results?search_query=${encodeURIComponent(a.name+' official music video')}" target="_blank">▶</a></div></div></div>`).join('')||'<div class="empty">Aucun groupe.</div>'}
+function discoverArtistImage(a){return a?(photos['discover:'+a.id]||albumCovers['discover:'+a.id]||''):''}
+async function loadDiscoverPhotos(){
+  const queue=[...discoverArtistsData];
+  const workers=Array.from({length:3},async()=>{while(queue.length){const a=queue.shift();if(!a)break;const key='discover:'+a.id;
+    const cached=photoCacheGet('discover:'+String(a.name||'').toLowerCase());
+    if(cached!==null){photos[key]=cached;renderDiscoverArtists();continue;}
+    try{
+      const d=await api('/api/discover/photo?name='+encodeURIComponent(a.name));
+      photos[key]=d?.photoUrl||'';
+      if(!photos[key]){const p=await api('/api/discover/profile?name='+encodeURIComponent(a.name));if(p?.latestAlbum?.coverUrl)albumCovers[key]=p.latestAlbum.coverUrl;}
+    }catch{}
+    if(!photos[key]){try{photos[key]=await findRealPhoto(a.name)}catch{}}
+    photoCacheSet('discover:'+String(a.name||'').toLowerCase(),photos[key]||'');
+    renderDiscoverArtists();
+  }});
+  await Promise.all(workers);
+}
+
+function discoverArtistHTML(a){const img=discoverArtistImage(a);const data=JSON.stringify(a).replace(/</g,'\u003c');return `<article class="discover-card" role="button" tabindex="0" style="cursor:pointer" onclick='openDiscoverProfile(${data})' onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDiscoverProfile(${data})}"><div class="discover-img" ${photoStyle(img)}></div><div><button class="profile-name-btn" type="button" onclick='event.stopPropagation();openDiscoverProfile(${data})'><div class="discover-name">${esc(a.name)}</div></button><div class="discover-style">${esc(a.style||'Métal')}</div><div class="discover-meta">${esc(a.disambiguation||'Artiste à découvrir')} · cliquer pour ouvrir le profil</div></div></article>`}
+function renderDiscoverArtists(){const el=$('discoverArtists');if(!el)return;el.innerHTML=discoverArtistsData.length?discoverArtistsData.map(discoverArtistHTML).join(''):'<div class="discover-empty">Aucun nouveau groupe trouvé pour ce style pour le moment.</div>'}
+function renderDiscoverEvents(){const el=$('discoverEvents');if(!el)return;el.innerHTML=discoverEventsData.length?discoverEventsData.slice(0,50).map(x=>`<article class="discover-event"><div class="discover-event-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div><div class="discover-event-name">${esc(cleanDiscoverText(x.title))}</div><div class="discover-event-place">${esc(cleanDiscoverText(x.venue||''))} ${x.city?'· '+esc(cleanDiscoverText(x.city)):''}</div></div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join(''):'<div class="discover-empty">Aucun concert métal trouvé autour de vous avec les sources gratuites disponibles.</div>'}
+function renderDiscoverFestivals(){const el=$('discoverFestivals');if(!el)return;el.innerHTML=discoverFestivalsData.length?discoverFestivalsData.slice(0,30).map(x=>`<article class="festival-event"><div class="festival-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div><div class="festival-name">${esc(cleanDiscoverText(x.title))}</div><div class="festival-place">${esc(cleanDiscoverText(x.venue||''))} ${x.city?'· '+esc(cleanDiscoverText(x.city)):''}</div>${x.metalDetected?'<span class="festival-badge">MÉTAL DÉTECTÉ</span>':''}</div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join(''):'<div class="discover-empty">Aucun festival trouvé dans votre secteur avec les sources gratuites disponibles.</div>'}
+function renderDiscover(){renderDiscoverArtists();renderDiscoverEvents();renderDiscoverFestivals();if(userPlace)$('locationBox').innerHTML=`📍 <strong>${esc(userPlace.city||userPlace.locality||userPlace.municipality||'Votre position')}</strong>${userPlace.state?' · '+esc(userPlace.state):''} · rayon de <strong>${discoverRadius} km</strong> · concerts et festivals dans votre secteur`}
+async function discoverArtistsLoad(){const style=$('discoverStyle').value;$('discoverArtists').innerHTML='<div class="discover-status">Recherche de groupes…</div>';try{const d=await api('/api/discover/artists?style='+encodeURIComponent(style)+'&limit=18');discoverArtistsData=d.items||[];renderDiscoverArtists();loadDiscoverPhotos().catch(()=>{});}catch(e){$('discoverArtists').innerHTML='<div class="discover-empty">Impossible de charger les groupes à découvrir.</div>';status('Découverte indisponible : '+e.message)}}
+async function browserReversePlace(lat,lon){
+  try{
+    const r=await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+'&localityLanguage=fr',{cache:'no-store'});
+    if(!r.ok)throw Error('reverse geocode '+r.status);
+    const d=await r.json();
+    const locality=String(d.locality||d.localityName||'').trim();
+    const city=String(d.city||'').trim();
+    const label=locality||city||String(d.principalSubdivision||'').trim();
+    if(label)return {city:label,locality,municipality:city,county:'',state:String(d.principalSubdivision||''),country:String(d.countryName||''),lat:Number(lat),lon:Number(lon),display_name:[label,d.principalSubdivision,d.countryName].filter(Boolean).join(', ')};
+  }catch{}
+  try{
+    const r=await api('/api/discover/reverse?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon));
+    if(r?.city||r?.country)return r;
+  }catch{}
+  return {city:'',locality:'',municipality:'',county:'',state:'',country:'',lat:Number(lat),lon:Number(lon),display_name:''};
+}
+async function discoverLocation(){
+ const input=$('discoverLocation');
+ const manual=String(input?.value||'').trim();
+ if(manual){
+   locationMode='manual';
+   // STEP 1: manual city search is isolated from GPS/geolocation. The typed
+   // city string is sent as the only target identifier.
+   $('locationBox').innerHTML='📍 Recherche pour <strong>'+esc(manual)+'</strong>…';
+   try{
+     const d=await api('/api/discover/city-concerts?q='+encodeURIComponent(manual));
+     userPlace={city:d.city||manual,locality:d.city||manual,country:'France',manualTarget:true,citySearchOnly:true};
+     userCoords=null;
+     discoverEventsData=(d.items||[]).filter(x=>!x.isFestival);
+     discoverFestivalsData=(d.items||[]).filter(x=>x.isFestival);
+     const src=(d.sources||[]).map(x=>x.provider).filter(Boolean);
+     $('locationBox').innerHTML='📍 <strong>Recherche pour ' + esc(d.city||manual) + '</strong> · étape 1 · distance temporairement désactivée · sources : ' + esc(src.length?src.join(' + '):'aucune') + '';
+     renderDiscover();
+   }catch(e){
+     userPlace={city:manual,locality:manual,country:'France',manualTarget:true,citySearchOnly:true};
+     discoverEventsData=[];discoverFestivalsData=[];
+     $('locationBox').innerHTML='📍 <strong>Recherche pour ' + esc(manual) + '</strong> · étape 1 · aucune source n’a répondu.';
+     renderDiscoverEvents();renderDiscoverFestivals();
+   }
+   return;
+ }
+ locationMode='auto';
+ if(!navigator.geolocation){$('locationBox').innerHTML='Géolocalisation indisponible. Entrez votre ville ou votre lieu ci-dessus.';return}
+ $('locationBox').innerHTML='📍 Recherche des concerts et festivals autour de vous…';
+ navigator.geolocation.getCurrentPosition(async pos=>{
+   userCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+   $('locationBox').innerHTML='📍 Position détectée · détermination de votre ville…';
+   userPlace=await browserReversePlace(userCoords.lat,userCoords.lon);
+   if(!userPlace?.city)userPlace={...userPlace,city:'Position actuelle'};
+   await discoverAtCoords();
+ },err=>{$('locationBox').innerHTML='Position refusée ou indisponible. <strong>Entrez votre ville ou votre lieu</strong> ci-dessus pour continuer.'},{enableHighAccuracy:true,timeout:20000,maximumAge:60000});
+}
+async function discoverAtCoords(manualTarget=false){
+ discoverRadius=Number($('discoverRadius').value)||50;
+ const targetQs=manualTarget&&userPlace?.city?('&targetCity='+encodeURIComponent(userPlace.city)+'&manualTarget=1&targetLat='+encodeURIComponent(userPlace.targetLat||userCoords.lat)+'&targetLon='+encodeURIComponent(userPlace.targetLon||userCoords.lon)+'&resolvedCityVerified=1'):'';
+ const placeQs='&city='+encodeURIComponent(userPlace?.city||'')+'&locality='+encodeURIComponent(userPlace?.locality||'')+'&county='+encodeURIComponent(userPlace?.county||'')+'&state='+encodeURIComponent(userPlace?.state||'')+'&country='+encodeURIComponent(userPlace?.country||'');
+ const qs='lat='+encodeURIComponent(userCoords.lat)+'&lon='+encodeURIComponent(userCoords.lon)+'&radius='+encodeURIComponent(discoverRadius)+targetQs+placeQs;
+ const results=await Promise.allSettled([api('/api/discover/concerts?'+qs),api('/api/discover/festivals?'+qs)]);
+ if(results[0].status==='fulfilled'){const d=results[0].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverEventsData=d.items||[]}
+ if(results[1].status==='fulfilled'){const d=results[1].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverFestivalsData=d.items||[]}
+ renderDiscover();
+ if(!userPlace)$('locationBox').innerHTML='📍 <strong>Position détectée</strong> · impossible de déterminer le nom de la zone pour le moment. Vous pouvez saisir une ville ci-dessus.';
+}
+
+async function openDiscover(){await discoverArtistsLoad();if(!userCoords&&!String($('discoverLocation')?.value||'').trim())discoverLocation()}
+function render(){renderSelects();radar();liveMini();live();clips();renderStyles();renderDiscover()}
+let authUser=null,authMode='login';
+function showAuthGate(){ $('authGate').classList.remove('hidden'); }
+function hideAuthGate(){ $('authGate').classList.add('hidden'); }
+function renderAuthMode(){
+ const login=authMode==='login';
+ $('authTitle').textContent=login?'Se connecter':'Créer un compte';
+ $('authSubmit').textContent=login?'SE CONNECTER':'CRÉER MON COMPTE';
+ $('authPass').autocomplete=login?'current-password':'new-password';
+ $('authEmail').style.display=login?'none':'block';
+ $('authEmail').required=!login;
+ $('authForgot').style.display=login?'block':'none';
+ $('authSwitchText').textContent=login?'Pas encore de compte ?':'Déjà un compte ?';
+ $('authSwitch').textContent=login?'Créer un compte':'Se connecter';
+ $('authError').textContent='';
+}
+function showForgotPassword(){ $('authForm').style.display='none'; $('authForgot').style.display='none'; $('authSwitch').parentElement.style.display='none'; $('authNote').style.display='none'; $('forgotBox').classList.add('open'); $('forgotEmail').value=$('authEmail').value||''; $('forgotEmail').focus(); }
+function hideForgotPassword(){ $('forgotBox').classList.remove('open'); $('authForm').style.display='grid'; $('authSwitch').parentElement.style.display='block'; $('authNote').style.display='block'; renderAuthMode(); $('authUser').focus(); }
+async function requestPasswordReset(){
+ const btn=$('forgotSubmit');btn.disabled=true;$('forgotMsg').textContent='Envoi…';
+ try{const r=await fetch('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('forgotEmail').value.trim()})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Impossible d’envoyer le lien');$('forgotMsg').textContent=d.message||'Si cette adresse correspond à un compte, un e-mail va être envoyé.';}catch(e){$('forgotMsg').textContent=e.message||'Erreur'}finally{btn.disabled=false}
+}
+async function accountSettings(){
+ const current=authUser?.email||'';
+ const email=prompt('Adresse e-mail de récupération STAYLOUD :',current);
+ if(email===null)return;
+ try{const d=await api('/api/auth/email',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});authUser=d.user;status('E-mail de récupération enregistré');alert('Adresse e-mail enregistrée. Tu pourras récupérer ton mot de passe avec « Mot de passe oublié ? ».');}catch(e){alert(e.message||'Impossible d’enregistrer l’adresse e-mail.')}
+}
+async function authBoot(){
+ const params=new URLSearchParams(location.search),token=params.get('reset');
+ if(token){$('authGate').classList.add('hidden');$('resetGate').classList.remove('hidden');$('resetForm').onsubmit=async e=>{e.preventDefault();const a=$('resetPass').value,b=$('resetPass2').value;if(a!==b){$('resetError').textContent='Les deux mots de passe sont différents.';return}try{const r=await fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,password:a})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Lien invalide');$('resetError').textContent='Mot de passe modifié. Tu peux maintenant te connecter.';setTimeout(()=>{location.href=location.pathname},1200)}catch(e){$('resetError').textContent=e.message||'Erreur'}};return}
+ try{const d=await fetch('/api/auth/me',{cache:'no-store'});if(d.ok){authUser=(await d.json()).user;hideAuthGate();await load();return}}catch{}
+ showAuthGate();renderAuthMode();
+}
+$('authSwitch').onclick=()=>{authMode=authMode==='login'?'register':'login';hideForgotPassword();renderAuthMode();$('authPass').value='';$('authUser').focus()};
+$('authForm').addEventListener('submit',async e=>{
+ e.preventDefault();const btn=$('authSubmit');btn.disabled=true;$('authError').textContent='';
+ try{const body={username:$('authUser').value.trim(),password:$('authPass').value};if(authMode==='register')body.email=$('authEmail').value.trim();const r=await fetch(authMode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Connexion impossible');authUser=d.user;hideAuthGate();$('authPass').value='';await load();status('Connecté · '+authUser.username)}catch(e){$('authError').textContent=e.message||'Erreur';showAuthGate()}finally{btn.disabled=false}
+});
+async function logout(){try{await fetch('/api/auth/logout',{method:'POST'});}catch{}authUser=null;A=[];N=[];E=[];render();showAuthGate();renderAuthMode();$('authUser').value='';$('authPass').value='';$('authUser').focus()}
+async function load(){
+  // Initialisation légère : tant qu'aucun groupe n'est suivi, il n'y a
+  // aucune raison d'interroger Radar/Live. Cela évite l'écran "Chargement…"
+  // au premier lancement et laisse immédiatement l'utilisateur ajouter un groupe.
+  status('Connexion au serveur…');
+  try{
+    const a=await api('/api/artists');
+    A=Array.isArray(a?.artists)?a.artists:[];
+    N=[];E=[];
+    render();
+    if(!A.length){
+      status(authUser?.email?'Prêt — ajoutez un groupe ou un artiste':'Prêt — ajoutez un groupe ou un artiste · pensez à enregistrer votre e-mail de récupération');
+      return;
+    }
+
+    status('Actualisation des données…');
+    const results=await Promise.allSettled([
+      api('/api/radar?limit=1000'),
+      api('/api/live?limit=1000')
+    ]);
+    if(results[0].status==='fulfilled') N=results[0].value?.items||[];
+    if(results[1].status==='fulfilled') E=results[1].value?.items||[];
+    render();
+    const failed=results.filter(r=>r.status==='rejected').length;
+    status(failed?'Groupes chargés · certaines données sont indisponibles':'Données agrégées · sources gratuites');
+    loadRealPhotos().catch(()=>{});
+  }catch(e){
+    render();
+    status('Backend inaccessible : '+e.message);
+  }
+}
+let bitWidgetPromise=null;
+function loadBandsintownWidget(){
+  if(bitWidgetPromise)return bitWidgetPromise;
+  bitWidgetPromise=new Promise((resolve,reject)=>{
+    if(window.BandsintownWidget&&typeof window.BandsintownWidget.init==='function')return resolve();
+    const old=document.querySelector('script[data-stayloud-bit]');
+    if(old){old.addEventListener('load',()=>resolve());old.addEventListener('error',reject);return;}
+    const s=document.createElement('script');s.src='https://widgetv3.bandsintown.com/main.min.js';s.charset='utf-8';s.async=true;s.dataset.stayloudBit='1';
+    s.onload=()=>resolve();s.onerror=reject;document.head.appendChild(s);
+  });
+  return bitWidgetPromise;
+}
+function bitDateToIso(v){
+  const s=String(v||'').replace(/\s+/g,' ').trim();
+  let d=new Date(s);
+  if(!Number.isNaN(d.getTime()))return d.toISOString().slice(0,10);
+  const m=s.match(/([A-Z][a-z]{2,8})\.?\s+(\d{1,2}),?\s+(20\d{2})/i);
+  if(!m)return '';
+  const months={jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+  const mo=months[m[1].toLowerCase()];if(!mo)return '';
+  return `${m[3]}-${String(mo).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+}
+function bitLocation(v){
+  const s=String(v||'').replace(/\s+/g,' ').trim();
+  const parts=s.split(',').map(x=>x.trim()).filter(Boolean);
+  if(parts.length<2)return {city:s,country:''};
+  const last=parts.at(-1);
+  const countryMap={France:'France',Belgium:'Belgique',Germany:'Allemagne',Spain:'Espagne',Italy:'Italie',Switzerland:'Suisse','United Kingdom':'Royaume-Uni',UK:'Royaume-Uni','Netherlands':'Pays-Bas',Portugal:'Portugal',Poland:'Pologne',Austria:'Autriche',Ireland:'Irlande','Czech Republic':'République tchèque','Czechia':'République tchèque',Denmark:'Danemark',Sweden:'Suède',Norway:'Norvège',Finland:'Finlande',Hungary:'Hongrie',Romania:'Roumanie',Croatia:'Croatie',Slovenia:'Slovénie',Serbia:'Serbie',Luxembourg:'Luxembourg',Japan:'Japon','South Korea':'Corée du Sud',Canada:'Canada','United States':'États-Unis',USA:'États-Unis',US:'États-Unis'};
+  if(countryMap[last])return {city:parts.slice(0,-1).join(', '),country:countryMap[last]};
+  const usStates=new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV DC'.split(' '));
+  const caProvinces=new Set('AB BC MB NB NL NS NT NU ON PE QC SK YT'.split(' '));
+  if(/^[A-Z]{2}$/.test(last))return {city:parts.slice(0,-1).join(', '),country:usStates.has(last)?'États-Unis':caProvinces.has(last)?'Canada':''};
+  return {city:parts.slice(0,-1).join(', '),country:''};
+}
+async function refreshBandsintownWidget(id){
+  const info=await api('/api/artists/'+id+'/bandsintown-id');
+  if(!info?.id)return 0;
+  await loadBandsintownWidget();
+  const host=$('bitHarvest');host.innerHTML='';
+  const a=document.createElement('a');a.className='bit-widget-initializer';
+  a.setAttribute('data-artist-name','id_'+info.id);
+  a.setAttribute('data-display-limit','all');
+  a.setAttribute('data-display-past-dates','false');
+  a.setAttribute('data-display-local-dates','false');
+  a.setAttribute('data-display-start-time','true');
+  a.setAttribute('data-display-details','false');
+  a.setAttribute('data-display-lineup','false');
+  a.setAttribute('data-language','en');
+  a.setAttribute('data-date-format','MMM D, YYYY');
+  a.setAttribute('data-auto-style','false');
+  host.appendChild(a);
+  if(window.BandsintownWidget&&typeof window.BandsintownWidget.init==='function')window.BandsintownWidget.init();
+
+  // IMPORTANT: the widget uses lazy rendering. A 2px/overflow-hidden harvest
+  // box made Bandsintown think only the first visible event existed. Keep the
+  // widget fully laid out off-screen so all events can be rendered.
+  let stable=0,lastSignature='';
+  for(let i=0;i<100;i++){
+    await new Promise(r=>setTimeout(r,500));
+    const els=[...host.querySelectorAll(".bit-event, [class*='bit-event']")];
+    const signature=els.map(el=>[
+      el.querySelector('.bit-date')?.textContent||'',
+      el.querySelector('.bit-venue')?.textContent||'',
+      el.querySelector('.bit-location')?.textContent||''
+    ].join('|')).join('||');
+    if(signature && signature===lastSignature)stable++; else stable=0;
+    lastSignature=signature;
+    const more=[...host.querySelectorAll('button,a')].find(x=>/show more|more dates|more events|afficher plus|plus d.?événements/i.test(x.textContent||''));
+    if(more && typeof more.click==='function' && i<80){try{more.click()}catch{}}
+    // Bandsintown documents data-display-limit="all"; wait for the DOM to
+    // stop changing rather than assuming the first batch is complete.
+    if(els.length>=2 && stable>=8 && i>=12)break;
+  }
+  const events=[...host.querySelectorAll(".bit-event, [class*='bit-event']")];
+  const rows=events.map(el=>{
+    const date=bitDateToIso(el.querySelector('.bit-date')?.textContent||'');
+    const venue=(el.querySelector('.bit-venue')?.textContent||'').trim();
+    const loc=bitLocation(el.querySelector('.bit-location')?.textContent||'');
+    const time=(el.querySelector('.bit-startTime')?.textContent||'').trim();
+    const href=el.querySelector('a.bit-details, a[href*="/e/"]')?.href||'';
+    return {title:(el.querySelector('.bit-title')?.textContent||A.find(x=>x.id===id)?.name||'').trim(),date,time:time||null,venue,city:loc.city,country:loc.country,url:href};
+  }).filter(x=>x.date&&x.venue&&x.city);
+  if(rows.length)await api('/api/artists/'+id+'/bandsintown-widget',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})});
+  host.innerHTML='';
+  return rows.length;
+}
+function addModalOpen(title,sub,body,footer=''){ $('addModalTitle').textContent=title; $('addModalSub').textContent=sub||''; $('addModalBody').innerHTML=body; $('addModalFooter').innerHTML=footer; $('addModal').classList.add('open'); document.body.style.overflow='hidden'; }
+function closeAddModal(){ $('addModal').classList.remove('open'); document.body.style.overflow=''; addWizard={rawName:'',candidate:null,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]}; photoEdit={artistId:null,artist:null,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]}; const b=$('add');if(b){b.disabled=false;b.textContent='+ AJOUTER'} }
+function normUi(s){return String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()}
+function candidateIsAmbiguous(items,input){const q=normUi(input);return items.filter(x=>normUi(x.name)===q).length>1}
+function candidateCard(x){const years=x.beginDate?((x.endDate?x.beginDate.slice(0,4)+'–'+x.endDate.slice(0,4):'depuis '+x.beginDate.slice(0,4))):'';const place=x.hometown||x.area||'';const country=x.country||'';const genre=x.genre||x.style||((x.tags||[]).slice(0,4).join(' · '));const meta=[place,country&&place!==country?country:'',genre,years,x.type].filter(Boolean);const source=x.source?`Source : ${x.source}`:'';const desc=String(x.description||'').trim();return `<button type="button" class="candidate-card" onclick='selectArtistCandidate(${JSON.stringify(x).replace(/</g,'\\u003c')})'>${x.imageUrl?`<img class="candidate-avatar" src="${esc(x.imageUrl)}" alt="" onerror="this.style.display='none'">`:''}<div class="candidate-name">${esc(x.name)}</div><div class="candidate-meta">${esc(meta.join(' · ')||'Artiste musical')}</div>${source?`<div class="candidate-source">${esc(source)}</div>`:''}${x.upcomingCount?`<div class="candidate-source">${x.upcomingCount} concert${x.upcomingCount>1?'s':''} à venir</div>`:''}${desc?`<div class="candidate-desc">${esc(desc.slice(0,220))}${desc.length>220?'…':''}</div>`:''}${x.bandsintownUrl?`<div class="candidate-source">Bandsintown ✓</div>`:''}${x.mbid?`<div class="candidate-source">MBID : ${esc(x.mbid)}</div>`:''}</button>`}
+async function showPhotoChoices(reset=true){
+ const c=addWizard.candidate; const name=c?.name||addWizard.rawName;
+ if(reset){addWizard.photoPage=0;addWizard.shownPhotoUrls=[];addWizard.photos=[];addWizard.selectedPhoto=null;}
+ addModalOpen('Choisir la photo','Cette photo sera enregistrée avec ce groupe et utilisée dans STAYLOUD. Maximum 5 propositions par série.','<div class="add-modal-loading">Recherche des photos les plus récentes…</div>','<button type="button" class="mini" onclick="closeAddModal()">Annuler</button>');
+ try{
+  const context=[c?.country,c?.style||c?.genre,c?.source,c?.metalArchiveUrl||c?.spiritUrl].filter(Boolean).join(' · '); const biUrl=c?.bandsintownUrl||''; const qs='?name='+encodeURIComponent(name)+'&context='+encodeURIComponent(context)+'&bandsintownUrl='+encodeURIComponent(biUrl)+'&page='+addWizard.photoPage+'&exclude='+encodeURIComponent(JSON.stringify(addWizard.shownPhotoUrls)); const d=await api('/api/artists/photo-candidates'+qs); addWizard.photos=Array.isArray(d?.items)?d.items.slice(0,5):[];
+  addWizard.photos.forEach(x=>{const u=x.url||x.thumbUrl;if(u&&!addWizard.shownPhotoUrls.includes(u))addWizard.shownPhotoUrls.push(u);});
+  const cards=addWizard.photos.map((x,i)=>`<button type="button" class="photo-choice" id="photoChoice${i}" onclick="selectPhotoChoice(${i})"><img src="${esc(x.thumbUrl||x.url)}" alt="${esc(x.title||name)}" loading="lazy" onerror="this.closest('.photo-choice').style.display='none'"><span class="photo-choice-check">✓</span><span class="photo-choice-info">${esc(x.title||'Photo du groupe')}</span>${imageCandidateYear(x)?`<span class="photo-choice-date">${imageCandidateYear(x)}</span>`:''}<span class="photo-choice-source">${esc(x.credit||'Photo')}</span></button>`).join('');
+  const none=`<button type="button" class="photo-choice" id="photoChoiceNone" onclick="selectPhotoChoice(-1)"><div class="photo-none">Aucune photo<br><small>Tu pourras en choisir une plus tard.</small></div><span class="photo-choice-check">✓</span><span class="photo-choice-info">Ne pas enregistrer de photo</span></button>`;
+  const next=addWizard.photos.length?'<button type="button" class="mini photo-refresh" onclick="addWizard.photoPage++;showPhotoChoices(false)">5 autres photos →</button>':'';
+  $('addModalBody').innerHTML='<div class="photo-choice-grid">'+(cards||'<div class="add-modal-error">Aucune photo trouvée pour cette série.</div>')+none+'</div><div class="add-modal-note">Les propositions mélangent photos live, studio, promotionnelles et pochettes pertinentes. La date est prioritaire et « 5 autres photos » ouvre une nouvelle série sans répéter les précédentes.</div>';
+  addWizard.selectedPhoto=null;
+  $('addModalFooter').innerHTML=next+'<button type="button" class="mini" onclick="closeAddModal()">Annuler</button><button type="button" id="confirmAddBtn" class="modal-primary" disabled onclick="confirmAddArtist()">Ajouter le groupe</button>';
+ }catch(e){$('addModalBody').innerHTML='<div class="add-modal-error">Impossible de récupérer les photos pour le moment.</div>';}
+}
+async function openPhotoEditor(id){
+ const a=A.find(x=>Number(x.id)===Number(id)); if(!a)return;
+ photoEdit={artistId:id,artist:a,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]};
+ await loadPhotoEditorChoices(true,true);
+}
+async function loadPhotoEditorChoices(force=false,reset=false){
+ const a=photoEdit.artist; if(!a)return;
+ if(reset||force&&photoEdit.photoPage===0){photoEdit.photoPage=0;photoEdit.shownPhotoUrls=[];}
+ addModalOpen('Changer la photo',`Choisis une nouvelle photo pour ${a.name}. Photos récentes : live, studio, promotionnelles ou pochettes pertinentes.`,'<div class="add-modal-loading">Recherche des photos les plus récentes…</div>','<button type="button" class="mini" onclick="closeAddModal()">Annuler</button>');
+ try{
+  const context=[a.country,a.style,a.identity_source,a.identity_key].filter(Boolean).join(' · '); const biUrl=a.bandsintown_url||'';
+  const qs='?name='+encodeURIComponent(a.name)+'&context='+encodeURIComponent(context)+'&bandsintownUrl='+encodeURIComponent(biUrl)+'&force=1&page='+photoEdit.photoPage+'&exclude='+encodeURIComponent(JSON.stringify(photoEdit.shownPhotoUrls));
+  const d=await api('/api/artists/photo-candidates'+qs); photoEdit.photos=Array.isArray(d?.items)?d.items.slice(0,5):[];
+  photoEdit.photos.forEach(x=>{const u=x.url||x.thumbUrl;if(u&&!photoEdit.shownPhotoUrls.includes(u))photoEdit.shownPhotoUrls.push(u);});
+  const cards=photoEdit.photos.map((x,i)=>{
+   const year=imageCandidateYear(x);
+   return `<button type="button" class="photo-choice" id="editPhotoChoice${i}" onclick="selectEditPhoto(${i})"><img src="${esc(x.thumbUrl||x.url)}" alt="${esc(x.title||a.name)}" loading="lazy" onerror="this.closest('.photo-choice').style.display='none'"><span class="photo-choice-check">✓</span><span class="photo-choice-info">${esc(x.title||'Photo live / groupe')}</span>${year?`<span class="photo-choice-date">${year}</span>`:''}<span class="photo-choice-source">${esc(x.credit||'Recherche d’images')}</span></button>`;
+  }).join('');
+  const next=photoEdit.photos.length?'<button type="button" class="mini photo-refresh" onclick="photoEdit.photoPage++;loadPhotoEditorChoices(false,false)">5 autres photos →</button>':'';
+  $('addModalBody').innerHTML=(photoEdit.photos.length?'<div class="photo-edit-current">Photo actuelle : <strong>conservée tant que tu ne valides pas une nouvelle photo</strong></div>':'')+'<div class="photo-choice-grid">'+(cards||'<div class="add-modal-error">Aucune nouvelle photo pertinente trouvée.</div>')+'</div><div class="add-modal-note">Chaque nouvelle série exclut les photos déjà proposées. Priorité à la date la plus récente, quel que soit le type de photo pertinent.</div>';
+  $('addModalFooter').innerHTML=next+'<button type="button" class="mini" onclick="closeAddModal()">Annuler</button><button type="button" id="savePhotoBtn" class="modal-primary" disabled onclick="saveEditedPhoto()">Enregistrer la photo</button>';
+ }catch(e){$('addModalBody').innerHTML='<div class="add-modal-error">Impossible de récupérer les photos pour le moment.</div>'; $('addModalFooter').innerHTML='<button type="button" class="mini" onclick="closeAddModal()">Fermer</button>'}
+}
+function imageCandidateYear(x){const t=String(x?.date||'')+' '+String(x?.title||'')+' '+String(x?.description||'')+' '+String(x?.sourceTitle||'');const ys=[...t.matchAll(/(?:19|20)\d{2}/g)].map(m=>Number(m[0])).filter(y=>y>=2000&&y<=new Date().getFullYear());return ys.length?Math.max(...ys):0}
+async function importArtistPhotoFile(event,id){
+ const file=event?.target?.files?.[0]; if(!file)return;
+ if(!String(file.type||'').startsWith('image/')){status('Le fichier sélectionné n’est pas une image.');event.target.value='';return;}
+ try{
+  status('Import de la photo…');
+  const reader=new FileReader();
+  reader.onload=()=>{
+   const img=new Image();
+   img.onload=async()=>{
+    try{
+     const max=1600,scale=Math.min(1,max/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+     const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale)),h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+     const ctx=canvas.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+     let dataUrl=canvas.toDataURL('image/jpeg',0.88);
+     if(dataUrl.length>7000000)dataUrl=canvas.toDataURL('image/jpeg',0.72);
+     const r=await api('/api/artists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({photoUrl:dataUrl})});
+     if(!r?.artist)throw new Error('La photo n’a pas pu être enregistrée');
+     const idx=A.findIndex(x=>Number(x.id)===Number(id)); if(idx>=0)A[idx]=r.artist;
+     photos[id]=dataUrl;render();openArtistProfile(id);status('Photo de '+(r.artist.name||'ce groupe')+' importée.');
+    }catch(e){status('Impossible d’importer la photo : '+(e.message||e));}
+   };
+   img.onerror=()=>status('Impossible de lire cette image.');
+   img.src=reader.result;
+  };
+  reader.onerror=()=>status('Impossible de lire le fichier.');
+  reader.readAsDataURL(file);
+ }catch(e){status('Impossible d’importer la photo : '+(e.message||e));}
+ finally{if(event?.target)event.target.value='';}
+}
+async function openDescriptionEditor(id){
+ const a=A.find(x=>Number(x.id)===Number(id));
+ if(!a){status('Groupe introuvable.');return;}
+ let value=String(a.description||'');
+ try{
+  const profile=await api('/api/artists/'+id+'/profile');
+  if(profile&&typeof profile.description==='string') value=profile.description;
+ }catch(_){}
+ addModalOpen('Modifier la description',`Description de ${a?.name||'ce groupe'}.`,`<textarea id="artistDescriptionInput" style="width:100%;min-height:220px;resize:vertical;background:#080b0e;border:1px solid var(--line);border-radius:8px;color:#fff;padding:12px;font:14px/1.5 Inter,Arial,sans-serif;outline:none" placeholder="Écris ici la description du groupe…">${esc(value)}</textarea><div class="add-modal-note">Cette description sera conservée et remplacera le descriptif automatique pour ce groupe.</div>`,`<button type="button" class="mini" onclick="closeAddModal()">Annuler</button><button type="button" id="saveDescriptionBtn" class="modal-primary" onclick="saveArtistDescription(${id})">Enregistrer la description</button>`);
+ setTimeout(()=>{const el=$('artistDescriptionInput');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}},0);
+}
+async function saveArtistDescription(id){
+ const el=$('artistDescriptionInput'),b=$('saveDescriptionBtn'); if(!el)return;
+ const description=String(el.value||'').trim();
+ if(!description){status('La description ne peut pas être vide.');return;}
+ if(b){b.disabled=true;b.textContent='Enregistrement…'}
+ try{
+  const r=await api('/api/artists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({description})});
+  if(!r?.artist)throw new Error('La description n’a pas pu être enregistrée');
+  const idx=A.findIndex(x=>Number(x.id)===Number(id)); if(idx>=0)A[idx]=r.artist;
+  closeAddModal();
+  await openArtistProfile(id);
+  status('Description de '+(r.artist.name||'ce groupe')+' mise à jour.');
+ }catch(e){if(b){b.disabled=false;b.textContent='Enregistrer la description'}status('Impossible de modifier la description : '+(e.message||e));}
+}
+function selectEditPhoto(i){photoEdit.selectedPhoto=photoEdit.photos[i]||null;document.querySelectorAll('[id^="editPhotoChoice"]').forEach(x=>x.classList.remove('selected'));const el=document.getElementById('editPhotoChoice'+i);if(el)el.classList.add('selected');const b=$('savePhotoBtn');if(b)b.disabled=!photoEdit.selectedPhoto}
+async function saveEditedPhoto(){
+ const id=photoEdit.artistId,u=photoEdit.selectedPhoto?.url||photoEdit.selectedPhoto?.thumbUrl; if(!id||!u)return;
+ const b=$('savePhotoBtn');if(b){b.disabled=true;b.textContent='Enregistrement…'}
+ try{
+  const r=await api('/api/artists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({photoUrl:u})});
+  const idx=A.findIndex(x=>Number(x.id)===Number(id)); if(idx>=0&&r?.artist)A[idx]=r.artist;
+  photos[id]=u; closeAddModal(); render(); openArtistProfile(id); status('Photo de '+(r?.artist?.name||photoEdit.artist?.name||'ce groupe')+' mise à jour.');
+ }catch(e){if(b){b.disabled=false;b.textContent='Enregistrer la photo'}status('Impossible de changer la photo : '+e.message)}
+}
+function selectPhotoChoice(i){addWizard.selectedPhoto=i<0?null:addWizard.photos[i];document.querySelectorAll('.photo-choice').forEach(x=>x.classList.remove('selected'));const el=document.getElementById(i<0?'photoChoiceNone':'photoChoice'+i);if(el)el.classList.add('selected');$('confirmAddBtn').disabled=false}
+function showAutomaticBandsintownPhoto(x){
+ addWizard.candidate=x||null;
+ const name=x?.name||addWizard.rawName;
+ const image=x?.imageUrl||'';
+ if(image){
+  addWizard.selectedPhoto={url:image,thumbUrl:image,title:name,credit:'Bandsintown',sourceTitle:'Bandsintown',_bandsintown:true};
+  addModalOpen('Groupe sélectionné','La photo Bandsintown est automatiquement utilisée pour ce groupe.',`<div class="auto-photo-wrap"><div class="auto-photo-card"><img src="${esc(image)}" alt="${esc(name)}" onerror="this.style.display='none'"><div class="auto-photo-info"><strong>${esc(name)}</strong><span>Photo : Bandsintown</span></div></div></div><div class="add-modal-note">Tu pourras changer la photo plus tard depuis la fiche du groupe.</div>`,`<button type="button" class="mini" onclick="closeAddModal()">Annuler</button><button type="button" id="confirmAddBtn" class="modal-primary" onclick="confirmAddArtist()">Ajouter le groupe</button>`);
+ }else{
+  addWizard.selectedPhoto=null;
+  addModalOpen('Groupe sélectionné','Aucune photo Bandsintown n’est disponible pour ce groupe.',`<div class="add-modal-note">Le groupe sera ajouté sans photo. Tu pourras en choisir une plus tard depuis sa fiche.</div>`,`<button type="button" class="mini" onclick="closeAddModal()">Annuler</button><button type="button" id="confirmAddBtn" class="modal-primary" onclick="confirmAddArtist()">Ajouter le groupe</button>`);
+ }
+}
+async function selectArtistCandidate(x){showAutomaticBandsintownPhoto(x)}
+async function startAddWizard(){
+ const input=$('name').value.trim(); if(!input)return;
+ const btn=$('add');btn.disabled=true;btn.textContent='RECHERCHE…';addWizard={rawName:input,candidate:null,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]};
+ try{
+  const d=await api('/api/artists/candidates?name='+encodeURIComponent(input));
+  const q=normUi(input);
+  const items=(Array.isArray(d?.items)?d.items:[]).filter(x=>normUi(x.name)===q && String(x.type||'Group').toLowerCase()==='group');
+  if(!items.length){
+   addModalOpen('Groupe introuvable',`Aucun groupe nommé « ${esc(input)} » n’a été trouvé. Vérifie l’orthographe du nom avant de l’ajouter.`,`<div class=\"add-modal-error\">⚠️ Aucun groupe correspondant exactement à ce nom n’a été trouvé.<br><br>Vérifie l’orthographe puis réessaie.</div>`,'<button type=\"button\" class=\"mini\" onclick=\"closeAddModal()\">Fermer</button>');
+   return;
+  }
+  if(items.length>1){
+   addModalOpen('Quel groupe cherches-tu ?',`Plusieurs identités correspondent à ce nom. Vérifie les informations ci-dessous et choisis précisément le groupe recherché.`,`<div class=\"candidate-grid\">${items.map(candidateCard).join('')}</div><div class=\"add-modal-note\">Le choix est mémorisé avec l'identité et la source sélectionnées. Les informations servent à distinguer les homonymes.</div>`,'<button type=\"button\" class=\"mini\" onclick=\"closeAddModal()\">Annuler</button>');
+  }else{
+   addWizard.candidate=items[0];
+   showAutomaticBandsintownPhoto(addWizard.candidate);
+  }
+ }catch(e){
+  addModalOpen('Recherche impossible','Le groupe n’a pas pu être vérifié. Vérifie ta connexion puis réessaie.',`<div class=\"add-modal-error\">⚠️ Impossible de vérifier l’existence de « ${esc(input)} » pour le moment.<br><br>${esc(e.message||'Erreur inconnue')}</div>`,'<button type=\"button\" class=\"mini\" onclick=\"closeAddModal()\">Fermer</button>');
+ }finally{
+  btn.disabled=false;btn.textContent='+ AJOUTER';
+ }
+}
+async function confirmAddArtist(){
+ const btn=$('confirmAddBtn');if(!btn)return;btn.disabled=true;btn.textContent='AJOUT…';
+ try{
+  const c=addWizard.candidate||{name:addWizard.rawName};
+  const photo=addWizard.selectedPhoto?.thumbUrl||addWizard.selectedPhoto?.url||null;
+  const r=await api('/api/artists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:c.name,mbid:c.mbid||'',photoUrl:photo||'',identitySource:c.source||'',identityKey:c.mbid?`mbid:${c.mbid}`:(c.metalArchiveUrl||c.spiritUrl||`${c.source||'unknown'}|${normUi(c.name)}|${normUi(c.country||c.area||'')}|${normUi(c.style||c.genre||'')}`),disambiguation:c.disambiguation||'',country:c.country||'',style:c.style||c.genre||'',identityLocked:true,bandsintownUrl:c.bandsintownUrl||''})});
+  if(r?.artist){const existing=A.findIndex(x=>Number(x.id)===Number(r.artist.id));if(existing>=0)A[existing]=r.artist;else A.push(r.artist);}
+  $('name').value='';closeAddModal();await load();status((r?.artist?.name||c.name)+' a été ajouté à vos groupes.');
+ }catch(e){btn.disabled=false;btn.textContent='Ajouter le groupe';status('Ajout impossible : '+e.message)}
+}
+async function add(){return startAddWizard()}
+
+async function refresh(id){status('Actualisation concerts + line-up…');try{const report=await api('/api/artists/'+id+'/refresh',{method:'POST'});const n=await refreshBandsintownWidget(id).catch(()=>0);await load();const src=report?.live?.sources||{};status('Concerts actualisés · Bandsintown '+(src.Bandsintown?.count||0)+' · InfoConcert '+(src.InfoConcert?.count||0)+' · Line-up '+(src.LineupDiscovery?.count||0)+' · Widget '+n);}catch(e){status('Erreur : '+e.message)}}
+async function removeA(id){const a=A.find(x=>x.id===id);if(!a)return;if(confirm('Supprimer '+a.name+' de STAYLOUD ?\n\nSes actualités, concerts et données associées seront retirés de cette installation.')){try{await api('/api/artists/'+id,{method:'DELETE'});currentProfileId=null;await load();show('styles')}catch(e){status('Suppression impossible : '+e.message)}}}
+function show(s){if(activeAlbumPlayer)closeAlbumPlayer(activeAlbumPlayer);document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));$(s).classList.add('active');document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('active',x.dataset.s===s));window.scrollTo({top:0,behavior:'smooth'});if(s==='discover')openDiscover()}
+$('artistForm').addEventListener('submit',e=>{e.preventDefault();add()});$('discoverStyle').onchange=discoverArtistsLoad;$('locate').onclick=()=>{locationMode='auto';$('discoverLocation').value='';discoverLocation()};$('searchLocation').onclick=discoverLocation;$('discoverLocation').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();discoverLocation()}});$('discoverLocation').addEventListener('input',()=>{if(String($('discoverLocation').value||'').trim()){locationMode='manual';discoverEventsData=[];discoverFestivalsData=[];$('locationBox').innerHTML='📍 Ville saisie : <strong>'+esc($('discoverLocation').value.trim())+'</strong> · cliquez sur Rechercher';renderDiscoverEvents();renderDiscoverFestivals()}});$('discoverLocation').addEventListener('click',()=>{$('discoverLocation').focus()});$('discoverRadius').onchange=()=>{discoverRadius=Number($('discoverRadius').value)||50;if(locationMode==='manual'&&String($('discoverLocation').value||'').trim())discoverLocation();else if(locationMode==='auto'&&userCoords){$('discoverLocation').value='';discoverLocation()}};$('name').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add()}};$('name').onclick=()=>{$('name').focus()};$('name').oninput=()=>{};$('addModal').addEventListener('click',e=>{if(e.target===$('addModal'))closeAddModal()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('addModal').classList.contains('open'))closeAddModal()});$('ra').onchange=()=>{limit=5;radar()};$('la').onchange=liveMini;$('co').onchange=liveMini;$('la2').onchange=async()=>{live();const id=+$('la2').value||0;if(id){$('refreshLiveBtn').disabled=true;$('refreshLiveBtn').textContent='Actualisation…';try{await refresh(id); }catch{} finally{$('refreshLiveBtn').disabled=false;$('refreshLiveBtn').textContent='↻ Actualiser les concerts';}}};$('co2').onchange=live;$('refreshLiveBtn').onclick=async()=>{const id=+$('la2').value||0;if(!id)return;$('refreshLiveBtn').disabled=true;$('refreshLiveBtn').textContent='Actualisation…';try{await refresh(id)}finally{$('refreshLiveBtn').disabled=false;$('refreshLiveBtn').textContent='↻ Actualiser les concerts'}};document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>show(b.dataset.s));authBoot().catch(e=>{showAuthGate();$('authError').textContent=e.message||'Backend inaccessible'});
+</script></body></html>
