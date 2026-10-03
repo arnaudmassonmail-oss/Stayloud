@@ -56,6 +56,7 @@ app.post('/api/auth/register',async(req,res)=>{
 });
 app.post('/api/auth/login',async(req,res)=>{
  try{
+  console.log('LOGIN D1 DIAGNOSTIC:', {d1Enabled, config: d1ConfigStatus(), pid: process.pid});
   if(!d1Enabled)return res.status(503).json({error:'D1 n’est pas configuré sur le serveur'});
   const user=await d1AuthenticateUser(req.body?.username,req.body?.password);
   if(!user)return res.status(401).json({error:'Nom d’utilisateur ou mot de passe incorrect'});
