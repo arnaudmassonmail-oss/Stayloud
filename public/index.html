@@ -363,8 +363,8 @@ async function loadDiscoverPhotos(){
 
 function discoverArtistHTML(a){const img=discoverArtistImage(a);const data=JSON.stringify(a).replace(/</g,'\u003c');return `<article class="discover-card" role="button" tabindex="0" style="cursor:pointer" onclick='openDiscoverProfile(${data})' onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDiscoverProfile(${data})}"><div class="discover-img" ${photoStyle(img)}></div><div><button class="profile-name-btn" type="button" onclick='event.stopPropagation();openDiscoverProfile(${data})'><div class="discover-name">${esc(a.name)}</div></button><div class="discover-style">${esc(a.style||'Métal')}</div><div class="discover-meta">${esc(a.disambiguation||'Artiste à découvrir')} · cliquer pour ouvrir le profil</div></div></article>`}
 function renderDiscoverArtists(){const el=$('discoverArtists');if(!el)return;el.innerHTML=discoverArtistsData.length?discoverArtistsData.map(discoverArtistHTML).join(''):'<div class="discover-empty">Aucun nouveau groupe trouvé pour ce style pour le moment.</div>'}
-function renderDiscoverEvents(){const el=$('discoverEvents');if(!el)return;el.innerHTML=discoverEventsData.length?discoverEventsData.slice(0,50).map(x=>`<article class="discover-event"><div class="discover-event-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div><div class="discover-event-name">${esc(cleanDiscoverText(x.title))}</div><div class="discover-event-place">${esc(cleanDiscoverText(x.venue||''))} ${x.city?'· '+esc(cleanDiscoverText(x.city)):''}</div></div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join(''):'<div class="discover-empty">Aucun concert métal trouvé autour de vous avec les sources gratuites disponibles.</div>'}
-function renderDiscoverFestivals(){const el=$('discoverFestivals');if(!el)return;el.innerHTML=discoverFestivalsData.length?discoverFestivalsData.slice(0,30).map(x=>`<article class="festival-event"><div class="festival-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div><div class="festival-name">${esc(cleanDiscoverText(x.title))}</div><div class="festival-place">${esc(cleanDiscoverText(x.venue||''))} ${x.city?'· '+esc(cleanDiscoverText(x.city)):''}</div>${x.metalDetected?'<span class="festival-badge">MÉTAL DÉTECTÉ</span>':''}</div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join(''):'<div class="discover-empty">Aucun festival trouvé dans votre secteur avec les sources gratuites disponibles.</div>'}
+function renderDiscoverEvents(){const el=$('discoverEvents');if(!el)return;el.innerHTML=discoverEventsData.length?discoverEventsData.slice(0,50).map(x=>`<article class="discover-event"><div class="discover-event-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div><div class="discover-event-name">${esc(cleanDiscoverText(x.title))}</div><div class="discover-event-place">${esc(cleanDiscoverText(x.venue||''))} ${x.city?'· '+esc(cleanDiscoverText(x.city)):''}</div></div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join(''):(discoverLoading.events?'<div class="discover-empty">⏳ Recherche des concerts en cours…</div>':'<div class="discover-empty">Aucun concert métal trouvé autour de vous avec les sources gratuites disponibles.</div>')}
+function renderDiscoverFestivals(){const el=$('discoverFestivals');if(!el)return;el.innerHTML=discoverFestivalsData.length?discoverFestivalsData.slice(0,30).map(x=>`<article class="festival-event"><div class="festival-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div><div class="festival-name">${esc(cleanDiscoverText(x.title))}</div><div class="festival-place">${esc(cleanDiscoverText(x.venue||''))} ${x.city?'· '+esc(cleanDiscoverText(x.city)):''}</div>${x.metalDetected?'<span class="festival-badge">MÉTAL DÉTECTÉ</span>':''}</div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join(''):(discoverLoading.festivals?'<div class="discover-empty">⏳ Recherche des festivals en cours…</div>':'<div class="discover-empty">Aucun festival trouvé dans votre secteur avec les sources gratuites disponibles.</div>')}
 function renderDiscover(){renderDiscoverArtists();renderDiscoverEvents();renderDiscoverFestivals();if(userPlace)$('locationBox').innerHTML=`📍 <strong>${esc(userPlace.city||userPlace.locality||userPlace.municipality||'Votre position')}</strong>${userPlace.state?' · '+esc(userPlace.state):''} · rayon de <strong>${discoverRadius} km</strong> · concerts et festivals dans votre secteur`}
 async function discoverArtistsLoad(){const style=$('discoverStyle').value;$('discoverArtists').innerHTML='<div class="discover-status">Recherche de groupes…</div>';try{const d=await api('/api/discover/artists?style='+encodeURIComponent(style)+'&limit=18');discoverArtistsData=d.items||[];renderDiscoverArtists();loadDiscoverPhotos().catch(()=>{});}catch(e){$('discoverArtists').innerHTML='<div class="discover-empty">Impossible de charger les groupes à découvrir.</div>';status('Découverte indisponible : '+e.message)}}
 async function browserReversePlace(lat,lon){
@@ -386,7 +386,7 @@ async function browserReversePlace(lat,lon){
 // Every discovery request carries a sequence number. Only the most recent
 // search may write results: a slow GPS lookup started when the page opened
 // (e.g. at home in Cugand) must never overwrite a city typed afterwards.
-let discoverSeq=0;
+let discoverSeq=0,discoverLoading={events:false,festivals:false};
 function discoverKey(x){return [String(x?.date||'').slice(0,10),normUi(x?.title),normUi(x?.venue)].join('|')}
 function mergeDiscoverRows(...lists){const m=new Map();for(const list of lists)for(const x of(list||[])){const k=discoverKey(x);if(!m.has(k))m.set(k,x)}return [...m.values()].sort((a,b)=>String(a.date||'9999').slice(0,10).localeCompare(String(b.date||'9999').slice(0,10)))}
 async function discoverLocation(){
@@ -396,29 +396,35 @@ async function discoverLocation(){
  discoverRadius=Number($('discoverRadius').value)||50;
  if(manual){
    locationMode='manual';
+   userCoords=null;
+   userPlace={city:manual,locality:manual,country:'France',manualTarget:true};
+   discoverEventsData=[];discoverFestivalsData=[];discoverLoading={events:true,festivals:true};
+   renderDiscoverEvents();renderDiscoverFestivals();
    $('locationBox').innerHTML='📍 Recherche autour de <strong>'+esc(manual)+'</strong>…';
+   const done=()=>{discoverLoading={events:false,festivals:false};renderDiscoverEvents();renderDiscoverFestivals()};
    // 1) Resolve the typed city to its own coordinates (never the GPS ones).
    let target=null;
    try{target=await api('/api/discover/resolve-city?q='+encodeURIComponent(manual))}catch{}
    if(seq!==discoverSeq)return;
-   // 2) Radius search around the typed city + the city's own agenda pages.
-   const jobs=[api('/api/discover/city-concerts?q='+encodeURIComponent(manual))];
-   if(target&&Number.isFinite(Number(target.lat))&&Number.isFinite(Number(target.lon))){
-     const qs='lat='+encodeURIComponent(target.lat)+'&lon='+encodeURIComponent(target.lon)+'&radius='+encodeURIComponent(discoverRadius)+'&targetCity='+encodeURIComponent(manual)+'&targetLat='+encodeURIComponent(target.lat)+'&targetLon='+encodeURIComponent(target.lon)+'&resolvedCityVerified=1&country='+encodeURIComponent(target.country||'France');
-     jobs.push(api('/api/discover/concerts?'+qs),api('/api/discover/festivals?'+qs));
+   if(!target||!Number.isFinite(Number(target.lat))||!Number.isFinite(Number(target.lon))){
+     // No coordinates: fall back to the city's own agenda pages (slower, no radius).
+     let cityItems=[];
+     try{cityItems=(await api('/api/discover/city-concerts?q='+encodeURIComponent(manual))).items||[]}catch{}
+     if(seq!==discoverSeq)return;
+     discoverEventsData=cityItems.filter(x=>!x.isFestival);discoverFestivalsData=cityItems.filter(x=>x.isFestival);
+     done();
+     $('locationBox').innerHTML=cityItems.length?'📍 <strong>'+esc(manual)+'</strong> · position de la ville introuvable, concerts de la ville uniquement (sans rayon).':'📍 Ville introuvable : <strong>'+esc(manual)+'</strong>. Vérifiez l’orthographe.';
+     return;
    }
-   const [city,near,fest]=await Promise.allSettled(jobs);
-   if(seq!==discoverSeq)return;
-   const cityItems=city?.status==='fulfilled'?(city.value.items||[]):[];
-   const nearItems=near?.status==='fulfilled'?(near.value.items||[]):[];
-   const festItems=fest?.status==='fulfilled'?(fest.value.items||[]):[];
-   userCoords=null;
-   userPlace={city:manual,locality:manual,country:target?.country||'France',manualTarget:true};
-   discoverEventsData=mergeDiscoverRows(nearItems.filter(x=>!x.isFestival),cityItems.filter(x=>!x.isFestival));
-   discoverFestivalsData=mergeDiscoverRows(festItems,nearItems.filter(x=>x.isFestival),cityItems.filter(x=>x.isFestival));
-   renderDiscover();
-   if(!target&&!cityItems.length)$('locationBox').innerHTML='📍 Ville introuvable : <strong>'+esc(manual)+'</strong>. Vérifiez l’orthographe.';
-   else if(!target)$('locationBox').innerHTML='📍 <strong>'+esc(manual)+'</strong> · position de la ville introuvable, concerts de la ville uniquement (sans rayon).';
+   userPlace={...userPlace,country:target.country||'France'};
+   // 2) Radius search around the typed city. Concerts and festivals share one
+   // server-side scan; each list is shown as soon as its answer arrives.
+   const qs='lat='+encodeURIComponent(target.lat)+'&lon='+encodeURIComponent(target.lon)+'&radius='+encodeURIComponent(discoverRadius)+'&targetCity='+encodeURIComponent(manual)+'&targetLat='+encodeURIComponent(target.lat)+'&targetLon='+encodeURIComponent(target.lon)+'&resolvedCityVerified=1&country='+encodeURIComponent(target.country||'France');
+   const status=()=>{$('locationBox').innerHTML='📍 <strong>'+esc(manual)+'</strong> · rayon de <strong>'+discoverRadius+' km</strong>'+(discoverLoading.events||discoverLoading.festivals?' · recherche en cours…':'')};
+   status();
+   const concertsJob=api('/api/discover/concerts?'+qs).then(d=>{if(seq!==discoverSeq)return;discoverEventsData=mergeDiscoverRows((d.items||[]).filter(x=>!x.isFestival));discoverFestivalsData=mergeDiscoverRows(discoverFestivalsData,(d.items||[]).filter(x=>x.isFestival))}).catch(()=>{}).finally(()=>{if(seq!==discoverSeq)return;discoverLoading.events=false;renderDiscoverEvents();renderDiscoverFestivals();status()});
+   const festivalsJob=api('/api/discover/festivals?'+qs).then(d=>{if(seq!==discoverSeq)return;discoverFestivalsData=mergeDiscoverRows(d.items||[],discoverFestivalsData)}).catch(()=>{}).finally(()=>{if(seq!==discoverSeq)return;discoverLoading.festivals=false;renderDiscoverFestivals();status()});
+   await Promise.allSettled([concertsJob,festivalsJob]);
    return;
  }
  locationMode='auto';
@@ -439,8 +445,10 @@ async function discoverAtCoords(seq=discoverSeq){
  discoverRadius=Number($('discoverRadius').value)||50;
  const placeQs='&city='+encodeURIComponent(userPlace?.city||'')+'&locality='+encodeURIComponent(userPlace?.locality||'')+'&county='+encodeURIComponent(userPlace?.county||'')+'&state='+encodeURIComponent(userPlace?.state||'')+'&country='+encodeURIComponent(userPlace?.country||'');
  const qs='lat='+encodeURIComponent(userCoords.lat)+'&lon='+encodeURIComponent(userCoords.lon)+'&radius='+encodeURIComponent(discoverRadius)+placeQs;
+ discoverLoading={events:true,festivals:true};renderDiscoverEvents();renderDiscoverFestivals();
  const results=await Promise.allSettled([api('/api/discover/concerts?'+qs),api('/api/discover/festivals?'+qs)]);
  if(seq!==discoverSeq)return;
+ discoverLoading={events:false,festivals:false};
  if(results[0].status==='fulfilled'){const d=results[0].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverEventsData=d.items||[]}
  if(results[1].status==='fulfilled'){const d=results[1].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverFestivalsData=d.items||[]}
  renderDiscover();
