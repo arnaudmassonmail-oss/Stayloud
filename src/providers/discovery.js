@@ -388,7 +388,8 @@ async function discoverManualCityConcerts(city){
   try{
     const r=await fetchBandsintownCity(requested);
     if(r.rows.length){
-      const correctedRows=await correctManualEventCities(r.rows,requested);
+      let near=null;try{near=await geocodeQuery(requested)}catch{}
+      const correctedRows=await correctManualEventCities(r.rows,requested,near);
       all.push(...correctedRows);
       sources.push({provider:'Bandsintown',url:r.url,mode:'city'});
     }
@@ -506,37 +507,18 @@ function parseBandsintownMetalText(text,targetCity,sourceUrl){
   }
   return rows;
 }
-async function correctManualEventCities(rows,targetCity){
+async function correctManualEventCities(rows,targetCity,near=null){
   const list=Array.isArray(rows)?rows:[];
-  const venues=[...new Set(list.map(x=>String(x?.venue||'').trim()).filter(Boolean))];
+  const venues=[...new Set(list.map(x=>String(x?.venue||'').trim()).filter(Boolean))].slice(0,80);
   const corrected=new Map();
-  for(const venue of venues){
-    // For manual city searches, the source page can assign every event the
-    // searched city even when the venue is actually in a neighbouring commune.
-    // Resolve the venue itself, then reverse-geocode its coordinates to get the
-    // real commune. This is deliberately limited to rows whose source city is
-    // the requested city, so we do not overwrite a provider's more precise city.
-    let place=await geocodeEventVenue(venue,'');
-    if(!place && targetCity)place=await geocodeEventVenue(venue,targetCity);
-    if(!place)continue;
-    try{
-      const key='venue-city|'+norm(venue);
-      let cityInfo=geoCache.get(key);
-      if(!cityInfo){
-        // Keep reverse geocoding polite; one venue is enough to establish its commune.
-        await sleep(650);
-        cityInfo=await reverseCity(place.lat,place.lon);
-        if(cityInfo?.city)geoCache.set(key,cityInfo);
-      }
-      const city=String(cityInfo?.city||'').trim();
-      if(city)corrected.set(norm(venue),city);
-    }catch{}
-  }
+  for(const venue of venues){const place=await geocodeEventVenue(venue,targetCity,near);corrected.set(norm(venue),place?.city||'')}
+  // Bandsintown rows carry the searched city only because the parser assigned
+  // it; replace it with the venue's real commune, or leave it blank when the
+  // venue could not be located rather than claiming the searched city.
   return list.map(row=>{
     const sourceCity=String(row?.city||'').trim();
-    const venueCity=corrected.get(norm(row?.venue||''));
-    if(venueCity && (!sourceCity || norm(sourceCity)===norm(targetCity||'')))return {...row,city:venueCity};
-    return row;
+    if(sourceCity&&norm(sourceCity)!==norm(targetCity||''))return row;
+    return {...row,city:corrected.get(norm(row?.venue||''))||''};
   });
 }
 
@@ -552,32 +534,45 @@ async function fetchBandsintownCity(city,lat=null,lon=null){
   }catch{}
   return {rows:[],url};
 }
-async function geocodeEventVenue(venue,targetCity){
-  const q=String([venue,targetCity,'France'].filter(Boolean).join(', ')).trim(); if(!q)return null;
-  const key='eventplace|'+norm(q); if(geoCache.has(key))return geoCache.get(key);
-  try{
-    const d=await fetchJson(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=1`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
-    const c=d?.features?.[0]?.geometry?.coordinates; if(Array.isArray(c)&&c.length>=2){const out={lat:Number(c[1]),lon:Number(c[0])};if(Number.isFinite(out.lat)&&Number.isFinite(out.lon)){geoCache.set(key,out);return out}}
-  }catch{}
-  try{
-    const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(q)}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
-    const hit=d?.[0]; const out=hit?{lat:Number(hit.lat),lon:Number(hit.lon)}:null; if(out&&Number.isFinite(out.lat)&&Number.isFinite(out.lon)){geoCache.set(key,out);return out}
-  }catch{}
-  geoCache.set(key,null); return null;
+// Resolve a concert venue (e.g. "Le Trabendo") to coordinates and its real
+// commune. Bandsintown city pages list every show in the surrounding area
+// with the venue name only, so the searched city must NOT be used as a hint:
+// "Le Trabendo, Versailles" made the address API return a random street in
+// Versailles. Nominatim knows venues as named places; we search the venue
+// name alone and keep the hit closest to the searched city.
+async function nominatimVenue(q,near){
+  const wait=Math.max(0,1100-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
+  const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&countrycodes=fr&addressdetails=1&q=${encodeURIComponent(q)}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
+  const hits=(Array.isArray(d)?d:[]).map(h=>{const a=h.address||{};return {lat:Number(h.lat),lon:Number(h.lon),city:String(a.city||a.town||a.village||a.municipality||'').trim()}}).filter(h=>Number.isFinite(h.lat)&&Number.isFinite(h.lon));
+  if(!hits.length)return null;
+  if(near&&Number.isFinite(near.lat)&&Number.isFinite(near.lon))hits.sort((x,y)=>distanceKm(near.lat,near.lon,x.lat,x.lon)-distanceKm(near.lat,near.lon,y.lat,y.lon));
+  return hits[0];
+}
+async function geocodeEventVenue(venue,targetCity,near=null){
+  const v=String(venue||'').trim(); if(!v)return null;
+  const zone=near&&Number.isFinite(near.lat)&&Number.isFinite(near.lon)?`${near.lat.toFixed(1)},${near.lon.toFixed(1)}`:'';
+  const key='venue|'+norm(v)+'|'+zone+'|'+norm(targetCity); if(geoCache.has(key))return geoCache.get(key);
+  let out=null;
+  try{out=await nominatimVenue(v,near)}catch{}
+  // Only when the venue name alone is unknown, try it inside the searched
+  // city; Nominatim matches names strictly, so this cannot invent a street.
+  if(!out&&targetCity){try{out=await nominatimVenue(`${v}, ${targetCity}`,near)}catch{}}
+  if(out&&!out.city){try{const r=await reverseCity(out.lat,out.lon);out.city=String(r?.city||'').trim()}catch{}}
+  geoCache.set(key,out); return out;
 }
 async function discoverBandsintownMetal(city,lat,lon,radiusKm){
   const r=await fetchBandsintownCity(city,lat,lon); if(!r.rows.length)return [];
   const uniqueVenues=[...new Set(r.rows.map(x=>x.venue).filter(Boolean))].slice(0,80); const venueCoords=new Map();
-  for(const venue of uniqueVenues){const p=await geocodeEventVenue(venue,city); if(p)venueCoords.set(norm(venue),p);}
+  for(const venue of uniqueVenues){const p=await geocodeEventVenue(venue,city,{lat:Number(lat),lon:Number(lon)}); if(p)venueCoords.set(norm(venue),p);}
   // Never assume that an event belongs to the requested city when its venue
   // could not be geocoded. That assumption was the exact mechanism that could
   // make a stale/wrong Bandsintown page (for example Cugand) leak into a
   // Versailles search. A venue must have real coordinates before it can pass
   // the target-city radius filter.
   const located=[];
-  for(const row of r.rows){const p=venueCoords.get(norm(row.venue)); if(!p)continue; row._place={coordinates:{latitude:p.lat,longitude:p.lon}}; located.push(row);}
+  for(const row of r.rows){const p=venueCoords.get(norm(row.venue)); if(!p)continue; located.push({...row,city:p.city||'',_place:{coordinates:{latitude:p.lat,longitude:p.lon}}});}
   const filtered=await withDistance(located,lat,lon,radiusKm);
-  return filtered.map(x=>({...x,city:x.city||city}));
+  return filtered;
 }
 
 const FR_MONTHS={janvier:1,fevrier:2,février:2,mars:3,avril:4,mai:5,juin:6,juillet:7,aout:8,août:8,septembre:9,octobre:10,novembre:11,decembre:12,décembre:12};
