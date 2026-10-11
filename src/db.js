@@ -103,6 +103,10 @@ try{db.exec("ALTER TABLE events ADD COLUMN evidence_json TEXT")}catch{}
 // Concert engine v5.15: only Bandsintown + InfoConcert. Any cache created by
 // an older engine is discarded once, while artists/news are preserved.
 db.exec("CREATE TABLE IF NOT EXISTS app_meta(key TEXT PRIMARY KEY,value TEXT)");
+// Geocoding results (venues, cities) survive restarts: a venue does not move,
+// and Nominatim only allows ~1 request/second, so re-resolving them on every
+// search was the main cause of slow discovery. Misses are retried after 7 days.
+db.exec("CREATE TABLE IF NOT EXISTS geo_cache(key TEXT PRIMARY KEY,value TEXT,updated_at INTEGER)");
 try{db.exec("ALTER TABLE artists ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE")}catch{}
 try{db.exec("CREATE INDEX IF NOT EXISTS idx_artists_user ON artists(user_id)")}catch{}
 
@@ -363,3 +367,7 @@ export function providerRun(provider,error=null){
  last_success_at=COALESCE(excluded.last_success_at,provider_runs.last_success_at),
  last_error=excluded.last_error`).run(provider,t,error?null:t,error);
 }
+
+const GEO_MISS_TTL=7*24*3600*1000;
+export function geoCacheGet(key){const r=db.prepare("SELECT value,updated_at FROM geo_cache WHERE key=?").get(key);if(!r)return undefined;const v=JSON.parse(r.value);if(v===null&&Date.now()-r.updated_at>GEO_MISS_TTL)return undefined;return v}
+export function geoCacheSet(key,value){db.prepare("INSERT INTO geo_cache(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(key,JSON.stringify(value??null),Date.now())}

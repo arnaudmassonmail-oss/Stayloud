@@ -1,8 +1,15 @@
 import {fetchJson,fetchText,sleep,eventKey} from "../utils.js";
 import {XMLParser} from "fast-xml-parser";
-import {getArtists,putEvent} from "../db.js";
+import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
 
-const geoCache=new Map();
+// In-memory map backed by the persistent geo_cache table (see db.js).
+const geoMem=new Map();
+const geoCache={
+  has(k){if(geoMem.has(k))return true;try{const v=geoCacheGet(k);if(v!==undefined){geoMem.set(k,v);return true}}catch{}return false},
+  get(k){return this.has(k)?geoMem.get(k):undefined},
+  // Misses stay in memory only: they may come from a network error.
+  set(k,v){geoMem.set(k,v);if(v!=null){try{geoCacheSet(k,v)}catch{}}return this}
+};
 let geoLast=0;
 const MB_BASE="https://musicbrainz.org/ws/2";
 let mbLast=0;
@@ -163,12 +170,21 @@ async function geocodeCity(city,country=''){const c=String(city||'').trim();if(!
 function distanceKm(lat1,lon1,lat2,lon2){const toRad=v=>v*Math.PI/180,dLat=toRad(lat2-lat1),dLon=toRad(lon2-lon1),a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
 
 async function withDistance(rows,lat,lon,radiusKm){
+  const coordsOf=row=>{const p=row._place||{};return {lat:Number(p.coordinates?.latitude),lon:Number(p.coordinates?.longitude)}};
+  const cityOf=row=>row.city||row._place?.area?.name||'';
+  // Locate each missing city once, within a time budget (see VENUE_BUDGET_MS);
+  // unfinished lookups keep running in the background to fill the cache.
+  const missing=new Map();
+  for(const row of rows){const c=coordsOf(row);if(!Number.isFinite(c.lat)||!Number.isFinite(c.lon)){const city=cityOf(row);if(city)missing.set(norm(`${city}|${row.country||''}`),[city,row.country||''])}}
+  const found=new Map();
+  if(missing.size){
+    const run=(async()=>{for(const [k,[city,country]] of missing){const g=await geocodeCity(city,country);if(g)found.set(k,g)}})().catch(()=>{});
+    await withinBudget(run);
+  }
   const out=[];
   for(const row of rows){
-    const p=row._place||{};
-    let elat=Number(p.coordinates?.latitude), elon=Number(p.coordinates?.longitude);
-    const city=row.city||p.area?.name||'';
-    if(!Number.isFinite(elat)||!Number.isFinite(elon)){const g=await geocodeCity(city,row.country||'');if(g){elat=g.lat;elon=g.lon}}
+    let {lat:elat,lon:elon}=coordsOf(row);
+    if(!Number.isFinite(elat)||!Number.isFinite(elon)){const g=found.get(norm(`${cityOf(row)}|${row.country||''}`));if(g){elat=g.lat;elon=g.lon}}
     if(Number.isFinite(elat)&&Number.isFinite(elon)){const d=distanceKm(lat,lon,elat,elon);if(d<=radiusKm)out.push({...row,distanceKm:Math.round(d*10)/10})}
   }
   return out;
@@ -335,6 +351,12 @@ function eventHasMetal(row){
  return terms.some(t=>hay.includes(t));
 }
 
+// Run alternative ways of reading the same page (proxy / direct / URL
+// variants) at the same time and keep the first one that yields rows,
+// instead of waiting for each one to time out in turn.
+async function firstWithRows(attempts){
+  try{return await Promise.any(attempts.map(async f=>{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}))}catch{return null}
+}
 async function fetchDiscoveryProxy(url,timeout=18000){
   const proxy=`https://r.jina.ai/${url}`;
   return fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},timeout);
@@ -423,20 +445,13 @@ async function discoverManualCityConcerts(city){
 
 async function fetchMetalRegionalSource(source){
  const url=`https://${source.slug}.concerts-metal.com/`;
- // Try the clean proxy first because Render/free hosts can receive a different
- // response from the public site than a normal browser. Direct fetch remains
- // the fallback so existing feeds keep working if the proxy is unavailable.
- try{
-  const text=await fetchDiscoveryProxy(url,18000);
-  let parsed=parseConcertsMetalHtml(text,url);
-  if(!parsed.length)parsed=parseConcertsMetalText(text,url);
-  if(parsed.length)return {source,rows:parsed,error:null,transport:'jina'};
- }catch{}
- try{
-  const html=await fetchText(url,{headers:{Accept:'text/html'}},15000);
-  const parsed=parseConcertsMetalHtml(html,url);
-  return {source,rows:parsed,error:null,transport:'direct'};
- }catch(e){return {source,rows:[],error:e};}
+ // Render/free hosts can receive a different response from the public site
+ // than a normal browser, so the clean proxy and a direct fetch race.
+ const r=await firstWithRows([
+  async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseConcertsMetalHtml(text,url);if(!rows.length)rows=parseConcertsMetalText(text,url);return {source,rows,error:null,transport:'jina'}},
+  async()=>{const html=await fetchText(url,{headers:{Accept:'text/html'}},15000);return {source,rows:parseConcertsMetalHtml(html,url),error:null,transport:'direct'}}
+ ]);
+ return r||{source,rows:[],error:new Error('no rows')};
 }
 
 
@@ -511,7 +526,8 @@ async function correctManualEventCities(rows,targetCity,near=null){
   const list=Array.isArray(rows)?rows:[];
   const venues=[...new Set(list.map(x=>String(x?.venue||'').trim()).filter(Boolean))].slice(0,80);
   const corrected=new Map();
-  for(const venue of venues){const place=await geocodeEventVenue(venue,targetCity,near);corrected.set(norm(venue),place?.city||'')}
+  const places=await geocodeVenuesWithin(venues,targetCity,near);
+  for(const venue of venues)corrected.set(norm(venue),places.get(norm(venue))?.city||'');
   // Bandsintown rows carry the searched city only because the parser assigned
   // it; replace it with the venue's real commune, or leave it blank when the
   // venue could not be located rather than claiming the searched city.
@@ -526,13 +542,11 @@ async function fetchBandsintownCity(city,lat=null,lon=null){
   const slug=bandsintownSlug(city); if(!slug)return {rows:[]};
   const suffix=(Number.isFinite(Number(lat))&&Number.isFinite(Number(lon)))?`?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}`:'';
   const url=`https://www.bandsintown.com/fr/c/${slug}-france/all-dates/genre/metal${suffix}`;
-  try{
-    const text=await fetchDiscoveryProxy(url,18000); const rows=parseBandsintownMetalText(text,city,url); if(rows.length)return {rows,url,transport:'jina'};
-  }catch{}
-  try{
-    const html=await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},18000); const rows=parseBandsintownMetalText(html,city,url); if(rows.length)return {rows,url,transport:'direct'};
-  }catch{}
-  return {rows:[],url};
+  const r=await firstWithRows([
+    async()=>({rows:parseBandsintownMetalText(await fetchDiscoveryProxy(url,15000),city,url),url,transport:'jina'}),
+    async()=>({rows:parseBandsintownMetalText(await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},15000),city,url),url,transport:'direct'})
+  ]);
+  return r||{rows:[],url};
 }
 // Resolve a concert venue (e.g. "Le Trabendo") to coordinates and its real
 // commune. Bandsintown city pages list every show in the surrounding area
@@ -548,6 +562,24 @@ async function nominatimVenue(q,near){
   if(near&&Number.isFinite(near.lat)&&Number.isFinite(near.lon))hits.sort((x,y)=>distanceKm(near.lat,near.lon,x.lat,x.lon)-distanceKm(near.lat,near.lon,y.lat,y.lon));
   return hits[0];
 }
+// Unknown venues cost ~1 s each (Nominatim rate limit). Cached ones are
+// instant; only wait VENUE_BUDGET_MS for new ones and let the lookup finish
+// in the background so the next search has them.
+const VENUE_BUDGET_MS=8000;
+// Wait for a lookup loop at most VENUE_BUDGET_MS. If it had to be cut short,
+// cached scans are partial: drop them once the loop completes so the next
+// search is rebuilt from the now-complete geocoding cache.
+async function withinBudget(run){
+  let finished=false; run.then(()=>{finished=true});
+  await Promise.race([run,sleep(VENUE_BUDGET_MS)]);
+  if(!finished)run.then(()=>scanCache.clear());
+}
+async function geocodeVenuesWithin(venues,targetCity,near){
+  const out=new Map();
+  const run=(async()=>{for(const venue of venues){const p=await geocodeEventVenue(venue,targetCity,near);if(p)out.set(norm(venue),p)}})().catch(()=>{});
+  await withinBudget(run);
+  return new Map(out);
+}
 async function geocodeEventVenue(venue,targetCity,near=null){
   const v=String(venue||'').trim(); if(!v)return null;
   const zone=near&&Number.isFinite(near.lat)&&Number.isFinite(near.lon)?`${near.lat.toFixed(1)},${near.lon.toFixed(1)}`:'';
@@ -562,8 +594,8 @@ async function geocodeEventVenue(venue,targetCity,near=null){
 }
 async function discoverBandsintownMetal(city,lat,lon,radiusKm){
   const r=await fetchBandsintownCity(city,lat,lon); if(!r.rows.length)return [];
-  const uniqueVenues=[...new Set(r.rows.map(x=>x.venue).filter(Boolean))].slice(0,80); const venueCoords=new Map();
-  for(const venue of uniqueVenues){const p=await geocodeEventVenue(venue,city,{lat:Number(lat),lon:Number(lon)}); if(p)venueCoords.set(norm(venue),p);}
+  const uniqueVenues=[...new Set(r.rows.map(x=>x.venue).filter(Boolean))].slice(0,80);
+  const venueCoords=await geocodeVenuesWithin(uniqueVenues,city,{lat:Number(lat),lon:Number(lon)});
   // Never assume that an event belongs to the requested city when its venue
   // could not be geocoded. That assumption was the exact mechanism that could
   // make a stale/wrong Bandsintown page (for example Cugand) leak into a
@@ -641,20 +673,11 @@ function parseSongkickMetalText(text,metro){
 
 async function fetchSongkickMetro(metro){
   const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/2026/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/2026/genre/metal`];
-  for(const url of urls){
-    try{
-      const text=await fetchDiscoveryProxy(url,18000);
-      let rows=parseSongkickMetalText(text,metro);
-      if(!rows.length)rows=parseSongkickMetalHtml(text,metro);
-      if(rows.length)return {metro,rows,transport:'jina'};
-    }catch{}
-    try{
-      const html=await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},12000);
-      const rows=parseSongkickMetalHtml(html,metro);
-      if(rows.length)return {metro,rows,transport:'direct'};
-    }catch{}
-  }
-  return {metro,rows:[]};
+  const r=await firstWithRows(urls.flatMap(url=>[
+    async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);return {metro,rows,transport:'jina'}},
+    async()=>{const html=await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},12000);return {metro,rows:parseSongkickMetalHtml(html,metro),transport:'direct'}}
+  ]));
+  return r||{metro,rows:[]};
 }
 async function discoverSongkickMetal(lat,lon,radiusKm){
   const ranked=SONGKICK_METAL_METROS.map(m=>({...m,distance:distanceKm(lat,lon,m.lat,m.lon)})).sort((a,b)=>a.distance-b.distance);
@@ -681,18 +704,29 @@ async function discoverSongkickMetal(lat,lon,radiusKm){
   return [...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
 }
 
-async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
+// Concerts and festivals come from the same scan; the browser asks for both at
+// once, so share one in-flight run and keep its result for a few minutes.
+const scanCache=new Map(); const SCAN_TTL=20*60*1000;
+function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
+  const key=[Number(lat).toFixed(3),Number(lon).toFixed(3),radiusKm,norm(targetCityOverride)].join('|');
+  const hit=scanCache.get(key); if(hit&&Date.now()-hit.at<SCAN_TTL)return hit.job;
+  const job=scanConcertsMetal(lat,lon,radiusKm,targetCityOverride).catch(e=>{scanCache.delete(key);throw e});
+  scanCache.set(key,{at:Date.now(),job});
+  for(const [k,v] of scanCache)if(Date.now()-v.at>=SCAN_TTL)scanCache.delete(k);
+  return job;
+}
+async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   // Manual searches are authoritative: when the user typed a city, never
   // infer the search city again from the browser/GPS coordinates.
   const targetCity=String(targetCityOverride||'').trim();
   const resolvedPlace=targetCity?{city:targetCity,lat,lon}:await reverseCity(lat,lon);
   const effectiveCity=String(resolvedPlace?.city||targetCity||'').trim();
   const all=[];
+  // The three sources are independent: query them in parallel.
   // 1) Bandsintown city Metal agenda: broad coverage and a public city/genre page.
-  if(effectiveCity){try{all.push(...await discoverBandsintownMetal(effectiveCity,lat,lon,radiusKm));}catch{}}
-
+  const bandsintownJob=effectiveCity?discoverBandsintownMetal(effectiveCity,lat,lon,radiusKm).catch(()=>[]):Promise.resolve([]);
   // 2) Songkick city/metro Metal agenda: second independent nationwide source.
-  try{all.push(...await discoverSongkickMetal(lat,lon,radiusKm));}catch{}
+  const songkickJob=discoverSongkickMetal(lat,lon,radiusKm).catch(()=>[]);
 
   // 3) Specialist Concerts-Metal regional feed: keep it because it is especially
   // rich for local French metal shows. Force the region containing the target city.
@@ -713,6 +747,7 @@ async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     }}
   }catch{}
 
+  all.push(...await bandsintownJob,...await songkickJob);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const filtered=await withDistance(dated,lat,lon,radiusKm);
   const unique=new Map();
@@ -727,7 +762,7 @@ async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   return {concerts:fallback,festivals:[]};
 }
 
-async function googleLocalFestivalDiscovery(place){const queries=[`festival metal ${place.city||''} ${place.state||''}`,`concert metal festival ${place.city||''} ${place.state||''}`];const found=new Map();for(const q of queries){try{const xml=await fetchText(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=fr&gl=FR&ceid=FR:fr`,{},15000);const d=new XMLParser({ignoreAttributes:false}).parse(xml);let items=d?.rss?.channel?.item||[];if(!Array.isArray(items))items=[items];for(const x of items.slice(0,20)){const title=String(x.title||'').trim(),url=String(x.link||'').trim(),desc=stripHtml(x.description||'');const hay=`${title} ${desc}`.toLowerCase();if(!title||!url||!/festival|concert|live|metal/i.test(hay))continue;const key=title.toLowerCase();if(found.has(key))continue;const gp=await geocodeQuery(`${title} ${desc}`);if(!gp)continue;const dkm=distanceKm(latOr(place),lonOr(place),gp.lat,gp.lon);if(dkm>100)continue;const metalDetected=FESTIVAL_METAL_TAGS.some(t=>hay.includes(t));if(!metalDetected)continue;found.set(key,{id:`google-local-${Buffer.from(url).toString('base64url').slice(0,24)}`,title,date:parseRssDate(x.pubDate),venue:'',city:gp.display_name?.split(',')[0]||'',country:'France',url,provider:'google-news-local',metalDetected:true,distanceKm:Math.round(dkm*10)/10});}}catch{}}return [...found.values()]}
+async function googleLocalFestivalDiscovery(place){const deadline=Date.now()+10000;const queries=[`festival metal ${place.city||''} ${place.state||''}`,`concert metal festival ${place.city||''} ${place.state||''}`];const found=new Map();for(const q of queries){try{const xml=await fetchText(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=fr&gl=FR&ceid=FR:fr`,{},15000);const d=new XMLParser({ignoreAttributes:false}).parse(xml);let items=d?.rss?.channel?.item||[];if(!Array.isArray(items))items=[items];for(const x of items.slice(0,20)){if(Date.now()>deadline)break;const title=String(x.title||'').trim(),url=String(x.link||'').trim(),desc=stripHtml(x.description||'');const hay=`${title} ${desc}`.toLowerCase();if(!title||!url||!/festival|concert|live|metal/i.test(hay))continue;const key=title.toLowerCase();if(found.has(key))continue;const gp=await geocodeQuery(`${title} ${desc}`);if(!gp)continue;const dkm=distanceKm(latOr(place),lonOr(place),gp.lat,gp.lon);if(dkm>100)continue;const metalDetected=FESTIVAL_METAL_TAGS.some(t=>hay.includes(t));if(!metalDetected)continue;found.set(key,{id:`google-local-${Buffer.from(url).toString('base64url').slice(0,24)}`,title,date:parseRssDate(x.pubDate),venue:'',city:gp.display_name?.split(',')[0]||'',country:'France',url,provider:'google-news-local',metalDetected:true,distanceKm:Math.round(dkm*10)/10});}}catch{}}return [...found.values()]}
 function latOr(p){return Number(p?.lat)||0} function lonOr(p){return Number(p?.lon)||0}
 function parseRssDate(v){const d=new Date(String(v||''));return Number.isNaN(d.getTime())?null:d.toISOString()}
 
