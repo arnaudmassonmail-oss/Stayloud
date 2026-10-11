@@ -383,48 +383,64 @@ async function browserReversePlace(lat,lon){
   }catch{}
   return {city:'',locality:'',municipality:'',county:'',state:'',country:'',lat:Number(lat),lon:Number(lon),display_name:''};
 }
+// Every discovery request carries a sequence number. Only the most recent
+// search may write results: a slow GPS lookup started when the page opened
+// (e.g. at home in Cugand) must never overwrite a city typed afterwards.
+let discoverSeq=0;
+function discoverKey(x){return [String(x?.date||'').slice(0,10),normUi(x?.title),normUi(x?.venue)].join('|')}
+function mergeDiscoverRows(...lists){const m=new Map();for(const list of lists)for(const x of(list||[])){const k=discoverKey(x);if(!m.has(k))m.set(k,x)}return [...m.values()].sort((a,b)=>String(a.date||'9999').slice(0,10).localeCompare(String(b.date||'9999').slice(0,10)))}
 async function discoverLocation(){
+ const seq=++discoverSeq;
  const input=$('discoverLocation');
  const manual=String(input?.value||'').trim();
+ discoverRadius=Number($('discoverRadius').value)||50;
  if(manual){
    locationMode='manual';
-   // STEP 1: manual city search is isolated from GPS/geolocation. The typed
-   // city string is sent as the only target identifier.
-   $('locationBox').innerHTML='📍 Recherche pour <strong>'+esc(manual)+'</strong>…';
-   try{
-     const d=await api('/api/discover/city-concerts?q='+encodeURIComponent(manual));
-     userPlace={city:d.city||manual,locality:d.city||manual,country:'France',manualTarget:true,citySearchOnly:true};
-     userCoords=null;
-     discoverEventsData=(d.items||[]).filter(x=>!x.isFestival);
-     discoverFestivalsData=(d.items||[]).filter(x=>x.isFestival);
-     const src=(d.sources||[]).map(x=>x.provider).filter(Boolean);
-     $('locationBox').innerHTML='📍 <strong>Recherche pour ' + esc(d.city||manual) + '</strong> · étape 1 · distance temporairement désactivée · sources : ' + esc(src.length?src.join(' + '):'aucune') + '';
-     renderDiscover();
-   }catch(e){
-     userPlace={city:manual,locality:manual,country:'France',manualTarget:true,citySearchOnly:true};
-     discoverEventsData=[];discoverFestivalsData=[];
-     $('locationBox').innerHTML='📍 <strong>Recherche pour ' + esc(manual) + '</strong> · étape 1 · aucune source n’a répondu.';
-     renderDiscoverEvents();renderDiscoverFestivals();
+   $('locationBox').innerHTML='📍 Recherche autour de <strong>'+esc(manual)+'</strong>…';
+   // 1) Resolve the typed city to its own coordinates (never the GPS ones).
+   let target=null;
+   try{target=await api('/api/discover/resolve-city?q='+encodeURIComponent(manual))}catch{}
+   if(seq!==discoverSeq)return;
+   // 2) Radius search around the typed city + the city's own agenda pages.
+   const jobs=[api('/api/discover/city-concerts?q='+encodeURIComponent(manual))];
+   if(target&&Number.isFinite(Number(target.lat))&&Number.isFinite(Number(target.lon))){
+     const qs='lat='+encodeURIComponent(target.lat)+'&lon='+encodeURIComponent(target.lon)+'&radius='+encodeURIComponent(discoverRadius)+'&targetCity='+encodeURIComponent(manual)+'&targetLat='+encodeURIComponent(target.lat)+'&targetLon='+encodeURIComponent(target.lon)+'&resolvedCityVerified=1&country='+encodeURIComponent(target.country||'France');
+     jobs.push(api('/api/discover/concerts?'+qs),api('/api/discover/festivals?'+qs));
    }
+   const [city,near,fest]=await Promise.allSettled(jobs);
+   if(seq!==discoverSeq)return;
+   const cityItems=city?.status==='fulfilled'?(city.value.items||[]):[];
+   const nearItems=near?.status==='fulfilled'?(near.value.items||[]):[];
+   const festItems=fest?.status==='fulfilled'?(fest.value.items||[]):[];
+   userCoords=null;
+   userPlace={city:manual,locality:manual,country:target?.country||'France',manualTarget:true};
+   discoverEventsData=mergeDiscoverRows(nearItems.filter(x=>!x.isFestival),cityItems.filter(x=>!x.isFestival));
+   discoverFestivalsData=mergeDiscoverRows(festItems,nearItems.filter(x=>x.isFestival),cityItems.filter(x=>x.isFestival));
+   renderDiscover();
+   if(!target&&!cityItems.length)$('locationBox').innerHTML='📍 Ville introuvable : <strong>'+esc(manual)+'</strong>. Vérifiez l’orthographe.';
+   else if(!target)$('locationBox').innerHTML='📍 <strong>'+esc(manual)+'</strong> · position de la ville introuvable, concerts de la ville uniquement (sans rayon).';
    return;
  }
  locationMode='auto';
  if(!navigator.geolocation){$('locationBox').innerHTML='Géolocalisation indisponible. Entrez votre ville ou votre lieu ci-dessus.';return}
  $('locationBox').innerHTML='📍 Recherche des concerts et festivals autour de vous…';
  navigator.geolocation.getCurrentPosition(async pos=>{
-   userCoords={lat:pos.coords.latitude,lon:pos.coords.longitude};
+   if(seq!==discoverSeq)return;
+   const coords={lat:pos.coords.latitude,lon:pos.coords.longitude};
    $('locationBox').innerHTML='📍 Position détectée · détermination de votre ville…';
-   userPlace=await browserReversePlace(userCoords.lat,userCoords.lon);
-   if(!userPlace?.city)userPlace={...userPlace,city:'Position actuelle'};
-   await discoverAtCoords();
- },err=>{$('locationBox').innerHTML='Position refusée ou indisponible. <strong>Entrez votre ville ou votre lieu</strong> ci-dessus pour continuer.'},{enableHighAccuracy:true,timeout:20000,maximumAge:60000});
+   let place=await browserReversePlace(coords.lat,coords.lon);
+   if(seq!==discoverSeq)return;
+   if(!place?.city)place={...place,city:'Position actuelle'};
+   userCoords=coords;userPlace=place;
+   await discoverAtCoords(seq);
+ },err=>{if(seq!==discoverSeq)return;$('locationBox').innerHTML='Position refusée ou indisponible. <strong>Entrez votre ville ou votre lieu</strong> ci-dessus pour continuer.'},{enableHighAccuracy:true,timeout:20000,maximumAge:60000});
 }
-async function discoverAtCoords(manualTarget=false){
+async function discoverAtCoords(seq=discoverSeq){
  discoverRadius=Number($('discoverRadius').value)||50;
- const targetQs=manualTarget&&userPlace?.city?('&targetCity='+encodeURIComponent(userPlace.city)+'&manualTarget=1&targetLat='+encodeURIComponent(userPlace.targetLat||userCoords.lat)+'&targetLon='+encodeURIComponent(userPlace.targetLon||userCoords.lon)+'&resolvedCityVerified=1'):'';
  const placeQs='&city='+encodeURIComponent(userPlace?.city||'')+'&locality='+encodeURIComponent(userPlace?.locality||'')+'&county='+encodeURIComponent(userPlace?.county||'')+'&state='+encodeURIComponent(userPlace?.state||'')+'&country='+encodeURIComponent(userPlace?.country||'');
- const qs='lat='+encodeURIComponent(userCoords.lat)+'&lon='+encodeURIComponent(userCoords.lon)+'&radius='+encodeURIComponent(discoverRadius)+targetQs+placeQs;
+ const qs='lat='+encodeURIComponent(userCoords.lat)+'&lon='+encodeURIComponent(userCoords.lon)+'&radius='+encodeURIComponent(discoverRadius)+placeQs;
  const results=await Promise.allSettled([api('/api/discover/concerts?'+qs),api('/api/discover/festivals?'+qs)]);
+ if(seq!==discoverSeq)return;
  if(results[0].status==='fulfilled'){const d=results[0].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverEventsData=d.items||[]}
  if(results[1].status==='fulfilled'){const d=results[1].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverFestivalsData=d.items||[]}
  renderDiscover();
