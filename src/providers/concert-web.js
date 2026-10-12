@@ -1,4 +1,4 @@
-import {fetchText,eventKey,countryGuess,parseDate} from "../utils.js";
+import {fetchText,eventKey,countryGuess,parseDate,isFranceEvent} from "../utils.js";
 
 // STAYLOUD 5.16 — concert engine: Bandsintown + InfoConcert + lineup discovery.
 // Bandsintown and InfoConcert remain the primary artist calendars. A separate
@@ -197,31 +197,23 @@ async function discoverBandsintownEventPages(artist,expectedCount=0){
   const urls=new Set();
   const now=new Date();
   const y=now.getUTCFullYear(), next=y+1;
-  const months=[
-    'January','February','March','April','May','June','July','August','September','October','November','December',
-    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
-  ];
-  const countries=['Germany','United Kingdom','Belgium','Netherlands','Switzerland','Italy','Spain','Poland','Austria','Czech Republic','Hungary','France','United States','Canada'];
+  // Only concerts in France are kept, so only French event pages are looked
+  // for (this used to run up to ~330 web searches across 14 countries).
   const queries=[
-    `site:bandsintown.com/e/ "${name}"`,
-    `site:bandsintown.com/e/ "${name}" "${y}"`,
-    `site:bandsintown.com/e/ "${name}" "${next}"`
+    `site:bandsintown.com/e/ "${name}" France`,
+    `site:bandsintown.com/e/ "${name}" France "${y}"`,
+    `site:bandsintown.com/e/ "${name}" France "${next}"`
   ];
-  for(const m of months)queries.push(`site:bandsintown.com/e/ "${name}" "${m}" "${next}"`);
-  for(const c of countries)queries.push(`site:bandsintown.com/e/ "${name}" "${c}"`);
-  for(const c of countries)queries.push(`site:bandsintown.com/e/ "${name}" "${c}" "${next}"`);
   for(const q of queries){
-    for(const start of [0,10,20,30,40,50]){
+    for(const start of [0,10]){
       const t=await searchReader(q,start);
       for(const u of extractBandsintownEventUrlsFromSearch(t))urls.add(u);
-      if(expectedCount && urls.size>=expectedCount)break;
-      if(urls.size>=120)break;
+      if(urls.size>=40)break;
     }
-    if(expectedCount && urls.size>=expectedCount)break;
-    if(urls.size>=120)break;
+    if(urls.size>=40)break;
   }
   if(!urls.size)return [];
-  const pages=[...urls].slice(0,Math.max(120,expectedCount||0));
+  const pages=[...urls].slice(0,40);
   const results=[];
   // Sequential batches avoid hammering search/page endpoints and make Windows runs stable.
   for(let i=0;i<pages.length;i+=6){
@@ -859,10 +851,14 @@ function extractGenericSearchUrls(text){
 
 function lineupRelationNearArtist(text,artist){
   const n=norm(text), a=norm(artist.name);
-  const idx=n.indexOf(a);
-  if(idx<0)return false;
-  const around=n.slice(Math.max(0,idx-180),Math.min(n.length,idx+a.length+180));
-  return /premi[eè]re partie|first (?:part|support)|support(?: act|ing)?|opening (?:act|band)|opener|special guest|guest(?:s)?|invit(?:e|é|ée|es|és)|line[D]?up|avec .{0,50}en premi[eè]re|assurera l'ouverture|ouvrira la soir[ée]e/.test(around);
+  if(!a)return false;
+  // Check every mention of the group, not only the first one (often a page
+  // title or JSON-LD block far from the "première partie" sentence).
+  const re=/premi[eè]re partie|first (?:part|support)|support(?: act|ing)?|opening (?:act|band)|opener|special guest|guest(?:s)?|invit(?:e|é|ée|es|és)|line[D]?up|avec .{0,50}en premi[eè]re|assurera l'ouverture|ouvrira la soir[ée]e/;
+  for(let idx=n.indexOf(a);idx>=0;idx=n.indexOf(a,idx+a.length)){
+    if(re.test(n.slice(Math.max(0,idx-180),Math.min(n.length,idx+a.length+180))))return true;
+  }
+  return false;
 }
 
 function parseGenericLineupPage(text,artist,url){
@@ -899,33 +895,28 @@ function parseGenericLineupPage(text,artist,url){
 }
 
 async function discoverLineupConcerts(artist){
+  // Concerts where the group plays as support act / special guest in France.
+  // A page is kept only when it proves the group is billed (see
+  // parseGenericLineupPage), and only French dates are returned.
   const name=String(artist.name||'').trim();if(!name)return [];
   const y=new Date().getUTCFullYear(), next=y+1;
   const queries=[
-    `"${name}" "première partie" concert ${y}`,
-    `"${name}" "first support" concert ${y}`,
-    `"${name}" "support act" ${y}`,
-    `"${name}" "special guest" concert ${y}`,
-    `"${name}" "line-up" concert ${y}`,
-    `"${name}" concert ${next}`
+    `"${name}" "première partie" concert France ${y}`,
+    `"${name}" "première partie" concert ${next}`,
+    `"${name}" "invité" OR "special guest" concert France ${y}`,
+    `"${name}" "support" concert Paris OR Lyon OR Nantes OR Lille OR Bordeaux OR Toulouse ${y}`
   ];
+  const texts=await Promise.all(queries.map(q=>genericSearchReader(q,0).catch(()=>'')));
   const urls=new Set();
-  for(const q of queries){
-    for(const start of [0,10]){
-      const t=await genericSearchReader(q,start);
-      for(const u of extractGenericSearchUrls(t))urls.add(u);
-      if(urls.size>=30)break;
-    }
-    if(urls.size>=30)break;
-  }
-  const pages=[...urls].filter(u=>!/(facebook|instagram|youtube|twitter|x\.com|tiktok)\./i.test(u)).slice(0,30);
+  for(const t of texts)for(const u of extractGenericSearchUrls(t))urls.add(u);
+  const pages=[...urls].filter(u=>!/(facebook|instagram|youtube|twitter|x\.com|tiktok)\./i.test(u)).slice(0,24);
   const results=[];
-  for(let i=0;i<pages.length;i+=6){
-    const batch=pages.slice(i,i+6);
+  for(let i=0;i<pages.length;i+=8){
+    const batch=pages.slice(i,i+8);
     const got=await Promise.allSettled(batch.map(async u=>parseGenericLineupPage(await readSource(u),artist,u)));
     results.push(...got.flatMap(r=>r.status==='fulfilled'?r.value:[]));
   }
-  return dedupe(results);
+  return dedupe(results.filter(isFranceEvent)).map(x=>({...x,support:true}));
 }
 
 export async function fetchExternalConcerts(artist){
@@ -939,6 +930,8 @@ export async function fetchExternalConcerts(artist){
   };
   const all=[];
 
+  // Support slots (première partie) run alongside the two artist calendars.
+  const lineupJob=discoverLineupConcerts(artist).then(rows=>({ok:true,rows}),()=>({ok:false,rows:[]}));
   const [biUrl,icUrl]=await Promise.all([
     resolveBandsintown(artist),
     resolveInfoConcert(artist)
@@ -985,26 +978,12 @@ export async function fetchExternalConcerts(artist){
     }catch{}
   }
 
+  const lineup=await lineupJob;
+  sources.LineupDiscovery={url:null,count:lineup.rows.length,ok:lineup.ok,mode:lineup.ok?(lineup.rows.length?'event-pages':'no-match'):'failed'};
+  all.push(...lineup.rows);
   const rows=dedupe(all);
   sources.Bandsintown.count=rows.filter(x=>String(x.provider||'').startsWith('Bandsintown')).length;
   sources.InfoConcert.count=rows.filter(x=>x.provider==='InfoConcert').length;
-
-  // Line-up discovery is a third *discovery path*, not a new primary calendar.
-  // It looks for real event pages where the tracked artist is explicitly billed
-  // as support/opening/guest, then keeps only events whose page itself proves
-  // the artist is part of the line-up. This catches support slots such as
-  // LANDMVRKS opening for Papa Roach even when the artist calendar is absent.
-  try{
-    const lineup=await discoverLineupConcerts(artist);
-    if(lineup.length){
-      sources.LineupDiscovery={url:null,count:lineup.length,ok:true,mode:'event-pages'};
-      all.push(...lineup);
-    }else{
-      sources.LineupDiscovery={url:null,count:0,ok:true,mode:'no-match'};
-    }
-  }catch{
-    sources.LineupDiscovery={url:null,count:0,ok:false,mode:'failed'};
-  }
 
   // Do not wipe a working calendar when both collectors returned no usable
   // event. The caller can keep the previous cache in that case.
@@ -1013,7 +992,9 @@ export async function fetchExternalConcerts(artist){
     err.sources=sources;
     throw err;
   }
-  return {rows,sources};
+  // Sources answered: keep only the concerts in France (possibly none, which
+  // then clears foreign dates stored by older versions).
+  return {rows:rows.filter(isFranceEvent),sources};
 }
 
 export {resolveBandsintown,resolveInfoConcert,parseBandsintown,parseInfoConcert,parseInfoConcertLoose,parseInfoConcertRobust,parseInfoConcertGenericPage,parseBandsintownEventPage,parseGenericLineupPage,discoverLineupConcerts};

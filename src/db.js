@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import {countryGuess,isRelevantArtistNews} from "./utils.js";
+import {countryGuess,isRelevantArtistNews,isFranceEvent} from "./utils.js";
 
 const file=process.env.DB_FILE||((process.env.RENDER_DISK_PATH||process.env.DATA_DIR)?path.join(process.env.RENDER_DISK_PATH||process.env.DATA_DIR,'music-radar.sqlite'):"./data/music-radar.sqlite");
 fs.mkdirSync(path.dirname(file),{recursive:true});
@@ -353,7 +353,8 @@ export function eventList({artistId,userId,country,limit=500}={}){
  if(userId!=null){q+=" AND a.user_id=?";p.push(userId)}
  if(artistId){q+=" AND e.artist_id=?";p.push(artistId)}
  q+=" ORDER BY date(e.date),time(e.time) LIMIT ?";p.push(limit);
- let rows=db.prepare(q).all(...p).map(e=>({...e,country:countryGuess(e.country,e.city,e.venue,e.title)}));
+ // Only concerts in France are shown (also hides foreign dates stored earlier).
+ let rows=db.prepare(q).all(...p).filter(isFranceEvent).map(e=>({...e,country:countryGuess(e.country,e.city,e.venue,e.title)}));
  const key=e=>[e.artist_id,String(e.date||'').slice(0,10),normalizeName(e.city).replace(/[^a-z0-9]+/g,' '),normalizeName(e.venue).replace(/[^a-z0-9]+/g,' ')].join('|');
  const best=new Map(); for(const e of rows){const k=key(e);const old=best.get(k);if(!old||String(e.title||'').length>String(old.title||'').length)best.set(k,e)}
  rows=[...best.values()].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))||String(a.time||'').localeCompare(String(b.time||'')));
