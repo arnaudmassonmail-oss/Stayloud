@@ -5,7 +5,7 @@ import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser} from "./db.js";
 import {d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
 import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
-import {refreshArtist,refreshAll} from "./aggregator.js";
+import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts} from "./providers/discovery.js";
 
@@ -51,13 +51,21 @@ const warmedArtists=new Set(), warmingByUser=new Map();
 let warmChain=Promise.resolve();
 function warmUserArtists(userId){
  const uid=Number(userId);
- for(const a of localArtistsForUser(uid)){
-  if(warmedArtists.has(a.id))continue;
-  warmedArtists.add(a.id);
-  warmingByUser.set(uid,(warmingByUser.get(uid)||0)+1);
-  warmChain=warmChain.then(()=>refreshArtist(a.id)).catch(e=>console.error('Warm refresh:',e?.message||e)).finally(()=>warmingByUser.set(uid,Math.max(0,(warmingByUser.get(uid)||1)-1)));
- }
+ const ids=localArtistsForUser(uid).map(a=>a.id).filter(id=>!warmedArtists.has(id));
+ if(!ids.length)return;
+ for(const id of ids)warmedArtists.add(id);
+ warmingByUser.set(uid,(warmingByUser.get(uid)||0)+1);
+ // Articles of every group first (fast), then concerts, then the slow part:
+ // reading article pages for missing dates/photos.
+ const pending=new Map();
+ warmChain=warmChain
+  .then(async()=>{for(const id of ids){try{pending.set(id,(await refreshArtistNews(id,{enrich:false})).pending)}catch(e){logWarm(e)}}})
+  .then(async()=>{for(const id of ids){try{await refreshArtistConcerts(id)}catch(e){logWarm(e)}}})
+  .finally(()=>warmingByUser.set(uid,Math.max(0,(warmingByUser.get(uid)||1)-1)))
+  .then(async()=>{for(const id of ids){try{await enrichArtistNews(id,pending.get(id))}catch(e){logWarm(e)}}})
+  .catch(()=>{});
 }
+const logWarm=e=>console.error('Warm refresh:',e?.message||e);
 const isWarming=userId=>(warmingByUser.get(Number(userId))||0)>0;
 async function bootstrapD1(){
  if(!d1Enabled)return;
@@ -132,7 +140,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.8",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.9",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});

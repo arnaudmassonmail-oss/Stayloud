@@ -1,5 +1,5 @@
 import {getArtist,getArtists,putNews,replaceArtistEvents,providerRun,cleanArtistNews,migrateConcertEngineV59,setArtistSourceUrls} from "./db.js";
-import {gdelt,googleNews} from "./providers/news.js";
+import {gdelt,googleNews,enrichDates} from "./providers/news.js";
 import {liveMentions} from "./providers/live-mentions.js";
 import {fetchExternalConcerts} from "./providers/concert-web.js";
 import {resolve as resolveMusicBrainz} from "./providers/musicbrainz.js";
@@ -11,6 +11,16 @@ export async function refreshArtist(id){
  const p=run(id).finally(()=>running.delete(id));running.set(id,p);return p;
 }
 async function run(id){
+ const {report,pending}=await refreshArtistNews(id,{enrich:false});
+ await enrichArtistNews(id,pending);
+ Object.assign(report,{live:(await refreshArtistConcerts(id)).live});
+ return report;
+}
+
+// News step: identity check, then all news providers in parallel. Articles are
+// stored as soon as they are found; returns those still missing a date/image
+// so the caller can fill them later with enrichArtistNews.
+export async function refreshArtistNews(id,{enrich=true}={}){
  let artist=getArtist(id);if(!artist)throw new Error("Artiste introuvable");
  // Canonicalize the artist identity before any provider search. This fixes
  // aliases/typos such as "Landmarks" -> "LANDMVRKS" so every downstream
@@ -31,11 +41,23 @@ async function run(id){
  migrateConcertEngineV59();
 
  cleanArtistNews(id,artist.name);
- for(const [name,fn] of [["gdelt",gdelt],["google-news",googleNews],["live-mentions",liveMentions]]){
-  try{const rows=await fn(artist);for(const n of rows)putNews(id,n);report.news[name]=rows.length}
-  catch(e){report.errors.push(`${name}:${e.message}`);providerRun(name,e.message)}
- }
+ const providers=[["gdelt",a=>gdelt(a,{enrich:false})],["google-news",a=>googleNews(a,{enrich:false})],["live-mentions",liveMentions]];
+ const found=await Promise.all(providers.map(async([name,fn])=>{
+  try{const rows=await fn(artist);for(const n of rows)putNews(id,n);report.news[name]=rows.length;return rows}
+  catch(e){report.errors.push(`${name}:${e.message}`);providerRun(name,e.message);return []}
+ }));
+ const pending=found.flat().filter(x=>x.url&&!(x.published_at&&x.image_url));
+ if(enrich){await enrichArtistNews(id,pending);return {report,pending:[]}}
+ return {report,pending};
+}
+export async function enrichArtistNews(id,rows){
+ if(!rows?.length||!getArtist(id))return;
+ for(const n of await enrichDates(rows,80))putNews(id,n);
+}
 
+export async function refreshArtistConcerts(id){
+ const artist=getArtist(id);if(!artist)throw new Error("Artiste introuvable");
+ const report={artist:artist.name,live:{},errors:[]};
  // Concerts: the primary references are Bandsintown and InfoConcert, plus lineup discovery on event pages.
  // Their artist calendars are merged by date + city + venue.
  try{
