@@ -94,17 +94,19 @@ async function searchReader(query,start=0){
     `https://r.jina.ai/https://www.bing.com/search?q=${q}${start?`&first=${start+1}`:''}`,
     `https://r.jina.ai/https://www.google.com/search?q=${q}${start?`&start=${start}`:''}`
   ];
-  for(const u of urls){
-    try{
+  // Do not accept cookie/consent pages as a successful search response.
+  return firstSearchPage(urls,t=>t.length>=300&&/bandsintown\.com|infoconcert\.com/i.test(t));
+}
+// Query every search engine at once and keep the first acceptable page,
+// instead of waiting up to 20 s for each blocked engine in turn.
+async function firstSearchPage(urls,accept){
+  try{
+    return await Promise.any(urls.map(async u=>{
       const t=await fetchText(u,{"Accept":"text/html,text/plain","Accept-Language":"fr-FR,fr;q=0.9,en;q=0.8","User-Agent":HEADERS["User-Agent"]},20000);
-      if(!t||t.length<300)continue;
-      // Do not accept cookie/consent pages as a successful search response.
-      const hasBands=/bandsintown\.com/i.test(t), hasInfo=/infoconcert\.com/i.test(t);
-      const target=hasBands||hasInfo;
-      if(target)return t;
-    }catch{}
-  }
-  return "";
+      if(!t||!accept(t))throw new Error("rejected");
+      return t;
+    }));
+  }catch{return ""}
 }
 function extractBandsintownEventUrlsFromSearch(text){
   let raw=String(text||'').replace(/&amp;/gi,'&').replace(/\\u0026/g,'&');
@@ -832,13 +834,7 @@ async function genericSearchReader(query,start=0){
     `https://r.jina.ai/https://www.bing.com/search?q=${q}${start?`&first=${start+1}`:''}`,
     `https://r.jina.ai/https://www.google.com/search?q=${q}${start?`&start=${start}`:''}`
   ];
-  for(const u of urls){
-    try{
-      const t=await fetchText(u,{"Accept":"text/html,text/plain","Accept-Language":"fr-FR,fr;q=0.9,en;q=0.8","User-Agent":HEADERS["User-Agent"]},20000);
-      if(t&&t.length>300)return t;
-    }catch{}
-  }
-  return "";
+  return firstSearchPage(urls,t=>t.length>300);
 }
 
 function extractGenericSearchUrls(text){

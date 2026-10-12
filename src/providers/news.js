@@ -91,23 +91,23 @@ function extractPageMeta(html){
  return {date,image};
 }
 
-async function enrichDates(rows,max=80){
- const out=[];let checked=0;
- for(const x of rows){
-   if(!x.url || checked>=max){out.push(x);continue}
-   // Fetch the article page when we still need a date or an article-specific image.
-   if(x.published_at && x.image_url){out.push(x);continue}
-   checked++;
-   try{
-     const html=await fetchText(x.url,{},10000);
-     const meta=extractPageMeta(html);
-     out.push({...x,published_at:x.published_at||meta.date||null,image_url:x.image_url||meta.image||''});
-   }catch{out.push(x)}
+// Article pages are read to fill a missing date or image. Several pages are
+// read at once with a short timeout: done one by one (10 s each) this used to
+// take many minutes per group, with nothing shown in Radar meanwhile.
+export async function enrichDates(rows,max=80){
+ const out=[...rows];let next=0;
+ const todo=out.map((x,i)=>i).filter(i=>out[i].url&&!(out[i].published_at&&out[i].image_url)).slice(0,max);
+ async function worker(){
+  while(next<todo.length){
+   const i=todo[next++],x=out[i];
+   try{const meta=extractPageMeta(await fetchText(x.url,{},6000));out[i]={...x,published_at:x.published_at||meta.date||null,image_url:x.image_url||meta.image||''}}catch{}
+  }
  }
+ await Promise.all(Array.from({length:6},worker));
  return out;
 }
 
-export async function gdelt(artist){
+export async function gdelt(artist,{enrich=true}={}){
  const q=encodeURIComponent(`"${artist.name}"`);
  const u=`https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=100&format=json&timespan=${process.env.NEWS_MONTHS||3}months`;
  const d=await fetchJson(u);
@@ -119,12 +119,12 @@ export async function gdelt(artist){
    published_at:parseDate(a.seendate||a.datetime),
    image_url:String(a.socialimage||"")
  })),artist);
- out=await enrichDates(out,50);
+ if(enrich)out=await enrichDates(out,50);
  providerRun("gdelt");
  return unique(out);
 }
 
-export async function googleNews(artist){
+export async function googleNews(artist,{enrich=true}={}){
  /*
   * Plusieurs requêtes complémentaires sont volontairement utilisées.
   * Une seule requête Google News peut ne pas remonter un article important
@@ -138,12 +138,9 @@ export async function googleNews(artist){
    `"${n}" (guitarist OR drummer OR vocalist OR singer OR member OR leaves OR left OR departure OR joins OR lineup)`,
    `"${n}" (album OR single OR EP OR tour OR touring OR festival OR concert OR show OR release)`
  ];
- const rows=[];
- for(const q of queries){
-  try{rows.push(...await googleQuery(artist,q))}catch{}
- }
+ const rows=(await Promise.all(queries.map(q=>googleQuery(artist,q).catch(()=>[])))).flat();
  let out=clean(unique(rows),artist);
- out=await enrichDates(out,60);
+ if(enrich)out=await enrichDates(out,60);
  providerRun("google-news");
  return out;
 }
