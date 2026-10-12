@@ -1,4 +1,4 @@
-import {fetchText,eventKey,countryGuess,parseDate} from "../utils.js";
+import {fetchText,eventKey,countryGuess,parseDate,isFranceEvent} from "../utils.js";
 
 // STAYLOUD 5.16 — concert engine: Bandsintown + InfoConcert + lineup discovery.
 // Bandsintown and InfoConcert remain the primary artist calendars. A separate
@@ -197,31 +197,23 @@ async function discoverBandsintownEventPages(artist,expectedCount=0){
   const urls=new Set();
   const now=new Date();
   const y=now.getUTCFullYear(), next=y+1;
-  const months=[
-    'January','February','March','April','May','June','July','August','September','October','November','December',
-    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
-  ];
-  const countries=['Germany','United Kingdom','Belgium','Netherlands','Switzerland','Italy','Spain','Poland','Austria','Czech Republic','Hungary','France','United States','Canada'];
+  // Only concerts in France are kept, so only French event pages are looked
+  // for (this used to run up to ~330 web searches across 14 countries).
   const queries=[
-    `site:bandsintown.com/e/ "${name}"`,
-    `site:bandsintown.com/e/ "${name}" "${y}"`,
-    `site:bandsintown.com/e/ "${name}" "${next}"`
+    `site:bandsintown.com/e/ "${name}" France`,
+    `site:bandsintown.com/e/ "${name}" France "${y}"`,
+    `site:bandsintown.com/e/ "${name}" France "${next}"`
   ];
-  for(const m of months)queries.push(`site:bandsintown.com/e/ "${name}" "${m}" "${next}"`);
-  for(const c of countries)queries.push(`site:bandsintown.com/e/ "${name}" "${c}"`);
-  for(const c of countries)queries.push(`site:bandsintown.com/e/ "${name}" "${c}" "${next}"`);
   for(const q of queries){
-    for(const start of [0,10,20,30,40,50]){
+    for(const start of [0,10]){
       const t=await searchReader(q,start);
       for(const u of extractBandsintownEventUrlsFromSearch(t))urls.add(u);
-      if(expectedCount && urls.size>=expectedCount)break;
-      if(urls.size>=120)break;
+      if(urls.size>=40)break;
     }
-    if(expectedCount && urls.size>=expectedCount)break;
-    if(urls.size>=120)break;
+    if(urls.size>=40)break;
   }
   if(!urls.size)return [];
-  const pages=[...urls].slice(0,Math.max(120,expectedCount||0));
+  const pages=[...urls].slice(0,40);
   const results=[];
   // Sequential batches avoid hammering search/page endpoints and make Windows runs stable.
   for(let i=0;i<pages.length;i+=6){
@@ -989,23 +981,6 @@ export async function fetchExternalConcerts(artist){
   sources.Bandsintown.count=rows.filter(x=>String(x.provider||'').startsWith('Bandsintown')).length;
   sources.InfoConcert.count=rows.filter(x=>x.provider==='InfoConcert').length;
 
-  // Line-up discovery is a third *discovery path*, not a new primary calendar.
-  // It looks for real event pages where the tracked artist is explicitly billed
-  // as support/opening/guest, then keeps only events whose page itself proves
-  // the artist is part of the line-up. This catches support slots such as
-  // LANDMVRKS opening for Papa Roach even when the artist calendar is absent.
-  try{
-    const lineup=await discoverLineupConcerts(artist);
-    if(lineup.length){
-      sources.LineupDiscovery={url:null,count:lineup.length,ok:true,mode:'event-pages'};
-      all.push(...lineup);
-    }else{
-      sources.LineupDiscovery={url:null,count:0,ok:true,mode:'no-match'};
-    }
-  }catch{
-    sources.LineupDiscovery={url:null,count:0,ok:false,mode:'failed'};
-  }
-
   // Do not wipe a working calendar when both collectors returned no usable
   // event. The caller can keep the previous cache in that case.
   if(!rows.length){
@@ -1013,7 +988,9 @@ export async function fetchExternalConcerts(artist){
     err.sources=sources;
     throw err;
   }
-  return {rows,sources};
+  // Sources answered: keep only the concerts in France (possibly none, which
+  // then clears foreign dates stored by older versions).
+  return {rows:rows.filter(isFranceEvent),sources};
 }
 
 export {resolveBandsintown,resolveInfoConcert,parseBandsintown,parseInfoConcert,parseInfoConcertLoose,parseInfoConcertRobust,parseInfoConcertGenericPage,parseBandsintownEventPage,parseGenericLineupPage,discoverLineupConcerts};

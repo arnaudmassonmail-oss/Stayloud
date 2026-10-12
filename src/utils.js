@@ -27,6 +27,13 @@ function canonicalCountry(v){
  const key=s.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/^[^a-z0-9]+|[^a-z0-9]+$/g,"");
  return COUNTRY_MAP[key]||""
 }
+// STAYLOUD only follows concerts in France. A row counts as French when its
+// country resolves to France; InfoConcert (a French agenda) rows whose small
+// town is not in the city table ("Autre") are kept as well.
+export function isFranceEvent(x){
+ const c=countryGuess(x?.country,x?.city,x?.venue,x?.title);
+ return c==="France" || (c==="Autre" && /infoconcert/i.test(String(x?.provider||"")));
+}
 export function countryGuess(country,city="",venue="",title=""){
  const direct=canonicalCountry(country);
  if(direct)return direct;
