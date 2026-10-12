@@ -496,6 +496,15 @@ $('authForm').addEventListener('submit',async e=>{
  try{const body={username:$('authUser').value.trim(),password:$('authPass').value};if(authMode==='register')body.email=$('authEmail').value.trim();const r=await fetch(authMode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Connexion impossible');authUser=d.user;hideAuthGate();$('authPass').value='';await load();status('Connecté · '+authUser.username)}catch(e){$('authError').textContent=e.message||'Erreur';showAuthGate()}finally{btn.disabled=false}
 });
 async function logout(){try{await fetch('/api/auth/logout',{method:'POST'});}catch{}authUser=null;A=[];N=[];E=[];render();showAuthGate();renderAuthMode();$('authUser').value='';$('authPass').value='';$('authUser').focus()}
+let warmReloadTimer=null;
+async function reloadFeeds(){
+  try{
+    const [r,l]=await Promise.all([api('/api/radar?limit=1000'),api('/api/live?limit=1000')]);
+    N=r?.items||[];E=l?.items||[];radar();liveMini();live();
+    if(r?.warming||l?.warming){warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},15000);return}
+    status('Données agrégées · sources gratuites');loadRealPhotos().catch(()=>{});
+  }catch{warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},30000)}
+}
 async function load(){
   // Initialisation légère : tant qu'aucun groupe n'est suivi, il n'y a
   // aucune raison d'interroger Radar/Live. Cela évite l'écran "Chargement…"
@@ -520,6 +529,11 @@ async function load(){
     if(results[1].status==='fulfilled') E=results[1].value?.items||[];
     render();
     const failed=results.filter(r=>r.status==='rejected').length;
+    // After a server restart the news/concerts of your groups are fetched
+    // again in the background: show it and reload until it is finished.
+    const warming=results.some(r=>r.status==='fulfilled'&&r.value?.warming);
+    clearTimeout(warmReloadTimer);
+    if(warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},15000);return}
     status(failed?'Groupes chargés · certaines données sont indisponibles':'Données agrégées · sources gratuites');
     loadRealPhotos().catch(()=>{});
   }catch(e){
