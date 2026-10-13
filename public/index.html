@@ -345,7 +345,7 @@ body.sl-sheet-open{overflow:hidden}
 .auth-forgot-help{font-size:13px;line-height:1.45;color:#b7bdc4;margin-bottom:10px}.auth-forgot-help strong{color:#fff}
 </style>
 </head><body>
-<div id="authGate" class="auth-gate"><img class="auth-hero" src="/stayloud-banner.png?v=2" alt="STAYLOUD Music Radar"><div class="auth-box"><div class="auth-sub">Votre espace personnel</div><h1 id="authTitle" class="auth-title">Se connecter</h1><form id="authForm" class="auth-form"><input id="authUser" name="username" type="text" autocomplete="username" placeholder="Nom d'utilisateur ou e-mail" minlength="3" maxlength="32" required><input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Adresse e-mail" required><input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="6" required><div id="authError" class="auth-error"></div><button id="authSubmit" class="btn" type="submit">SE CONNECTER</button></form><div id="authForgot" class="auth-forgot"><button type="button" onclick="showForgotPassword()">Mot de passe ou nom d’utilisateur oublié ?</button></div><div id="forgotBox" class="auth-extra"><div class="auth-forgot-help">Indiquez l’adresse e-mail de votre compte : vous recevrez votre <strong>nom d’utilisateur</strong> et un lien pour choisir un <strong>nouveau mot de passe</strong>.</div><input id="forgotEmail" type="email" autocomplete="email" placeholder="Votre adresse e-mail"><button id="forgotSubmit" class="btn" type="button" onclick="requestPasswordReset()">ENVOYER LE LIEN</button><div id="forgotMsg" class="auth-email-note"></div><button type="button" class="mini" onclick="hideForgotPassword()">Retour à la connexion</button></div><div id="authNote" class="auth-note">Chaque compte possède ses propres groupes, photos, descriptions, actualités et concerts associés.</div><div class="auth-switch"><span id="authSwitchText">Pas encore de compte ?</span> <button id="authSwitch" type="button">Créer un compte</button></div></div></div>
+<div id="authGate" class="auth-gate"><img class="auth-hero" src="/stayloud-banner.png?v=2" alt="STAYLOUD Music Radar"><div class="auth-box"><div class="auth-sub">Votre espace personnel</div><button type="button" class="auth-tour-link" onclick="openTour()"><span class="auth-tour-play">▶</span><span><b>Découvrir STAYLOUD</b><small>Présentation animée · 1 minute</small></span></button><h1 id="authTitle" class="auth-title">Se connecter</h1><form id="authForm" class="auth-form"><input id="authUser" name="username" type="text" autocomplete="username" placeholder="Nom d'utilisateur ou e-mail" minlength="3" maxlength="32" required><input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Adresse e-mail" required><input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="6" required><div id="authError" class="auth-error"></div><button id="authSubmit" class="btn" type="submit">SE CONNECTER</button></form><div id="authForgot" class="auth-forgot"><button type="button" onclick="showForgotPassword()">Mot de passe ou nom d’utilisateur oublié ?</button></div><div id="forgotBox" class="auth-extra"><div class="auth-forgot-help">Indiquez l’adresse e-mail de votre compte : vous recevrez votre <strong>nom d’utilisateur</strong> et un lien pour choisir un <strong>nouveau mot de passe</strong>.</div><input id="forgotEmail" type="email" autocomplete="email" placeholder="Votre adresse e-mail"><button id="forgotSubmit" class="btn" type="button" onclick="requestPasswordReset()">ENVOYER LE LIEN</button><div id="forgotMsg" class="auth-email-note"></div><button type="button" class="mini" onclick="hideForgotPassword()">Retour à la connexion</button></div><div id="authNote" class="auth-note">Chaque compte possède ses propres groupes, photos, descriptions, actualités et concerts associés.</div><div class="auth-switch"><span id="authSwitchText">Pas encore de compte ?</span> <button id="authSwitch" type="button">Créer un compte</button></div></div></div>
 <div id="resetGate" class="auth-gate hidden"><img class="auth-hero" src="/stayloud-banner.png?v=2" alt="STAYLOUD Music Radar"><div class="auth-box"><div class="auth-sub">Récupération du compte</div><h1 class="auth-title">Nouveau mot de passe</h1><form id="resetForm" class="auth-form"><input id="resetPass" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe" minlength="6" required><input id="resetPass2" type="password" autocomplete="new-password" placeholder="Confirmer le mot de passe" minlength="6" required><div id="resetError" class="auth-error"></div><button class="btn" type="submit">ENREGISTRER LE NOUVEAU MOT DE PASSE</button></form><div class="auth-note">Le lien de récupération est temporaire et utilisable une seule fois.</div></div></div>
 <div class="sticky-shell">
 <header class="hero"><img class="hero-img" id="heroImg" src="/stayloud-banner.png?v=2" alt="STAYLOUD Music Radar"><div class="radar-sweep" id="radarSweep" aria-hidden="true"><div class="radar-dim"></div><div class="radar-beam"></div><span class="radar-blip b1"></span><span class="radar-blip b2"></span><span class="radar-blip b3"></span></div></header>
@@ -1164,13 +1164,17 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
   el.querySelector('.tr-stage').innerHTML=`<div class="tr-visual" key="${i}">${sl.v}</div><h2>${sl.t}</h2><p>${sl.p}</p>`;
   el.querySelector('.tr-dots').innerHTML=SLIDES.map((_,k)=>`<i class="${k===i?'on':''}"></i>`).join('');
   el.querySelector('.tr-prev').style.visibility=i?'visible':'hidden';
-  const next=el.querySelector('.tr-next');next.textContent=sl.last?'Ajouter mon premier groupe':'Suivant';
+  const next=el.querySelector('.tr-next');next.textContent=sl.last?(signedIn()?'Ajouter mon premier groupe':'Créer mon compte'):'Suivant';
   el.querySelector('.tr-skip').style.visibility=sl.last?'hidden':'visible';
  }
+ const signedIn=()=>typeof authUser!=='undefined'&&!!authUser;
  function close(goAdd){
-  try{localStorage.setItem(key(),'1')}catch{}
+  if(signedIn()){try{localStorage.setItem(key(),'1')}catch{}}
   el?.remove();el=null;document.body.classList.remove('sl-sheet-open');
-  if(goAdd&&typeof show==='function'){show('styles');setTimeout(()=>document.getElementById('name')?.focus(),350)}
+  if(!goAdd)return;
+  // Opened from the login page: the final button leads to account creation.
+  if(!signedIn()){if(typeof authMode!=='undefined'){authMode='register';hideForgotPassword?.();renderAuthMode()}setTimeout(()=>document.getElementById('authUser')?.focus(),200);return}
+  if(typeof show==='function'){show('styles');setTimeout(()=>document.getElementById('name')?.focus(),350)}
  }
  window.openTour=function(){
   if(el)return;i=0;el=document.createElement('div');el.className='tr-backdrop';
@@ -1192,7 +1196,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
 <style id="sl-tour">
 .sl-help-btn{margin-left:auto!important;width:32px;height:32px;border-radius:50%!important;padding:0!important;font-weight:800!important}
 .sl-help-btn+button{margin-left:0!important}
-.tr-backdrop{position:fixed;inset:0;z-index:99000;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:14px;animation:slFade .2s ease}
+.tr-backdrop{position:fixed;inset:0;z-index:100500;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:14px;animation:slFade .2s ease}
 .tr-box{position:relative;width:min(420px,100%);max-height:94vh;overflow-y:auto;background:linear-gradient(180deg,#10151b,#07090b);border:1px solid #2c343d;border-radius:20px;padding:18px 18px 16px;box-shadow:0 20px 60px rgba(0,0,0,.6);color:#e8ebee}
 .tr-skip{position:absolute;top:12px;right:12px;z-index:2;border:1px solid #2c343d;background:#0d1116;color:#b7bdc4;border-radius:999px;padding:6px 12px;font:600 12px Inter,Arial,sans-serif;cursor:pointer}
 .tr-stage h2{font:900 24px 'Barlow Condensed',Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:16px 0 6px;color:#fff}
@@ -1257,5 +1261,9 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
 @keyframes trPulse{50%{transform:scale(1.15)}}
 @keyframes trHorns{50%{transform:scale(1.12) rotate(-6deg)}}
 @media (prefers-reduced-motion:reduce){.tr-screen *{animation-duration:0s!important;animation-iteration-count:1!important;opacity:1!important;width:auto}}
+.auth-tour-link{display:flex;align-items:center;gap:12px;width:100%;margin:12px 0 16px;padding:10px 12px;border:1px solid #2c343d;border-radius:12px;background:linear-gradient(145deg,#141a21,#0b0e12);color:#e8ebee;text-align:left;cursor:pointer}
+.auth-tour-link:hover{border-color:#ff2733}
+.auth-tour-play{flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:linear-gradient(180deg,#ff2733,#b90009);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;padding-left:2px}
+.auth-tour-link b{display:block;font-size:14px;color:#fff}.auth-tour-link small{display:block;font-size:11px;color:#8a939c;margin-top:1px}
 </style>
 </body></html>
