@@ -1111,4 +1111,29 @@ async function refresh(id){status('Actualisation concerts + line-up…');try{con
 async function removeA(id){const a=A.find(x=>x.id===id);if(!a)return;if(confirm('Supprimer '+a.name+' de STAYLOUD ?\n\nSes actualités, concerts et données associées seront retirés de cette installation.')){try{await api('/api/artists/'+id,{method:'DELETE'});currentProfileId=null;await load();show('styles')}catch(e){status('Suppression impossible : '+e.message)}}}
 function show(s){if(activeAlbumPlayer)closeAlbumPlayer(activeAlbumPlayer);document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));$(s).classList.add('active');document.querySelectorAll('[data-s]').forEach(x=>x.classList.toggle('active',x.dataset.s===s));window.scrollTo({top:0,behavior:'smooth'});if(s==='discover')openDiscover();if(s==='live'&&concertMode!=='mine'&&!discoverEventsData.length&&!discoverLoading.events)setConcertMode(concertMode)}
 $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi($('name').value);const hit=q&&A.find(a=>normUi(a.name)===q);hideNameSuggest();if(hit){$('name').value='';openArtistProfile(hit.id)}else add()});$('discoverStyle').onchange=discoverArtistsLoad;$('locate').onclick=()=>{locationMode='auto';$('discoverLocation').value='';discoverLocation()};$('cityForm').addEventListener('submit',e=>{e.preventDefault();if(String($('discoverLocation').value||'').trim()){saveConcertPrefs({city:$('discoverLocation').value.trim()});discoverLocation()}});$('discoverLocation').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();discoverLocation()}});$('discoverLocation').addEventListener('input',()=>{if(String($('discoverLocation').value||'').trim()){locationMode='manual';discoverEventsData=[];discoverFestivalsData=[];$('locationBox').innerHTML='📍 Ville saisie : <strong>'+esc($('discoverLocation').value.trim())+'</strong> · appuyez sur OK';renderDiscoverEvents();renderDiscoverFestivals()}});$('discoverLocation').addEventListener('click',()=>{$('discoverLocation').focus()});$('discoverRadius').onchange=()=>{discoverRadius=Number($('discoverRadius').value)||50;if(locationMode==='manual'&&String($('discoverLocation').value||'').trim())discoverLocation();else if(locationMode==='auto'&&userCoords){$('discoverLocation').value='';discoverLocation()}};$('name').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add()}};$('name').onclick=()=>{$('name').focus()};$('name').oninput=renderNameSuggest;$('name').addEventListener('focus',renderNameSuggest);$('name').addEventListener('blur',()=>setTimeout(hideNameSuggest,150));$('addModal').addEventListener('click',e=>{if(e.target===$('addModal'))closeAddModal()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('addModal').classList.contains('open'))closeAddModal()});$('ra').onchange=()=>{newsPage=0;radar()};$('la2').onchange=async()=>{concertPage=0;live();const id=+$('la2').value||0;if(id){$('refreshLiveBtn').disabled=true;$('refreshLiveBtn').classList.add('spin');try{await refresh(id); }catch{} finally{$('refreshLiveBtn').disabled=false;$('refreshLiveBtn').classList.remove('spin');}}};$('refreshLiveBtn').onclick=async()=>{const id=+$('la2').value||0;if(!id)return;$('refreshLiveBtn').disabled=true;$('refreshLiveBtn').classList.add('spin');try{await refresh(id)}finally{$('refreshLiveBtn').disabled=false;$('refreshLiveBtn').classList.remove('spin')}};document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>show(b.dataset.s));initConcertsPage();authBoot().catch(e=>{showAuthGate();$('authError').textContent=e.message||'Backend inaccessible'});
-</script></body></html>
+</script><script>
+// v7.18.22: eye button to show / hide every password field.
+(function(){
+ const EYE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>';
+ const EYE_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c4.88 0 8.6 3.04 9.94 6.65a1 1 0 0 1 0 .7 10.8 10.8 0 0 1-1.67 2.92"/><path d="M14.08 14.16a3 3 0 0 1-4.24-4.24"/><path d="M17.48 17.5A10.75 10.75 0 0 1 2.06 12.35a1 1 0 0 1 0-.7 10.8 10.8 0 0 1 4.45-5.14"/><path d="m2 2 20 20"/></svg>';
+ function addEye(input){
+  if(input.dataset.eye)return;input.dataset.eye='1';
+  const wrap=document.createElement('span');wrap.className='sl-pw';
+  input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);
+  const b=document.createElement('button');b.type='button';b.className='sl-pw-eye';b.setAttribute('aria-label','Afficher le mot de passe');b.innerHTML=EYE;
+  b.addEventListener('click',()=>{const show=input.type==='password';input.type=show?'text':'password';b.innerHTML=show?EYE_OFF:EYE;b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');input.focus()});
+  wrap.appendChild(b);
+ }
+ // Back to hidden after a submit, so a shown password is not left visible.
+ document.addEventListener('submit',e=>{e.target.querySelectorAll?.('.sl-pw input').forEach(i=>{i.type='password';const b=i.parentNode.querySelector('.sl-pw-eye');if(b){b.innerHTML=EYE;b.setAttribute('aria-label','Afficher le mot de passe')}})},true);
+ const init=()=>document.querySelectorAll('input[type=password]').forEach(addEye);
+ document.readyState==='loading'?document.addEventListener('DOMContentLoaded',init):init();
+})();
+</script>
+<style>
+.sl-pw{position:relative;display:block;width:100%}
+.sl-pw input{width:100%;padding-right:48px!important}
+.sl-pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:40px;height:40px;border:0;background:none;color:#8a939c;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;min-height:0}
+.sl-pw-eye:hover{color:#fff}.sl-pw-eye svg{width:20px;height:20px}
+</style>
+</body></html>
