@@ -2,8 +2,8 @@ import express from "express";
 import cron from "node-cron";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
-import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser} from "./db.js";
-import {d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
+import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
+import {d1GetBandCache,d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
 import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
@@ -50,6 +50,9 @@ async function restoreUserGroups(userId){
 const warmedArtists=new Set(), warmingByUser=new Map(), enrichingByUser=new Map();
 const TOP_NEWS_PHOTOS=10;
 let warmChain=Promise.resolve();
+// Cached copies newer than this are shown as-is; older ones are refreshed
+// in the background (new articles / concerts only).
+const NEWS_CACHE_TTL=2*3600e3, EVENTS_CACHE_TTL=12*3600e3;
 function warmUserArtists(userId){
  const uid=Number(userId);
  const ids=localArtistsForUser(uid).map(a=>a.id).filter(id=>!warmedArtists.has(id));
@@ -57,15 +60,29 @@ function warmUserArtists(userId){
  for(const id of ids)warmedArtists.add(id);
  warmingByUser.set(uid,(warmingByUser.get(uid)||0)+1);
  enrichingByUser.set(uid,(enrichingByUser.get(uid)||0)+1);
- // 1) articles of every group (fast) 2) photos of the 10 newest articles
- // 3) concerts 4) photos/dates of the remaining articles.
- let pending=[];
+ let warmDone=false;const endWarming=()=>{if(warmDone)return;warmDone=true;warmingByUser.set(uid,Math.max(0,(warmingByUser.get(uid)||1)-1))};
+ let pending=[],staleNews=ids,staleEvents=ids;
  warmChain=warmChain
-  .then(async()=>{for(const id of ids){try{pending.push(...(await refreshArtistNews(id,{enrich:false})).pending.map(row=>({artistId:id,row})))}catch(e){logWarm(e)}}
+  // 0) restore the saved 6 months of news + upcoming concerts from D1: instant display.
+  .then(async()=>{
+   const arts=ids.map(id=>getArtist(id)).filter(Boolean);let cache=new Map();
+   try{cache=await d1GetBandCache(arts.map(bandKey))}catch(e){logWarm(e)}
+   staleNews=[];staleEvents=[];const t=Date.now();
+   for(const a of arts){const c=cache.get(bandKey(a));
+    if(c?.news_json){try{importArtistNews(a.id,JSON.parse(c.news_json))}catch(e){logWarm(e)}}
+    if(c?.events_json){try{importArtistEvents(a.id,JSON.parse(c.events_json))}catch(e){logWarm(e)}}
+    if(!c?.news_at||t-Date.parse(c.news_at)>NEWS_CACHE_TTL)staleNews.push(a.id);
+    if(!c?.events_at||t-Date.parse(c.events_at)>EVENTS_CACHE_TTL)staleEvents.push(a.id);
+   }
+   if(arts.length&&arts.every(a=>cache.get(bandKey(a))?.news_json))endWarming();
+  })
+  // 1) new articles of stale groups 2) photos of the 10 newest new articles
+  .then(async()=>{for(const id of staleNews){try{pending.push(...(await refreshArtistNews(id,{enrich:false})).pending.map(row=>({artistId:id,row})))}catch(e){logWarm(e)}}
    pending.sort((a,b)=>String(b.row.published_at||'').localeCompare(String(a.row.published_at||'')));
    try{await enrichNewsItems(pending.slice(0,TOP_NEWS_PHOTOS))}catch(e){logWarm(e)}})
-  .then(async()=>{for(const id of ids){try{await refreshArtistConcerts(id)}catch(e){logWarm(e)}}})
-  .finally(()=>warmingByUser.set(uid,Math.max(0,(warmingByUser.get(uid)||1)-1)))
+  .finally(endWarming)
+  // 3) concerts of stale groups 4) photos/dates of the remaining new articles
+  .then(async()=>{for(const id of staleEvents){try{await refreshArtistConcerts(id)}catch(e){logWarm(e)}}})
   .then(async()=>{try{await enrichNewsItems(pending.slice(TOP_NEWS_PHOTOS))}catch(e){logWarm(e)}})
   .catch(()=>{})
   .finally(()=>enrichingByUser.set(uid,Math.max(0,(enrichingByUser.get(uid)||1)-1)));
@@ -146,7 +163,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.18",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.19",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});

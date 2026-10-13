@@ -335,6 +335,14 @@ export function mergeArtistEvents(artistId,rows){
 export const NEWS_MAX_AGE_MONTHS=6;
 export function newsCutoffIso(){const d=new Date();d.setMonth(d.getMonth()-NEWS_MAX_AGE_MONTHS);return d.toISOString()}
 export function pruneOldNews(artistId){return db.prepare("DELETE FROM news WHERE artist_id=? AND datetime(COALESCE(published_at,first_seen_at))<datetime(?)").run(artistId,newsCutoffIso()).changes}
+// Cache key shared by every user following the same band.
+export function bandKey(a){const m=String(a?.mbid||'').trim();return m?`mbid:${m}`:(a?.name?`name:${normalizeName(a.name)}`:'')}
+export function artistNewsRows(artistId){return db.prepare("SELECT title,url,source,provider,image_url,published_at,first_seen_at,dedupe_key FROM news WHERE artist_id=? AND datetime(COALESCE(published_at,first_seen_at))>=datetime(?)").all(artistId,newsCutoffIso())}
+export function artistEventRows(artistId){return db.prepare("SELECT title,date,time,venue,city,country,url,provider,evidence_json,dedupe_key FROM events WHERE artist_id=? AND date(date)>=date('now')").all(artistId)}
+// Articles already stored with both a date and a photo: no need to read their page again.
+export function completeNewsKeys(artistId){return new Set(db.prepare("SELECT dedupe_key FROM news WHERE artist_id=? AND published_at IS NOT NULL AND COALESCE(image_url,'')<>''").all(artistId).map(r=>r.dedupe_key))}
+export function importArtistNews(artistId,rows){const cutoff=newsCutoffIso();let n=0;for(const x of rows||[]){if(!x?.title||!x?.dedupe_key)continue;if(String(x.published_at||x.first_seen_at||'')<cutoff&&x.published_at)continue;putNews(artistId,x);n++}return n}
+export function importArtistEvents(artistId,rows){const today=new Date().toISOString().slice(0,10);let n=0;const tx=db.transaction(()=>{for(const x of rows||[]){if(!x?.date||String(x.date).slice(0,10)<today||!x.dedupe_key)continue;putEvent(artistId,x);n++}});tx();return n}
 export function cleanArtistNews(artistId,artistName){
  const rows=db.prepare("SELECT id,title,url,source,provider FROM news WHERE artist_id=?").all(artistId);
  let removed=0;
@@ -353,7 +361,8 @@ export function newsList({artistId,userId,limit=500}={}){
  return rows.filter(n=>isRelevantArtistNews({name:n.artist},n.title,n.url,n.source,n.provider)).slice(0,limit);
 }
 export function eventList({artistId,userId,country,limit=500}={}){
- let q=`SELECT e.*,a.name artist FROM events e JOIN artists a ON a.id=e.artist_id WHERE date(e.date)>=date('now')`,p=[];
+ // Upcoming concerts of the next 6 months only.
+ let q=`SELECT e.*,a.name artist FROM events e JOIN artists a ON a.id=e.artist_id WHERE date(e.date)>=date('now') AND date(e.date)<=date('now','+6 months')`,p=[];
  if(userId!=null){q+=" AND a.user_id=?";p.push(userId)}
  if(artistId){q+=" AND e.artist_id=?";p.push(artistId)}
  q+=" ORDER BY date(e.date),time(e.time) LIMIT ?";p.push(limit);
