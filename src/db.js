@@ -331,6 +331,10 @@ export function mergeArtistEvents(artistId,rows){
  return unique.size;
 }
 
+// Radar only keeps the last 6 months of news (avoids overloading the feed).
+export const NEWS_MAX_AGE_MONTHS=6;
+export function newsCutoffIso(){const d=new Date();d.setMonth(d.getMonth()-NEWS_MAX_AGE_MONTHS);return d.toISOString()}
+export function pruneOldNews(artistId){return db.prepare("DELETE FROM news WHERE artist_id=? AND datetime(COALESCE(published_at,first_seen_at))<datetime(?)").run(artistId,newsCutoffIso()).changes}
 export function cleanArtistNews(artistId,artistName){
  const rows=db.prepare("SELECT id,title,url,source,provider FROM news WHERE artist_id=?").all(artistId);
  let removed=0;
@@ -344,8 +348,8 @@ export function cleanArtistNews(artistId,artistName){
 }
 export function newsList({artistId,userId,limit=500}={}){
  const rows=artistId
-  ?(userId!=null?db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE n.artist_id=? AND a.user_id=? ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(artistId,userId,Math.max(limit,1000)):db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE n.artist_id=? ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(artistId,Math.max(limit,1000)))
-  :(userId!=null?db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE a.user_id=? ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(userId,Math.max(limit,1000)):db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(Math.max(limit,1000)));
+  ?(userId!=null?db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE n.artist_id=? AND a.user_id=? AND datetime(COALESCE(n.published_at,n.first_seen_at))>=datetime('now','-6 months') ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(artistId,userId,Math.max(limit,1000)):db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE n.artist_id=? AND datetime(COALESCE(n.published_at,n.first_seen_at))>=datetime('now','-6 months') ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(artistId,Math.max(limit,1000)))
+  :(userId!=null?db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE a.user_id=? AND datetime(COALESCE(n.published_at,n.first_seen_at))>=datetime('now','-6 months') ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(userId,Math.max(limit,1000)):db.prepare(`SELECT n.*,a.name artist FROM news n JOIN artists a ON a.id=n.artist_id WHERE datetime(COALESCE(n.published_at,n.first_seen_at))>=datetime('now','-6 months') ORDER BY datetime(COALESCE(n.published_at,n.last_seen_at)) DESC LIMIT ?`).all(Math.max(limit,1000)));
  return rows.filter(n=>isRelevantArtistNews({name:n.artist},n.title,n.url,n.source,n.provider)).slice(0,limit);
 }
 export function eventList({artistId,userId,country,limit=500}={}){

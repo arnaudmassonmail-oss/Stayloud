@@ -224,6 +224,21 @@
 .news-pager button{border:1px solid #2c343d;background:#0d1116;color:#fff;border-radius:999px;padding:8px 14px;font:700 12px Inter,Arial,sans-serif;cursor:pointer}
 .news-pager button:disabled{opacity:.35;cursor:default}
 </style>
+<style id="sl-news-v2">
+/* v7.18.16: news card — band name in bright red, source + red link pill on the right */
+.news-card.sl-news{display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;padding:12px;align-items:start}
+.sl-news .thumb{height:78px;width:78px}
+.sl-news-body{min-width:0}
+.sl-news-band{font:900 13px 'Barlow Condensed',Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--red2,#ff2733);text-shadow:0 0 10px rgba(255,39,51,.35)}
+.sl-news .news-title{margin:3px 0 0;color:#fff}
+.sl-news-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px}
+.sl-news-date{font-size:12px;font-weight:700;color:#fff;white-space:nowrap}
+.sl-news-link{display:inline-flex;align-items:center;gap:8px;min-width:0;color:#b7bdc4;text-decoration:none;font-size:12px}
+.sl-news-src{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.sl-news-pill{flex:0 0 28px;width:28px;height:28px;border-radius:50%;background:linear-gradient(180deg,var(--red2,#ff2733),#b90009);color:#fff;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(229,9,20,.35)}
+.sl-news-pill svg{width:15px;height:15px}
+.sl-news-link:hover .sl-news-src{color:#fff}
+</style>
 </head><body>
 <div id="authGate" class="auth-gate"><div class="auth-box"><div class="auth-logo">STAY<span class="red">LOUD</span></div><div class="auth-sub">MUSIC RADAR · votre espace personnel</div><h1 id="authTitle" class="auth-title">Se connecter</h1><form id="authForm" class="auth-form"><input id="authUser" name="username" type="text" autocomplete="username" placeholder="Nom d'utilisateur" minlength="3" maxlength="32" required><input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Adresse e-mail" required><input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="6" required><div id="authError" class="auth-error"></div><button id="authSubmit" class="btn" type="submit">SE CONNECTER</button></form><div id="authForgot" class="auth-forgot"><button type="button" onclick="showForgotPassword()">Mot de passe oublié ?</button></div><div id="forgotBox" class="auth-extra"><input id="forgotEmail" type="email" autocomplete="email" placeholder="Votre adresse e-mail"><button id="forgotSubmit" class="btn" type="button" onclick="requestPasswordReset()">ENVOYER LE LIEN</button><div id="forgotMsg" class="auth-email-note"></div><button type="button" class="mini" onclick="hideForgotPassword()">Retour à la connexion</button></div><div id="authNote" class="auth-note">Chaque compte possède ses propres groupes, photos, descriptions, actualités et concerts associés.</div><div class="auth-switch"><span id="authSwitchText">Pas encore de compte ?</span> <button id="authSwitch" type="button">Créer un compte</button></div></div></div>
 <div id="resetGate" class="auth-gate hidden"><div class="auth-box"><div class="auth-logo">STAY<span class="red">LOUD</span></div><div class="auth-sub">RÉCUPÉRATION DU COMPTE</div><h1 class="auth-title">Nouveau mot de passe</h1><form id="resetForm" class="auth-form"><input id="resetPass" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe" minlength="6" required><input id="resetPass2" type="password" autocomplete="new-password" placeholder="Confirmer le mot de passe" minlength="6" required><div id="resetError" class="auth-error"></div><button class="btn" type="submit">ENREGISTRER LE NOUVEAU MOT DE PASSE</button></form><div class="auth-note">Le lien de récupération est temporaire et utilisable une seule fois.</div></div></div>
@@ -356,7 +371,7 @@ function newsAllowed(x){
 }
 const NEWS_PAGE=10;
 function newsGo(d){newsPage+=d;radar();$('feed')?.closest('.panel')?.scrollIntoView({behavior:'smooth',block:'start'})}
-function radar(){const id=+$('ra').value||0,all=N.filter(x=>(!id||x.artist_id===id)&&newsAllowed(x)),pages=Math.max(1,Math.ceil(all.length/NEWS_PAGE));newsPage=Math.min(Math.max(0,newsPage),pages-1);const rows=all.slice(newsPage*NEWS_PAGE,newsPage*NEWS_PAGE+NEWS_PAGE);$('feed').innerHTML=rows.length?rows.map((x,i)=>`<article class="news-card"><div class="thumb article-photo" ${photoStyle(articleImage(x))}></div><div><div class="cat">${esc(x.provider==='google-news'?'Actualité':'Presse')}</div><div class="news-title">${esc(x.title)}</div><div class="desc">${esc(x.source||x.provider)} · ${x.published_at?new Date(x.published_at).toLocaleDateString('fr-FR'):'date inconnue'}${usableArticleImage(x.image_url)?' · photo de l’article':(photos[x.artist_id]?' · photo du groupe':(albumCovers[x.artist_id]?' · pochette du dernier album':''))}</div></div><div class="meta"><strong>${x.published_at?new Date(x.published_at).toLocaleDateString('fr-FR'):'—'}</strong>${esc(x.source||x.provider)}<a class="open" href="${esc(x.url)}" target="_blank">↗</a></div></article>`).join(''):'<div class="empty">Aucun article.</div>';$('newsPager').innerHTML=all.length>NEWS_PAGE?`<button type="button" onclick="newsGo(-1)" ${newsPage<=0?'disabled':''}>← Précédent</button><span>Page ${newsPage+1} / ${pages}</span><button type="button" onclick="newsGo(1)" ${newsPage>=pages-1?'disabled':''}>Suivant →</button>`:''}
+function radar(){const id=+$('ra').value||0,all=N.filter(x=>(!id||x.artist_id===id)&&newsAllowed(x)),pages=Math.max(1,Math.ceil(all.length/NEWS_PAGE));newsPage=Math.min(Math.max(0,newsPage),pages-1);const rows=all.slice(newsPage*NEWS_PAGE,newsPage*NEWS_PAGE+NEWS_PAGE);$('feed').innerHTML=rows.length?rows.map((x,i)=>{const d=x.published_at?new Date(x.published_at).toLocaleDateString('fr-FR'):'Date inconnue';const band=x.artist||A.find(a=>a.id===x.artist_id)?.name||'';return `<article class="news-card sl-news"><div class="thumb article-photo" ${photoStyle(articleImage(x))}></div><div class="sl-news-body"><div class="sl-news-band">${esc(band)}</div><div class="news-title">${esc(x.title)}</div><div class="sl-news-row"><span class="sl-news-date">${esc(d)}</span><a class="sl-news-link" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="Lire l’article sur ${esc(x.source||x.provider)}"><span class="sl-news-src">${esc(x.source||x.provider)}</span><span class="sl-news-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></span></a></div></div></article>`}).join(''):'<div class="empty">Aucun article.</div>';$('newsPager').innerHTML=all.length>NEWS_PAGE?`<button type="button" onclick="newsGo(-1)" ${newsPage<=0?'disabled':''}>← Précédent</button><span>Page ${newsPage+1} / ${pages}</span><button type="button" onclick="newsGo(1)" ${newsPage>=pages-1?'disabled':''}>Suivant →</button>`:''}
 function liveRows(id,c){return E.filter(x=>(!id||x.artist_id===id)&&(!c||x.country===c))}
 function eventHTML(rows,mini=false){return rows.slice(0,mini?5:500).map((x,i)=>`<article class="event"><div class="event-date">${x.date?new Date(x.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'}).replace('.','').toUpperCase():'—'}<small>${x.date?new Date(x.date).getFullYear():''}</small></div><div class="event-img" ${photoStyle(imgForArtist(A.find(a=>a.id===x.artist_id)))}></div><div><div class="event-name">${esc(x.artist)} · ${esc(x.title)}${/LineupDiscovery/.test(String(x.evidence_json||x.provider||''))?' <span class="support-tag">Première partie</span>':''}</div><div class="event-place">${esc(String(x.venue||'').replace(/^[\[\]]|[\[\]]$/g,''))} ${x.city?'· '+esc(String(x.city).replace(/^[\[\]]|[\[\]]$/g,'')):''} ${x.country?'· '+esc(String(x.country).replace(/^[\[\]]|[\[\]]$/g,'')):''}</div></div><a href="${esc(x.url||'#')}" target="_blank">↗</a></article>`).join('')||'<div class="empty">Aucun concert avec ces filtres.</div>'}
 // Concerts are France-only, so there is no country filter any more.
@@ -620,7 +635,9 @@ async function reloadFeeds(){
   try{
     const [r,l]=await Promise.all([api('/api/radar?limit=1000'),api('/api/live?limit=1000')]);
     N=r?.items||[];E=l?.items||[];radar();liveMini();live();
-    if(r?.warming||l?.warming){warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},15000);return}
+    if(r?.warming||l?.warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},8000);return}
+    // Photos of the articles are still being fetched: keep refreshing quietly.
+    if(r?.enriching){status('Données agrégées · sources gratuites');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},10000);loadRealPhotos().catch(()=>{});return}
     status('Données agrégées · sources gratuites');loadRealPhotos().catch(()=>{});
   }catch{warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},30000)}
 }
@@ -652,7 +669,8 @@ async function load(){
     // again in the background: show it and reload until it is finished.
     const warming=results.some(r=>r.status==='fulfilled'&&r.value?.warming);
     clearTimeout(warmReloadTimer);
-    if(warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},15000);return}
+    if(warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},8000);return}
+    if(results[0].status==='fulfilled'&&results[0].value?.enriching){warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},10000)}
     status(failed?'Groupes chargés · certaines données sont indisponibles':'Données agrégées · sources gratuites');
     loadRealPhotos().catch(()=>{});
   }catch(e){

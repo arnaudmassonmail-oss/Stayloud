@@ -1,4 +1,4 @@
-import {getArtist,getArtists,putNews,replaceArtistEvents,providerRun,cleanArtistNews,migrateConcertEngineV59,setArtistSourceUrls} from "./db.js";
+import {pruneOldNews,newsCutoffIso,getArtist,getArtists,putNews,replaceArtistEvents,providerRun,cleanArtistNews,migrateConcertEngineV59,setArtistSourceUrls} from "./db.js";
 import {gdelt,googleNews,enrichDates} from "./providers/news.js";
 import {liveMentions} from "./providers/live-mentions.js";
 import {fetchExternalConcerts} from "./providers/concert-web.js";
@@ -41,14 +41,25 @@ export async function refreshArtistNews(id,{enrich=true}={}){
  migrateConcertEngineV59();
 
  cleanArtistNews(id,artist.name);
+ pruneOldNews(id);
  const providers=[["gdelt",a=>gdelt(a,{enrich:false})],["google-news",a=>googleNews(a,{enrich:false})],["live-mentions",liveMentions]];
  const found=await Promise.all(providers.map(async([name,fn])=>{
   try{const rows=await fn(artist);for(const n of rows)putNews(id,n);report.news[name]=rows.length;return rows}
   catch(e){report.errors.push(`${name}:${e.message}`);providerRun(name,e.message);return []}
  }));
- const pending=found.flat().filter(x=>x.url&&!(x.published_at&&x.image_url));
+ const cutoff=newsCutoffIso();
+ // Newest articles first, so the top of Radar gets its photos first.
+ const pending=found.flat().filter(x=>x.url&&!(x.published_at&&x.image_url)&&(!x.published_at||String(x.published_at)>=cutoff))
+  .sort((a,b)=>String(b.published_at||'').localeCompare(String(a.published_at||'')));
  if(enrich){await enrichArtistNews(id,pending);return {report,pending:[]}}
  return {report,pending};
+}
+// Fill photos/dates for articles of several groups at once ({artistId,row}
+// items, in priority order).
+export async function enrichNewsItems(items){
+ if(!items?.length)return;
+ const done=await enrichDates(items.map(x=>x.row),items.length);
+ done.forEach((row,i)=>{if(getArtist(items[i].artistId))putNews(items[i].artistId,row)});
 }
 export async function enrichArtistNews(id,rows){
  if(!rows?.length||!getArtist(id))return;
