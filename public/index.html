@@ -189,11 +189,28 @@
 .sl-player-note{font-size:12px;color:#9aa3ad;padding:10px 12px;border-radius:10px;background:#05070a;border:1px solid #232a32}
 @media(max-width:420px){.sl-album-latest{grid-template-columns:96px minmax(0,1fr);gap:12px}.sl-album-latest .sl-album-title{font-size:22px}}
 </style>
+<style id="sl-radar">
+/* Animated radar sweep over the banner (v7.18.13): spins while searching */
+.hero{position:relative}
+.radar-sweep{position:absolute;border-radius:50%;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .45s ease;z-index:2}
+.radar-active .radar-sweep{opacity:1}
+.radar-dim{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,.55) 0,rgba(0,0,0,.5) 62%,rgba(0,0,0,0) 72%)}
+.radar-beam{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,rgba(255,30,30,0) 0deg,rgba(255,30,30,0) 270deg,rgba(255,35,35,.18) 320deg,rgba(255,45,45,.65) 356deg,rgba(255,120,110,.95) 360deg);mix-blend-mode:screen;animation:radarSpin 2.4s linear infinite;animation-play-state:paused;-webkit-mask:radial-gradient(circle,#000 0,#000 70%,transparent 71%);mask:radial-gradient(circle,#000 0,#000 70%,transparent 71%)}
+.radar-active .radar-beam{animation-play-state:running}
+.radar-blip{position:absolute;width:5%;height:5%;border-radius:50%;background:#ff3b3b;box-shadow:0 0 8px 2px rgba(255,40,40,.8);opacity:0}
+.radar-active .radar-blip{animation:radarBlip 2.4s ease-out infinite}
+.radar-blip.b1{left:60%;top:28%;animation-delay:.25s!important}
+.radar-blip.b2{left:30%;top:58%;animation-delay:1.1s!important}
+.radar-blip.b3{left:66%;top:62%;animation-delay:1.7s!important}
+@keyframes radarSpin{to{transform:rotate(360deg)}}
+@keyframes radarBlip{0%{opacity:0;transform:scale(.4)}10%{opacity:1;transform:scale(1.2)}60%{opacity:.25;transform:scale(1)}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.radar-beam{animation-duration:6s}.radar-active .radar-blip{animation:none;opacity:.6}}
+</style>
 </head><body>
 <div id="authGate" class="auth-gate"><div class="auth-box"><div class="auth-logo">STAY<span class="red">LOUD</span></div><div class="auth-sub">MUSIC RADAR · votre espace personnel</div><h1 id="authTitle" class="auth-title">Se connecter</h1><form id="authForm" class="auth-form"><input id="authUser" name="username" type="text" autocomplete="username" placeholder="Nom d'utilisateur" minlength="3" maxlength="32" required><input id="authEmail" name="email" type="email" autocomplete="email" placeholder="Adresse e-mail" required><input id="authPass" name="password" type="password" autocomplete="current-password" placeholder="Mot de passe" minlength="6" required><div id="authError" class="auth-error"></div><button id="authSubmit" class="btn" type="submit">SE CONNECTER</button></form><div id="authForgot" class="auth-forgot"><button type="button" onclick="showForgotPassword()">Mot de passe oublié ?</button></div><div id="forgotBox" class="auth-extra"><input id="forgotEmail" type="email" autocomplete="email" placeholder="Votre adresse e-mail"><button id="forgotSubmit" class="btn" type="button" onclick="requestPasswordReset()">ENVOYER LE LIEN</button><div id="forgotMsg" class="auth-email-note"></div><button type="button" class="mini" onclick="hideForgotPassword()">Retour à la connexion</button></div><div id="authNote" class="auth-note">Chaque compte possède ses propres groupes, photos, descriptions, actualités et concerts associés.</div><div class="auth-switch"><span id="authSwitchText">Pas encore de compte ?</span> <button id="authSwitch" type="button">Créer un compte</button></div></div></div>
 <div id="resetGate" class="auth-gate hidden"><div class="auth-box"><div class="auth-logo">STAY<span class="red">LOUD</span></div><div class="auth-sub">RÉCUPÉRATION DU COMPTE</div><h1 class="auth-title">Nouveau mot de passe</h1><form id="resetForm" class="auth-form"><input id="resetPass" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe" minlength="6" required><input id="resetPass2" type="password" autocomplete="new-password" placeholder="Confirmer le mot de passe" minlength="6" required><div id="resetError" class="auth-error"></div><button class="btn" type="submit">ENREGISTRER LE NOUVEAU MOT DE PASSE</button></form><div class="auth-note">Le lien de récupération est temporaire et utilisable une seule fois.</div></div></div>
 <div class="sticky-shell">
-<header class="hero"><img class="hero-img" src="/stayloud-banner.png" alt="STAYLOUD Music Radar"></header>
+<header class="hero"><img class="hero-img" id="heroImg" src="/stayloud-banner.png?v=2" alt="STAYLOUD Music Radar"><div class="radar-sweep" id="radarSweep" aria-hidden="true"><div class="radar-dim"></div><div class="radar-beam"></div><span class="radar-blip b1"></span><span class="radar-blip b2"></span><span class="radar-blip b3"></span></div></header>
 <div class="nav-wrap"><div class="wrap nav-container"><nav class="nav"><button class="active" data-s="radar"><span class="nav-icon"><i data-lucide="radar" aria-hidden="true"></i></span><span>Radar</span></button><button data-s="live"><span class="nav-icon"><i data-lucide="ticket" aria-hidden="true"></i></span><span>Concerts</span></button><button data-s="clips"><span class="nav-icon"><i data-lucide="clapperboard" aria-hidden="true"></i></span><span>Clips</span></button><button data-s="styles"><span class="nav-icon"><i data-lucide="mic" aria-hidden="true"></i></span><span>Styles/Groupes</span></button><button data-s="discover"><span class="nav-icon"><i data-lucide="scan-eye" aria-hidden="true"></i></span><span>Découvrir</span></button></nav></div></div>
 </div>
 <div class="wrap top-controls">
@@ -212,6 +229,34 @@
 <div id="bitHarvest" style="position:fixed;left:0;top:0;width:100vw;min-height:120px;height:80vh;max-height:80vh;overflow:auto;opacity:0.01;pointer-events:none;z-index:-1"></div>
 <div class="mobile-bottom"><button class="active" data-s="radar"><span class="nav-icon"><i data-lucide="radar" aria-hidden="true"></i></span><span class="nav-label">Radar</span></button><button data-s="live"><span class="nav-icon"><i data-lucide="ticket" aria-hidden="true"></i></span><span class="nav-label">Concerts</span></button><button data-s="clips"><span class="nav-icon"><i data-lucide="clapperboard" aria-hidden="true"></i></span><span class="nav-label">Clips</span></button><button data-s="styles"><span class="nav-icon"><i data-lucide="mic" aria-hidden="true"></i></span><span class="nav-label">Styles/Groupes</span></button><button data-s="discover"><span class="nav-icon"><i data-lucide="scan-eye" aria-hidden="true"></i></span><span class="nav-label">Découvrir</span></button></div>
 <script src="https://unpkg.com/lucide@0.468.0"></script>
+<script>
+// STAYLOUD 7.18.13 — the banner radar sweeps while the app is searching.
+(function(){
+ const RADAR={x:600,y:101,r:110,w:1051,h:153}; // radar position in stayloud-banner.png
+ function place(){
+  const img=document.getElementById('heroImg'),sw=document.getElementById('radarSweep');if(!img||!sw||!img.clientWidth)return;
+  const cw=img.clientWidth,ch=img.clientHeight,fit=getComputedStyle(img).objectFit;
+  let sx=cw/RADAR.w,sy=ch/RADAR.h;
+  if(fit==='cover'){sx=sy=Math.max(sx,sy)}else if(fit==='contain'||fit==='scale-down'){sx=sy=Math.min(sx,sy)}
+  const ox=img.offsetLeft+(cw-RADAR.w*sx)/2,oy=img.offsetTop+(ch-RADAR.h*sy)/2,r=RADAR.r*Math.min(sx,sy);
+  Object.assign(sw.style,{left:(ox+RADAR.x*sx-r)+'px',top:(oy+RADAR.y*sy-r)+'px',width:2*r+'px',height:2*r+'px'});
+ }
+ window.addEventListener('resize',place);window.addEventListener('orientationchange',()=>setTimeout(place,250));
+ document.addEventListener('DOMContentLoaded',()=>{const img=document.getElementById('heroImg');if(img){img.complete?place():img.addEventListener('load',place)}place()});
+ // Count in-flight API requests (searches, refreshes); the sweep runs while any is pending.
+ let pending=0,stopTimer=null;const root=document.documentElement;
+ const update=()=>{clearTimeout(stopTimer);if(pending>0)root.classList.add('radar-active');else stopTimer=setTimeout(()=>root.classList.remove('radar-active'),700)};
+ const nativeFetch=window.fetch.bind(window);
+ window.fetch=function(input,init){
+  const url=String(input&&input.url||input||'');
+  const tracked=/^\/api\//.test(url)&&!/^\/api\/(auth|health)\b/.test(url);
+  const p=nativeFetch(input,init);
+  if(tracked){pending++;update();const done=()=>{pending=Math.max(0,pending-1);update()};p.then(done,done)}
+  return p;
+ };
+ window.radarPlace=place;
+})();
+</script>
 <script>
 // STAYLOUD 7.18 — manual city search is intentionally isolated from GPS.
 lucide.createIcons();
