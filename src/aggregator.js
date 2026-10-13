@@ -1,4 +1,5 @@
-import {pruneOldNews,newsCutoffIso,getArtist,getArtists,putNews,replaceArtistEvents,providerRun,cleanArtistNews,migrateConcertEngineV59,setArtistSourceUrls} from "./db.js";
+import {d1PutBandNews,d1PutBandEvents} from "./d1.js";
+import {bandKey,artistNewsRows,artistEventRows,completeNewsKeys,pruneOldNews,newsCutoffIso,getArtist,getArtists,putNews,replaceArtistEvents,providerRun,cleanArtistNews,migrateConcertEngineV59,setArtistSourceUrls} from "./db.js";
 import {gdelt,googleNews,enrichDates} from "./providers/news.js";
 import {liveMentions} from "./providers/live-mentions.js";
 import {fetchExternalConcerts} from "./providers/concert-web.js";
@@ -49,9 +50,12 @@ export async function refreshArtistNews(id,{enrich=true}={}){
  }));
  const cutoff=newsCutoffIso();
  // Newest articles first, so the top of Radar gets its photos first.
- const pending=found.flat().filter(x=>x.url&&!(x.published_at&&x.image_url)&&(!x.published_at||String(x.published_at)>=cutoff))
+ // Only articles not already stored with a date and a photo need their page read.
+ const known=completeNewsKeys(id);
+ const pending=found.flat().filter(x=>x.url&&!known.has(x.dedupe_key)&&!(x.published_at&&x.image_url)&&(!x.published_at||String(x.published_at)>=cutoff))
   .sort((a,b)=>String(b.published_at||'').localeCompare(String(a.published_at||'')));
- if(enrich){await enrichArtistNews(id,pending);return {report,pending:[]}}
+ if(enrich){await enrichArtistNews(id,pending);await saveNewsCache(id);return {report,pending:[]}}
+ await saveNewsCache(id);
  return {report,pending};
 }
 // Fill photos/dates for articles of several groups at once ({artistId,row}
@@ -60,10 +64,15 @@ export async function enrichNewsItems(items){
  if(!items?.length)return;
  const done=await enrichDates(items.map(x=>x.row),items.length);
  done.forEach((row,i)=>{if(getArtist(items[i].artistId))putNews(items[i].artistId,row)});
+ for(const id of new Set(items.map(x=>x.artistId)))await saveNewsCache(id);
 }
+// Durable copy in D1 (see band_cache): failures only cost a slower next start.
+export async function saveNewsCache(id){const a=getArtist(id);if(!a)return;try{await d1PutBandNews(bandKey(a),artistNewsRows(id))}catch(e){console.error('News cache:',e?.message||e)}}
+export async function saveEventsCache(id){const a=getArtist(id);if(!a)return;try{await d1PutBandEvents(bandKey(a),artistEventRows(id))}catch(e){console.error('Events cache:',e?.message||e)}}
 export async function enrichArtistNews(id,rows){
  if(!rows?.length||!getArtist(id))return;
  for(const n of await enrichDates(rows,80))putNews(id,n);
+ await saveNewsCache(id);
 }
 
 export async function refreshArtistConcerts(id){
@@ -82,6 +91,7 @@ export async function refreshArtistConcerts(id){
   // two allowed references and remove all legacy events.
   report.live.total=replaceArtistEvents(id,rows);
   report.live.preservedExisting=false;
+  await saveEventsCache(id);
  }catch(e){
   report.live.preservedExisting=true;
   report.errors.push(`external-concerts:${e.message}`);

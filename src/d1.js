@@ -118,7 +118,16 @@ export async function ensureD1Schema(){
         updated_at TEXT NOT NULL,
         UNIQUE(user_id,sync_key)
       )`,
-      `CREATE INDEX IF NOT EXISTS idx_d1_groups_user ON groups(user_id)`
+      `CREATE INDEX IF NOT EXISTS idx_d1_groups_user ON groups(user_id)`,
+      // Durable copy of each band's news (6 months) and upcoming concerts, so
+      // a restarted server can show them instantly instead of re-collecting.
+      `CREATE TABLE IF NOT EXISTS band_cache(
+        band_key TEXT PRIMARY KEY,
+        news_json TEXT,
+        news_at TEXT,
+        events_json TEXT,
+        events_at TEXT
+      )`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -260,6 +269,27 @@ export async function d1DeleteGroup(userId,artist){
   }
 }
 
+export async function d1GetBandCache(keys){
+  const list=[...new Set((keys||[]).filter(Boolean))];const out=new Map();
+  if(!list.length||!d1ConfigStatus().configured)return out;
+  await ensureD1Schema();
+  for(let i=0;i<list.length;i+=80){
+    const part=list.slice(i,i+80);
+    const rows=(await query(`SELECT band_key,news_json,news_at,events_json,events_at FROM band_cache WHERE band_key IN (${part.map(()=>'?').join(',')})`,part)).rows;
+    for(const r of rows)out.set(r.band_key,r);
+  }
+  return out;
+}
+export async function d1PutBandNews(key,rows){
+  if(!key||!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query(`INSERT INTO band_cache(band_key,news_json,news_at) VALUES(?,?,?) ON CONFLICT(band_key) DO UPDATE SET news_json=excluded.news_json,news_at=excluded.news_at`,[key,JSON.stringify(rows||[]),now()]);
+}
+export async function d1PutBandEvents(key,rows){
+  if(!key||!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query(`INSERT INTO band_cache(band_key,events_json,events_at) VALUES(?,?,?) ON CONFLICT(band_key) DO UPDATE SET events_json=excluded.events_json,events_at=excluded.events_at`,[key,JSON.stringify(rows||[]),now()]);
+}
 export async function d1ListGroups(userId){
   await ensureD1Schema();
   return (await query("SELECT * FROM groups WHERE user_id=? ORDER BY name COLLATE NOCASE",[Number(userId)])).rows;
