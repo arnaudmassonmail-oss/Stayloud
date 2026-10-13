@@ -1,10 +1,12 @@
 import {XMLParser} from "fast-xml-parser";
 import {fetchJson,fetchText,newsKey,isRelevantArtistNews,parseDate} from "../utils.js";
-import {providerRun} from "../db.js";
+import {providerRun,newsCutoffIso} from "../db.js";
 
 function clean(rows,artist){
+ const cutoff=newsCutoffIso();
  return rows
   .filter(x=>x.title&&x.url&&isRelevantArtistNews(artist,x.title,x.url,x.source,x.provider))
+  .filter(x=>!x.published_at||String(x.published_at)>=cutoff)
   .map(x=>({...x,dedupe_key:newsKey(x)}));
 }
 
@@ -109,7 +111,7 @@ export async function enrichDates(rows,max=80){
 
 export async function gdelt(artist,{enrich=true}={}){
  const q=encodeURIComponent(`"${artist.name}"`);
- const u=`https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=100&format=json&timespan=${process.env.NEWS_MONTHS||3}months`;
+ const u=`https://api.gdeltproject.org/api/v2/doc/doc?query=${q}&mode=artlist&maxrecords=100&format=json&timespan=${process.env.NEWS_MONTHS||6}months`;
  const d=await fetchJson(u);
  let out=clean((d.articles||[]).map(a=>({
    title:a.title||"",

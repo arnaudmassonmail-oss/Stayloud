@@ -620,7 +620,9 @@ async function reloadFeeds(){
   try{
     const [r,l]=await Promise.all([api('/api/radar?limit=1000'),api('/api/live?limit=1000')]);
     N=r?.items||[];E=l?.items||[];radar();liveMini();live();
-    if(r?.warming||l?.warming){warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},15000);return}
+    if(r?.warming||l?.warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},8000);return}
+    // Photos of the articles are still being fetched: keep refreshing quietly.
+    if(r?.enriching){status('Données agrégées · sources gratuites');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},10000);loadRealPhotos().catch(()=>{});return}
     status('Données agrégées · sources gratuites');loadRealPhotos().catch(()=>{});
   }catch{warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},30000)}
 }
@@ -652,7 +654,8 @@ async function load(){
     // again in the background: show it and reload until it is finished.
     const warming=results.some(r=>r.status==='fulfilled'&&r.value?.warming);
     clearTimeout(warmReloadTimer);
-    if(warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},15000);return}
+    if(warming){status('Récupération des actualités et concerts de vos groupes…');warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},8000);return}
+    if(results[0].status==='fulfilled'&&results[0].value?.enriching){warmReloadTimer=setTimeout(()=>{if(authUser)reloadFeeds()},10000)}
     status(failed?'Groupes chargés · certaines données sont indisponibles':'Données agrégées · sources gratuites');
     loadRealPhotos().catch(()=>{});
   }catch(e){

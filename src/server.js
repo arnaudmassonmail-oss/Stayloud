@@ -5,7 +5,7 @@ import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser} from "./db.js";
 import {d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
 import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
-import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews} from "./aggregator.js";
+import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts} from "./providers/discovery.js";
 
@@ -47,7 +47,8 @@ async function restoreUserGroups(userId){
 // at login. The startup refresh runs before anyone logs in (no groups yet)
 // and the cron does not run while the instance sleeps, so refresh each
 // user's groups once per server process, in the background, when they show up.
-const warmedArtists=new Set(), warmingByUser=new Map();
+const warmedArtists=new Set(), warmingByUser=new Map(), enrichingByUser=new Map();
+const TOP_NEWS_PHOTOS=10;
 let warmChain=Promise.resolve();
 function warmUserArtists(userId){
  const uid=Number(userId);
@@ -55,18 +56,23 @@ function warmUserArtists(userId){
  if(!ids.length)return;
  for(const id of ids)warmedArtists.add(id);
  warmingByUser.set(uid,(warmingByUser.get(uid)||0)+1);
- // Articles of every group first (fast), then concerts, then the slow part:
- // reading article pages for missing dates/photos.
- const pending=new Map();
+ enrichingByUser.set(uid,(enrichingByUser.get(uid)||0)+1);
+ // 1) articles of every group (fast) 2) photos of the 10 newest articles
+ // 3) concerts 4) photos/dates of the remaining articles.
+ let pending=[];
  warmChain=warmChain
-  .then(async()=>{for(const id of ids){try{pending.set(id,(await refreshArtistNews(id,{enrich:false})).pending)}catch(e){logWarm(e)}}})
+  .then(async()=>{for(const id of ids){try{pending.push(...(await refreshArtistNews(id,{enrich:false})).pending.map(row=>({artistId:id,row})))}catch(e){logWarm(e)}}
+   pending.sort((a,b)=>String(b.row.published_at||'').localeCompare(String(a.row.published_at||'')));
+   try{await enrichNewsItems(pending.slice(0,TOP_NEWS_PHOTOS))}catch(e){logWarm(e)}})
   .then(async()=>{for(const id of ids){try{await refreshArtistConcerts(id)}catch(e){logWarm(e)}}})
   .finally(()=>warmingByUser.set(uid,Math.max(0,(warmingByUser.get(uid)||1)-1)))
-  .then(async()=>{for(const id of ids){try{await enrichArtistNews(id,pending.get(id))}catch(e){logWarm(e)}}})
-  .catch(()=>{});
+  .then(async()=>{try{await enrichNewsItems(pending.slice(TOP_NEWS_PHOTOS))}catch(e){logWarm(e)}})
+  .catch(()=>{})
+  .finally(()=>enrichingByUser.set(uid,Math.max(0,(enrichingByUser.get(uid)||1)-1)));
 }
 const logWarm=e=>console.error('Warm refresh:',e?.message||e);
 const isWarming=userId=>(warmingByUser.get(Number(userId))||0)>0;
+const isEnriching=userId=>(enrichingByUser.get(Number(userId))||0)>0;
 async function bootstrapD1(){
  if(!d1Enabled)return;
  await ensureD1Schema();
@@ -140,7 +146,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.14",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.15",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -243,7 +249,7 @@ app.post("/api/artists/:id/refresh",requireAuth,async(req,res)=>{try{if(!ownedAr
 app.post("/api/artists/:id/bandsintown-widget",requireAuth,(req,res)=>{try{const id=Number(req.params.id);const a=ownedArtist(req,id);if(!a)return res.status(404).json({error:"introuvable"});const rows=Array.isArray(req.body?.rows)?req.body.rows:[];const safe=rows.map(x=>({...x,provider:"Bandsintown"}));res.json({ok:true,count:mergeArtistEvents(id,safe)})}catch(e){res.status(400).json({error:e.message})}});
 app.get("/api/artists/:id/concert-sources",requireAuth,async(req,res)=>{try{const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});const [bandsintown,infoconcert]=await Promise.all([resolveBandsintown(a),resolveInfoConcert(a)]);res.json({artist:a.name,bandsintown,infoconcert})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/artists/:id/bandsintown-id",requireAuth,(req,res)=>{const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});res.json({id:bandsintownArtistId(a)})});
-app.get("/api/radar",requireAuth,(req,res)=>res.json({warming:isWarming(req.user.id),items:newsList({artistId:req.query.artistId?Number(req.query.artistId):undefined,userId:req.user.id,limit:Math.min(Number(req.query.limit||500),1000)})}));
+app.get("/api/radar",requireAuth,(req,res)=>res.json({warming:isWarming(req.user.id),enriching:isEnriching(req.user.id),items:newsList({artistId:req.query.artistId?Number(req.query.artistId):undefined,userId:req.user.id,limit:Math.min(Number(req.query.limit||500),1000)})}));
 app.get("/api/live",requireAuth,(req,res)=>res.json({warming:isWarming(req.user.id),items:eventList({artistId:req.query.artistId?Number(req.query.artistId):undefined,userId:req.user.id,country:String(req.query.country||"").trim()||undefined,limit:Math.min(Number(req.query.limit||500),1000)})}));
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
