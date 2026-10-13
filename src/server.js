@@ -140,7 +140,7 @@ app.patch('/api/auth/email',requireAuth,async(req,res)=>{
 });
 app.post('/api/auth/forgot-password',async(req,res)=>{
  const email=String(req.body?.email||'').trim().toLowerCase();
- const generic='Si cette adresse correspond à un compte STAYLOUD, un e-mail de récupération va être envoyé.';
+ const generic='Si cette adresse correspond à un compte STAYLOUD, un e-mail avec votre nom d’utilisateur et un lien pour changer de mot de passe va être envoyé.';
  try{
   if(!/^\S+@\S+\.\S+$/.test(email))return res.json({ok:true,message:generic});
   if(!d1Enabled)return res.status(503).json({error:'La récupération par e-mail doit être configurée sur le serveur avec D1.'});
@@ -151,7 +151,10 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
   const apiKey=String(process.env.RESEND_API_KEY||'').trim(), from=String(process.env.EMAIL_FROM||'').trim();
   if(!apiKey||!from)return res.status(503).json({error:'La récupération par e-mail doit être configurée sur le serveur (RESEND_API_KEY et EMAIL_FROM).'});
   const resetUrl=base+'/?reset='+encodeURIComponent(token);
-  const rr=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from,to:[user.email],subject:'STAYLOUD — réinitialiser votre mot de passe',html:`<p>Bonjour,</p><p>Vous avez demandé à réinitialiser votre mot de passe STAYLOUD.</p><p><a href="${resetUrl}">Réinitialiser mon mot de passe</a></p><p>Ce lien expire dans 30 minutes et ne peut être utilisé qu'une seule fois.</p><p>Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail.</p>`})});
+  // One e-mail covers both "forgot password" and "forgot username".
+  const safeName=String(user.username||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const html=`<div style="background:#050607;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#e8ebee"><div style="max-width:480px;margin:0 auto;background:#0d1116;border:1px solid #2a333d;border-radius:14px;overflow:hidden">${base?`<img src="${base}/stayloud-banner.png" alt="STAYLOUD Music Radar" width="480" style="display:block;width:100%;height:auto">`:''}<div style="padding:22px"><p style="margin:0 0 14px">Bonjour,</p><p style="margin:0 0 6px">Votre nom d’utilisateur STAYLOUD :</p><p style="margin:0 0 18px;font-size:22px;font-weight:bold;color:#ff2733">${safeName}</p><p style="margin:0 0 16px">Pour choisir un nouveau mot de passe :</p><p style="margin:0 0 18px"><a href="${resetUrl}" style="display:inline-block;background:#e50914;color:#fff;text-decoration:none;font-weight:bold;padding:12px 18px;border-radius:10px">Choisir un nouveau mot de passe</a></p><p style="margin:0 0 8px;font-size:13px;color:#9aa3ad">Ce lien expire dans 30 minutes et ne peut être utilisé qu’une seule fois. Vous pouvez aussi vous connecter avec votre adresse e-mail à la place du nom d’utilisateur.</p><p style="margin:0;font-size:13px;color:#9aa3ad">Si vous n’êtes pas à l’origine de cette demande, ignorez simplement cet e-mail.</p></div></div></div>`;
+  const rr=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from,to:[user.email],subject:'STAYLOUD — vos identifiants',html})});
   if(!rr.ok)throw new Error('Envoi e-mail impossible'); return res.json({ok:true,message:generic});
  }catch(e){console.error('Password reset email:',e?.message||e);return res.status(502).json({error:'Impossible d’envoyer l’e-mail de récupération pour le moment.'})}
 });
@@ -163,7 +166,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.20",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.21",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
