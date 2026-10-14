@@ -1,7 +1,7 @@
 import {fetchJson,fetchText,sleep,eventKey} from "../utils.js";
 import {XMLParser} from "fast-xml-parser";
 import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
-import {d1LoadGeoCache,d1PutGeoBatch} from "../d1.js";
+import {d1LoadGeoCache,d1PutGeoBatch,d1GetBandCache,d1PutBandEvents} from "../d1.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -402,6 +402,23 @@ function eventHasMetal(row){
 // Short, user-readable reason for a failed source fetch (shown in the
 // "aucun concert" diagnostic so a blocked or slow source is visible).
 function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m))return 'délai dépassé';const h=m.match(/HTTP \d{3}/);if(h)return h[0];if(m==='empty')return 'page sans concert';return m.slice(0,40)||'erreur'}
+// Source agenda pages (Concerts-Metal region, Songkick metro, Bandsintown
+// city) are kept 6 h in memory and in D1. When a source refuses us (429/403)
+// the last good copy is used instead of showing nothing.
+const SOURCE_TTL=6*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
+async function cachedSourceRows(key,fetcher){
+  const k='src:'+key;let hit=sourceMem.get(k);
+  if(!hit){try{const r=(await d1GetBandCache([k])).get(k);if(r?.events_json){hit={rows:JSON.parse(r.events_json)||[],at:Date.parse(r.events_at)||0};sourceMem.set(k,hit)}}catch{}}
+  if(hit&&hit.rows.length&&Date.now()-hit.at<SOURCE_TTL)return {...hit.fresh,rows:hit.rows,cached:true};
+  if(sourceInflight.has(k))return sourceInflight.get(k);
+  const job=(async()=>{
+    let res=null;try{res=await fetcher()}catch{}
+    if(res?.rows?.length){const {rows,...meta}=res;sourceMem.set(k,{rows,at:Date.now(),fresh:meta});d1PutBandEvents(k,rows).catch(()=>{});return res}
+    if(hit?.rows?.length)return {...(res||{}),rows:hit.rows,stale:true};
+    return res||{rows:[]};
+  })().finally(()=>sourceInflight.delete(k));
+  sourceInflight.set(k,job);return job;
+}
 // Attempts alternate relay (r.jina.ai) / direct fetch, which labels the errors.
 async function firstWithRows(attempts,errs=null){
   try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){if(errs)errs.push(`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`);throw e}}))}catch{return null}
@@ -409,7 +426,10 @@ async function firstWithRows(attempts,errs=null){
 const JINA_HEADERS=()=>process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{};
 async function fetchDiscoveryProxy(url,timeout=18000){
   const proxy=`https://r.jina.ai/${url}`;
-  return fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}},timeout);
+  const go=()=>fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}},timeout);
+  // The free relay allows a few requests per minute: on "too many requests"
+  // wait a moment and try once more.
+  try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}
 }
 
 async function cityWebSearch(query){
@@ -493,7 +513,8 @@ async function discoverManualCityConcerts(city){
   return {city:requested,items,sources};
 }
 
-async function fetchMetalRegionalSource(source,errs=null){
+function fetchMetalRegionalSource(source,errs=null){return cachedSourceRows('cm:'+source.slug,()=>fetchMetalRegionalSourceLive(source,errs)).then(r=>({...r,source}))}
+async function fetchMetalRegionalSourceLive(source,errs=null){
  const url=`https://${source.slug}.concerts-metal.com/`;
  // Render/free hosts can receive a different response from the public site
  // than a normal browser, so the clean proxy and a direct fetch race.
@@ -588,7 +609,8 @@ async function correctManualEventCities(rows,targetCity,near=null){
   });
 }
 
-async function fetchBandsintownCity(city,lat=null,lon=null,errs=null){
+function fetchBandsintownCity(city,lat=null,lon=null,errs=null){return cachedSourceRows('bi:'+bandsintownSlug(city),()=>fetchBandsintownCityLive(city,lat,lon,errs))}
+async function fetchBandsintownCityLive(city,lat=null,lon=null,errs=null){
   const slug=bandsintownSlug(city); if(!slug)return {rows:[]};
   const suffix=(Number.isFinite(Number(lat))&&Number.isFinite(Number(lon)))?`?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}`:'';
   const url=`https://www.bandsintown.com/fr/c/${slug}-france/all-dates/genre/metal${suffix}`;
@@ -723,7 +745,8 @@ function parseSongkickMetalText(text,metro){
   return rows;
 }
 
-async function fetchSongkickMetro(metro,errs=null){
+function fetchSongkickMetro(metro,errs=null){return cachedSourceRows('sk:'+metro.slug,()=>fetchSongkickMetroLive(metro,errs)).then(r=>({...r,metro}))}
+async function fetchSongkickMetroLive(metro,errs=null){
   const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/2026/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/2026/genre/metal`];
   const r=await firstWithRows(urls.flatMap(url=>[
     async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);return {metro,rows,transport:'jina'}},
@@ -837,10 +860,15 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const clean=v=>typeof v==='string'?v.replace(/\*+/g,' ').replace(/(^|\s)_+|_+(?=\s|$)/g,'$1').replace(/\s{2,}/g,' ').trim():v;
   for(const [k,x] of unique)unique.set(k,{...x,title:clean(x.title),venue:clean(x.venue),city:clean(x.city)});
   let final=[...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
-  if(final.length)return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival),sources};
+  // Around Nantes, the built-in agenda fills in when Concerts-Metal could not
+  // be read (the scan is wide, so other sources alone must not suppress it).
   const nearNantes=distanceKm(lat,lon,47.2184,-1.5536)<=150;
-  const fallback=nearNantes?await curatedConcertFallback(lat,lon,radiusKm):[];
-  return {concerts:fallback,festivals:[],sources};
+  if(nearNantes&&(!cmRaw||!final.length)){
+    const have=new Set(final.map(x=>`${String(x.date).slice(0,10)}|${norm(x.title)}`));
+    for(const x of await curatedConcertFallback(lat,lon,radiusKm)){const k=`${String(x.date).slice(0,10)}|${norm(x.title)}`;if(!have.has(k)){have.add(k);final.push(x)}}
+    final.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
+  }
+  return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival),sources};
 }
 
 async function googleLocalFestivalDiscovery(place){const deadline=Date.now()+10000;const queries=[`festival metal ${place.city||''} ${place.state||''}`,`concert metal festival ${place.city||''} ${place.state||''}`];const found=new Map();for(const q of queries){try{const xml=await fetchText(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=fr&gl=FR&ceid=FR:fr`,{},15000);const d=new XMLParser({ignoreAttributes:false}).parse(xml);let items=d?.rss?.channel?.item||[];if(!Array.isArray(items))items=[items];for(const x of items.slice(0,20)){if(Date.now()>deadline)break;const title=String(x.title||'').trim(),url=String(x.link||'').trim(),desc=stripHtml(x.description||'');const hay=`${title} ${desc}`.toLowerCase();if(!title||!url||!/festival|concert|live|metal/i.test(hay))continue;const key=title.toLowerCase();if(found.has(key))continue;const gp=await geocodeQuery(`${title} ${desc}`);if(!gp)continue;const dkm=distanceKm(latOr(place),lonOr(place),gp.lat,gp.lon);if(dkm>100)continue;const metalDetected=FESTIVAL_METAL_TAGS.some(t=>hay.includes(t));if(!metalDetected)continue;found.set(key,{id:`google-local-${Buffer.from(url).toString('base64url').slice(0,24)}`,title,date:parseRssDate(x.pubDate),venue:'',city:gp.display_name?.split(',')[0]||'',country:'France',url,provider:'google-news-local',metalDetected:true,distanceKm:Math.round(dkm*10)/10});}}catch{}}return [...found.values()]}
