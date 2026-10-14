@@ -269,20 +269,47 @@ export async function mergeFollowedConcerts(items,followed,lat,lon,radiusKm){
   }
   return list.sort((a,b)=>String(a.date||'').slice(0,10).localeCompare(String(b.date||'').slice(0,10))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
 }
-export async function discoverArtists(style='all',limit=18){
+// A tag counts only when it is one of the artist's main tags on MusicBrainz:
+// anyone can add a tag, so "post-hardcore" with 1 vote on Nirvana must not
+// make Nirvana a post-hardcore band.
+function mainTags(a){
+  const tags=(a.tags||[]).map(t=>({name:String(t.name||'').toLowerCase(),count:Number(t.count)||0})).sort((x,y)=>y.count-x.count);
+  if(!tags.length)return [];const max=tags[0].count||0;
+  return tags.filter((t,i)=>i<3||(max>0&&t.count>=max*0.5)).map(t=>t.name);
+}
+const ALL_METAL_TAGS=['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock'];
+const discoverCache=new Map();const DISCOVER_TTL=6*60*60*1000;
+export async function discoverArtists(style='all',limit=18,page=0){
   const followed=followedNames();
-  const tags=style==='all'?['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock']:(STYLE_TAGS[style]||['metal']);
+  const tags=style==='all'?ALL_METAL_TAGS:(STYLE_TAGS[style]||['metal']);
   const q=`type:group AND (${tags.map(t=>`tag:"${t}"`).join(' OR ')})`;
+  const want=(Number(page)+1)*limit;
   try{
-    const d=await mb(`${MB_BASE}/artist/?query=${encodeURIComponent(q)}&fmt=json&limit=${Math.min(100,Math.max(20,limit*3))}`);
-    const rows=(d.artists||[]).map(cleanArtist).filter(a=>!followed.has(norm(a.name))&&a.style);
-    const seen=new Set(),out=[];for(const a of rows){const k=norm(a.name);if(seen.has(k))continue;seen.add(k);out.push(a);if(out.length>=limit)break}return out;
+    let c=discoverCache.get(style);if(!c||Date.now()-c.at>DISCOVER_TTL){c={at:Date.now(),rows:[],seen:new Set(),offset:0,done:false};discoverCache.set(style,c)}
+    // Fetch MusicBrainz pages (100 artists each) until this page is full.
+    let calls=0;
+    while(!c.done&&c.rows.length<want+1&&calls<4){
+      calls++;
+      const d=await mb(`${MB_BASE}/artist/?query=${encodeURIComponent(q)}&fmt=json&limit=100&offset=${c.offset}`);
+      const list=d.artists||[];c.offset+=100;if(list.length<100||c.offset>=Number(d.count||0))c.done=true;
+      for(const raw of list){
+        const main=mainTags(raw);
+        const broad=style==='all'||style==='Metal';if(!main.some(t=>tags.includes(t)||(broad&&/\bmetal\b/.test(t))))continue;
+        const a=cleanArtist(raw);a.style=style==='all'?inferStyle(main):style;if(!a.style)continue;
+        const k=norm(a.name);if(c.seen.has(k))continue;c.seen.add(k);c.rows.push(a);
+      }
+    }
+    const visible=c.rows.filter(a=>!followed.has(norm(a.name)));
+    const items=visible.slice(page*limit,(page+1)*limit);
+    if(!items.length&&page===0)throw new Error('no artists');
+    return {items,hasMore:visible.length>(page+1)*limit||!c.done};
   }catch(e){
+    if(page>0)return {items:[],hasMore:false};
     const seen=new Set(),out=[];
     for(const [name,st] of (DISCOVER_FALLBACK[style]||DISCOVER_FALLBACK.all)){
       const k=norm(name);if(seen.has(k)||followed.has(k))continue;seen.add(k);out.push({id:`fallback-${k.replace(/[^a-z0-9]+/g,'-')}`,name,sortname:name,score:0,disambiguation:'Suggestion métal',style:st,mbid:''});if(out.length>=limit)break;
     }
-    if(out.length)return out;
+    if(out.length)return {items:out,hasMore:false};
     throw e;
   }
 }
