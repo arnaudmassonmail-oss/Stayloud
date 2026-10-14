@@ -790,7 +790,15 @@ const SCAN_RADIUS_KM=100;
 async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const r=Number(radiusKm)||50;const res=await discoverConcertsMetalScan(lat,lon,SCAN_RADIUS_KM,targetCityOverride);
   const keep=x=>!Number.isFinite(Number(x?.distanceKm))||Number(x.distanceKm)<=r;
-  return {concerts:(res.concerts||[]).filter(keep),festivals:(res.festivals||[]).filter(keep),sources:res.sources||null};
+  const concerts=(res.concerts||[]).filter(keep);
+  // Around Nantes, the built-in agenda of known local shows (Montaigu, Vallet,
+  // Clisson…) is always merged in: the online sources often miss small venues.
+  if(distanceKm(lat,lon,47.2184,-1.5536)<=150){
+    const k=x=>`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.title).slice(0,10)}`;const have=new Set(concerts.map(k));
+    for(const x of await curatedConcertFallback(lat,lon,r))if(!have.has(k(x))){have.add(k(x));concerts.push(x)}
+    concerts.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
+  }
+  return {concerts,festivals:(res.festivals||[]).filter(keep),sources:res.sources||null};
 }
 function discoverConcertsMetalScan(lat,lon,radiusKm,targetCityOverride=''){
   const key=[Number(lat).toFixed(3),Number(lon).toFixed(3),radiusKm,norm(targetCityOverride)].join('|');
@@ -860,14 +868,6 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const clean=v=>typeof v==='string'?v.replace(/\*+/g,' ').replace(/(^|\s)_+|_+(?=\s|$)/g,'$1').replace(/\s{2,}/g,' ').trim():v;
   for(const [k,x] of unique)unique.set(k,{...x,title:clean(x.title),venue:clean(x.venue),city:clean(x.city)});
   let final=[...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
-  // Around Nantes, the built-in agenda fills in when Concerts-Metal could not
-  // be read (the scan is wide, so other sources alone must not suppress it).
-  const nearNantes=distanceKm(lat,lon,47.2184,-1.5536)<=150;
-  if(nearNantes&&(!cmRaw||!final.length)){
-    const have=new Set(final.map(x=>`${String(x.date).slice(0,10)}|${norm(x.title)}`));
-    for(const x of await curatedConcertFallback(lat,lon,radiusKm)){const k=`${String(x.date).slice(0,10)}|${norm(x.title)}`;if(!have.has(k)){have.add(k);final.push(x)}}
-    final.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
-  }
   return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival),sources};
 }
 
