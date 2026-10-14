@@ -248,7 +248,7 @@ const DISCOVER_FALLBACK={
   'Post-Hardcore':[['Holding Absence','Post-Hardcore'],['Static Dress','Post-Hardcore'],['Thornhill','Post-Hardcore']],
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
-export {discoverManualCityConcerts};
+export {discoverManualCityConcerts,splitBandsFromGenres};
 export async function discoverArtists(style='all',limit=18){
   const followed=followedNames();
   const tags=style==='all'?['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock']:(STYLE_TAGS[style]||['metal']);
@@ -271,6 +271,31 @@ function stripHtml(s){return String(s||'').replace(/<script[\s\S]*?<\/script>/gi
 function parseCmDate(s){const m=String(s||'').match(/(20\d{2}-\d{2}-\d{2})/);return m?m[1]:null}
 function isMetalText(s){const h=norm(s);return BROAD_METAL_TERMS.some(t=>h.includes(norm(t)))}
 function isFestival(title,header,details){const h=norm(`${title} ${header} ${details}`);return /\bfestival\b|\bfest\b|hellfest|muscadeath|westill|kordevez|ragefest|in your face|tattoo fest/.test(h)}
+// Concerts-Metal pages read through the relay list each band followed by its
+// styles ("Kanine Deathcore NDKH Metal / Djent Parjure Beatdown Hardcore").
+// A run of style words is dropped only when it contains a style "head"
+// (metal, *core, doom…), so names like "Black Bomb A" or "Death Council" stay.
+const GENRE_MODS=new Set('death black thrash heavy doom power speed folk viking pagan symphonic gothic goth melodic melo progressive prog post atmospheric atmo technical tech brutal blackened industrial indus nu alternative alt groove sludge stoner epic avant-garde experimental crossover hard beatdown metallic crust grind noise dark depressive raw old-school modern instrumental extreme war funeral cyber electro celtic medieval neo neoclassical classic traditional trad fusion southern psychedelic psyche space drone atmospherique melodique symphonique progressif'.split(' '));
+const GENRE_HEAD=/^(?:metal|rock|punk|djent|doom|grind|grindcore|sludge|stoner|crust|thrash|hardcore|deathcore|metalcore|mathcore|post-rock|post-metal|black-metal|death-metal|[a-z]+core|n'roll|rock'n'roll)$/i;
+const GENRE_SEP=/^(?:\/|-|&|,|\+|'n'|n'|and|et)$/i;
+function splitBandsFromGenres(title){
+  const t=String(title||'').replace(/\s+/g,' ').trim();
+  if(!t||/\s\+\s/.test(t))return t;
+  const toks=t.replace(/\s*\/\s*/g,' / ').split(' ');
+  const isG=w=>{const x=norm(w).replace(/[(),.]/g,'');return GENRE_HEAD.test(x)||GENRE_MODS.has(x)||GENRE_SEP.test(x)};
+  const isHead=w=>GENRE_HEAD.test(norm(w).replace(/[(),.]/g,''));
+  const chunks=[];let cur=[];
+  for(let i=0;i<toks.length;){
+    if(isG(toks[i])){let j=i;while(j<toks.length&&isG(toks[j]))j++;const run=toks.slice(i,j);
+      // A style run with a head word, or a trailing one ("… Crossover"), is a style.
+      if(run.some(isHead)||(j>=toks.length&&cur.length)){if(cur.length){chunks.push(cur.join(' '));cur=[]}}else cur.push(...run);
+      i=j;continue}
+    cur.push(toks[i]);i++;
+  }
+  if(cur.length)chunks.push(cur.join(' '));
+  const out=chunks.map(x=>x.replace(/^[\s\/&,+-]+|[\s\/&,+-]+$/g,'').trim()).filter(Boolean);
+  return out.length?out.join(' + '):t;
+}
 function extractConcertTitle(details){
   const raw=String(details||'').replace(/\s+/g,' ').trim();
   if(!raw)return '';
@@ -386,8 +411,7 @@ const METAL_DISCOVERY_SOURCES=[
   {slug:'marseille',name:'Marseille / PACA',lat:43.2965,lon:5.3698},
   {slug:'montpellier',name:'Montpellier / Languedoc-Roussillon',lat:43.6108,lon:3.8767},
   {slug:'strasbourg',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
-  {slug:'grenoble',name:'Grenoble / Alpes',lat:45.1885,lon:5.7245},
-  {slug:'rennes',name:'Rennes / Bretagne',lat:48.1173,lon:-1.6778}
+  {slug:'grenoble',name:'Grenoble / Alpes',lat:45.1885,lon:5.7245}
 ];
 
 function eventHasMetal(row){
@@ -800,7 +824,7 @@ async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   // Around Nantes, the built-in agenda of known local shows (Montaigu, Vallet,
   // Clisson…) is always merged in: the online sources often miss small venues.
   if(distanceKm(lat,lon,47.2184,-1.5536)<=150){
-    const k=x=>`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.title).slice(0,10)}`;const have=new Set(concerts.map(k));
+    const k=x=>`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.venue).replace(/^(le|la|les|l)\s+/,'')}`;const have=new Set(concerts.map(k));
     for(const x of await curatedConcertFallback(lat,lon,r))if(!have.has(k(x))){have.add(k(x));concerts.push(x)}
     concerts.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
   }
@@ -876,7 +900,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   // Pages read through r.jina.ai come back as Markdown: drop the emphasis
   // marks ("**Title**", "*Venue*") that would otherwise show in the cards.
   const clean=v=>typeof v==='string'?v.replace(/\*+/g,' ').replace(/(^|\s)_+|_+(?=\s|$)/g,'$1').replace(/\s{2,}/g,' ').trim():v;
-  for(const [k,x] of unique)unique.set(k,{...x,title:clean(x.title),venue:clean(x.venue),city:clean(x.city)});
+  for(const [k,x] of unique){const title=clean(x.title);unique.set(k,{...x,title:/concerts-metal/i.test(String(x.provider||''))?splitBandsFromGenres(title):title,venue:clean(x.venue),city:clean(x.city)})}
   let final=[...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
   return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival),sources};
 }
