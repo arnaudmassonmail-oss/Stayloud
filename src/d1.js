@@ -127,7 +127,8 @@ export async function ensureD1Schema(){
         news_at TEXT,
         events_json TEXT,
         events_at TEXT
-      )`
+      )`,
+      `CREATE TABLE IF NOT EXISTS geo_cache(key TEXT PRIMARY KEY,value TEXT,updated_at TEXT)`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -279,6 +280,19 @@ export async function d1GetBandCache(keys){
     for(const r of rows)out.set(r.band_key,r);
   }
   return out;
+}
+export async function d1LoadGeoCache(){
+  if(!d1ConfigStatus().configured)return [];
+  await ensureD1Schema();
+  return (await query("SELECT key,value FROM geo_cache")).rows;
+}
+export async function d1PutGeoBatch(entries){
+  if(!entries?.length||!d1ConfigStatus().configured)return;
+  await ensureD1Schema();const t=now();
+  for(let i=0;i<entries.length;i+=30){
+    const part=entries.slice(i,i+30);
+    await query(`INSERT INTO geo_cache(key,value,updated_at) VALUES ${part.map(()=>'(?,?,?)').join(',')} ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`,part.flatMap(([k,v])=>[k,JSON.stringify(v),t]));
+  }
 }
 export async function d1PutBandNews(key,rows){
   if(!key||!d1ConfigStatus().configured)return;

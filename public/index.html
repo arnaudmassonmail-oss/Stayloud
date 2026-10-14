@@ -353,6 +353,7 @@ body.sl-sheet-open{overflow:hidden}
 .group-img{position:relative}
 .sl-clip-play{position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:50%;background:linear-gradient(180deg,#ff2733,#b90009);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding-left:2px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
 #discoverStyleBtnWrap{display:block;flex:1;min-width:0}
+.sl-src-diag{display:block;margin-top:8px;font-size:11px;color:#6f7882}
 .sl-pick-all svg{width:20px;height:20px}
 </style>
 </head><body>
@@ -695,7 +696,7 @@ async function loadDiscoverPhotos(){
 
 function discoverArtistHTML(a){const img=discoverArtistImage(a);const data=JSON.stringify(a).replace(/</g,'\u003c');return `<article class="discover-card" role="button" tabindex="0" style="cursor:pointer" onclick='openDiscoverProfile(${data})' onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openDiscoverProfile(${data})}"><div class="discover-img" ${photoStyle(img)}></div><div><button class="profile-name-btn" type="button" onclick='event.stopPropagation();openDiscoverProfile(${data})'><div class="discover-name">${esc(a.name)}</div></button><div class="discover-style">${esc(a.style||'Métal')}</div><div class="discover-meta">${esc(a.disambiguation||'Artiste à découvrir')} · cliquer pour ouvrir le profil</div></div></article>`}
 function renderDiscoverArtists(){const el=$('discoverArtists');if(!el)return;el.innerHTML=discoverArtistsData.length?discoverArtistsData.map(discoverArtistHTML).join(''):'<div class="discover-empty">Aucun nouveau groupe trouvé pour ce style pour le moment.</div>'}
-function renderDiscoverEvents(){const el=$('discoverEvents');if(!el)return;const all=discoverEventsData.filter(within6Months);const pg=pageSlice(all,geoPage);geoPage=pg.page;el.innerHTML=all.length?pg.rows.map(x=>concertCardHTML(x,{geo:true})).join('')+pagerHTML(pg.page,pg.pages,'geoGo'):(discoverLoading.events?'<div class="discover-empty">⏳ Recherche des concerts en cours…</div>':'<div class="discover-empty">Aucun concert métal trouvé dans ce rayon avec les sources gratuites disponibles.</div>')}
+function renderDiscoverEvents(){const el=$('discoverEvents');if(!el)return;const all=discoverEventsData.filter(within6Months);const pg=pageSlice(all,geoPage);geoPage=pg.page;el.innerHTML=all.length?pg.rows.map(x=>concertCardHTML(x,{geo:true})).join('')+pagerHTML(pg.page,pg.pages,'geoGo'):(discoverLoading.events?'<div class="discover-empty">⏳ Recherche des concerts en cours…</div>':`<div class="discover-empty">Aucun concert métal trouvé dans ce rayon avec les sources gratuites disponibles.${discoverSourcesInfo?`<small class="sl-src-diag">Résultats bruts des sources (avant le filtre de distance) : Bandsintown ${discoverSourcesInfo.bandsintown} · Songkick ${discoverSourcesInfo.songkick} · Concerts-Metal ${discoverSourcesInfo.concertsMetal}</small>`:''}</div>`)}
 function renderDiscoverFestivals(){const el=$('discoverFestivals');if(!el)return;el.innerHTML=discoverFestivalsData.filter(within6Months).length?discoverFestivalsData.filter(within6Months).slice(0,30).map(x=>concertCardHTML(x,{geo:true,festival:true})).join(''):(discoverLoading.festivals?'<div class="discover-empty">⏳ Recherche des festivals en cours…</div>':'<div class="discover-empty">Aucun festival trouvé dans ce rayon.</div>')}
 
 // ---- Concerts page (v7.18.18): one card style for every list + tabs ----
@@ -754,6 +755,7 @@ async function browserReversePlace(lat,lon){
 // Every discovery request carries a sequence number. Only the most recent
 // search may write results: a slow GPS lookup started when the page opened
 // (e.g. at home in Cugand) must never overwrite a city typed afterwards.
+let discoverSourcesInfo=null;
 let discoverSeq=0,discoverLoading={events:false,festivals:false};
 function discoverKey(x){return [String(x?.date||'').slice(0,10),normUi(x?.title),normUi(x?.venue)].join('|')}
 function mergeDiscoverRows(...lists){const m=new Map();for(const list of lists)for(const x of(list||[])){const k=discoverKey(x);if(!m.has(k))m.set(k,x)}return [...m.values()].sort((a,b)=>String(a.date||'9999').slice(0,10).localeCompare(String(b.date||'9999').slice(0,10)))}
@@ -791,7 +793,7 @@ async function discoverLocation(){
    const qs='lat='+encodeURIComponent(target.lat)+'&lon='+encodeURIComponent(target.lon)+'&radius='+encodeURIComponent(discoverRadius)+'&targetCity='+encodeURIComponent(manual)+'&targetLat='+encodeURIComponent(target.lat)+'&targetLon='+encodeURIComponent(target.lon)+'&resolvedCityVerified=1&country='+encodeURIComponent(target.country||'France');
    const status=()=>{$('locationBox').innerHTML=concertGeoSummary(manual)+(discoverLoading.events||discoverLoading.festivals?' · recherche en cours…':'')};
    status();
-   const concertsJob=api('/api/discover/concerts?'+qs).then(d=>{if(seq!==discoverSeq)return;discoverEventsData=mergeDiscoverRows((d.items||[]).filter(x=>!x.isFestival));discoverFestivalsData=mergeDiscoverRows(discoverFestivalsData,(d.items||[]).filter(x=>x.isFestival))}).catch(()=>{}).finally(()=>{if(seq!==discoverSeq)return;discoverLoading.events=false;renderDiscoverEvents();renderDiscoverFestivals();status()});
+   const concertsJob=api('/api/discover/concerts?'+qs).then(d=>{if(seq!==discoverSeq)return;discoverSourcesInfo=d.sources||null;discoverEventsData=mergeDiscoverRows((d.items||[]).filter(x=>!x.isFestival));discoverFestivalsData=mergeDiscoverRows(discoverFestivalsData,(d.items||[]).filter(x=>x.isFestival))}).catch(()=>{}).finally(()=>{if(seq!==discoverSeq)return;discoverLoading.events=false;renderDiscoverEvents();renderDiscoverFestivals();status()});
    const festivalsJob=api('/api/discover/festivals?'+qs).then(d=>{if(seq!==discoverSeq)return;discoverFestivalsData=mergeDiscoverRows(d.items||[],discoverFestivalsData)}).catch(()=>{}).finally(()=>{if(seq!==discoverSeq)return;discoverLoading.festivals=false;renderDiscoverFestivals();status()});
    await Promise.allSettled([concertsJob,festivalsJob]);
    return;
@@ -818,7 +820,7 @@ async function discoverAtCoords(seq=discoverSeq){
  const results=await Promise.allSettled([api('/api/discover/concerts?'+qs),api('/api/discover/festivals?'+qs)]);
  if(seq!==discoverSeq)return;
  discoverLoading={events:false,festivals:false};
- if(results[0].status==='fulfilled'){const d=results[0].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverEventsData=d.items||[]}
+ if(results[0].status==='fulfilled'){const d=results[0].value;discoverSourcesInfo=d.sources||null;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverEventsData=d.items||[]}
  if(results[1].status==='fulfilled'){const d=results[1].value;if(d.place&&(d.place.city||d.place.country))userPlace={...userPlace,...d.place};discoverFestivalsData=d.items||[]}
  renderDiscover();
  if(!userPlace)$('locationBox').innerHTML='📍 <strong>Position détectée</strong> · impossible de déterminer le nom de la zone pour le moment. Vous pouvez saisir une ville ci-dessus.';
