@@ -249,6 +249,26 @@ const DISCOVER_FALLBACK={
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
 export {discoverManualCityConcerts,splitBandsFromGenres};
+// Concerts of the user's own bands (from "Mes groupes") that fall inside the
+// searched radius are added to the city / near-me lists. When the same show is
+// already listed (same date and venue), the band is added to its title instead
+// of creating a second card ("Thrown" → "Counterparts + Thrown").
+export async function mergeFollowedConcerts(items,followed,lat,lon,radiusKm){
+  const list=[...(items||[])];if(!followed?.length)return list;
+  const venueKey=v=>norm(cleanPlaceName(v)).replace(/^(le|la|les|l)\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const today=new Date().toISOString().slice(0,10);
+  const rows=followed.filter(e=>e?.date&&String(e.date).slice(0,10)>=today&&(e.city||e.venue)).map(e=>({...e,city:cleanPlaceName(e.city||''),country:e.country||'France'}));
+  const near=await withDistance(rows,lat,lon,radiusKm);
+  const seen=new Set();
+  for(const f of near){
+    const artist=String(f.artist||'').trim();const day=String(f.date).slice(0,10);const k=`${norm(artist)}|${day}`;if(seen.has(k))continue;seen.add(k);
+    const same=list.find(x=>String(x.date).slice(0,10)===day&&((f.venue&&x.venue&&venueKey(x.venue)===venueKey(f.venue))||(!f.venue&&norm(x.city)===norm(f.city))));
+    if(same){if(artist&&!norm(same.title).includes(norm(artist)))same.title=`${artist} + ${same.title}`;continue}
+    if(list.some(x=>String(x.date).slice(0,10)===day&&artist&&norm(x.title).includes(norm(artist))))continue;
+    list.push({id:`mine-${f.id||k}`,title:f.title&&norm(f.title).includes(norm(artist))?f.title:(artist||f.title),artist,date:f.date,time:f.time||null,venue:f.venue||'',city:f.city||'',country:'France',url:f.url||'',provider:f.provider||'Mes groupes',distanceKm:f.distanceKm});
+  }
+  return list.sort((a,b)=>String(a.date||'').slice(0,10).localeCompare(String(b.date||'').slice(0,10))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
+}
 export async function discoverArtists(style='all',limit=18){
   const followed=followedNames();
   const tags=style==='all'?['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock']:(STYLE_TAGS[style]||['metal']);
@@ -296,6 +316,14 @@ function splitBandsFromGenres(title){
   const out=chunks.map(x=>x.replace(/^[\s\/&,+-]+|[\s\/&,+-]+$/g,'').trim()).filter(Boolean);
   return out.length?out.join(' + '):t;
 }
+// Full band list of a Concerts-Metal entry. Cutting at the first style word
+// lost every band after it ("Thrown Metalcore Counterparts …" → "Thrown").
+function concertsMetalTitle(details){
+  const d=String(details||'').replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/https?:\/\/\S+/g,' ').replace(/[*_]+/g,' ')
+    .replace(/\(([^)]*)\)/g,(m,x)=>isMetalText(x)?' ':m).replace(/\s+/g,' ').trim();
+  if(d&&d.length<=220){const t=splitBandsFromGenres(d);if(t&&t!==d||!isMetalText(d))return t;}
+  return extractConcertTitle(details)||d.slice(0,160);
+}
 function extractConcertTitle(details){
   const raw=String(details||'').replace(/\s+/g,' ').trim();
   if(!raw)return '';
@@ -324,7 +352,7 @@ function parseConcertsMetalHtml(html,sourceUrl=''){
     const city=cleanPlaceName(bits.pop()||''); const venue=cleanPlaceName(bits.join(', ')||location);
     const details=cells.slice(1).join(' ').replace(/\s+/g,' ').trim();
     if(!details||!isMetalText(details))continue;
-    const title=extractConcertTitle(details)||details.slice(0,160);
+    const title=concertsMetalTitle(details);
     rows.push({id:`cm-${date}-${norm(title)}-${norm(city)}`.slice(0,180),title,date,venue,city,country:'France',url:sourceUrl,provider:'Concerts-Metal.com',metalDetected:true,isFestival:isFestival(title,location,details),details});
   }
   return rows;
@@ -353,7 +381,7 @@ function parseConcertsMetalText(text,sourceUrl=''){
     }
     const details=detailParts.join(' ').replace(/\s+/g,' ').trim();
     if(!details||!isMetalText(details))continue;
-    const title=extractConcertTitle(details)||details.slice(0,160);
+    const title=concertsMetalTitle(details);
     const key=`${date}|${norm(title)}|${norm(venue)}|${norm(city)}`;
     if(rows.some(x=>`${x.date}|${norm(x.title)}|${norm(x.venue)}|${norm(x.city)}`===key))continue;
     rows.push({id:`cm-${date}-${norm(title)}-${norm(city)}`.slice(0,180),title,date,venue,city,country:'France',url:sourceUrl,provider:'Concerts-Metal.com',metalDetected:true,isFestival:isFestival(title,location,details),details});
