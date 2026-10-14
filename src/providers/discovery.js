@@ -376,12 +376,17 @@ function eventHasMetal(row){
 // Run alternative ways of reading the same page (proxy / direct / URL
 // variants) at the same time and keep the first one that yields rows,
 // instead of waiting for each one to time out in turn.
-async function firstWithRows(attempts){
-  try{return await Promise.any(attempts.map(async f=>{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}))}catch{return null}
+// Short, user-readable reason for a failed source fetch (shown in the
+// "aucun concert" diagnostic so a blocked or slow source is visible).
+function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m))return 'délai dépassé';const h=m.match(/HTTP \d{3}/);if(h)return h[0];if(m==='empty')return 'page sans concert';return m.slice(0,40)||'erreur'}
+// Attempts alternate relay (r.jina.ai) / direct fetch, which labels the errors.
+async function firstWithRows(attempts,errs=null){
+  try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){if(errs)errs.push(`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`);throw e}}))}catch{return null}
 }
+const JINA_HEADERS=()=>process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{};
 async function fetchDiscoveryProxy(url,timeout=18000){
   const proxy=`https://r.jina.ai/${url}`;
-  return fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},timeout);
+  return fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}},timeout);
 }
 
 async function cityWebSearch(query){
@@ -465,14 +470,14 @@ async function discoverManualCityConcerts(city){
   return {city:requested,items,sources};
 }
 
-async function fetchMetalRegionalSource(source){
+async function fetchMetalRegionalSource(source,errs=null){
  const url=`https://${source.slug}.concerts-metal.com/`;
  // Render/free hosts can receive a different response from the public site
  // than a normal browser, so the clean proxy and a direct fetch race.
  const r=await firstWithRows([
   async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseConcertsMetalHtml(text,url);if(!rows.length)rows=parseConcertsMetalText(text,url);return {source,rows,error:null,transport:'jina'}},
   async()=>{const html=await fetchText(url,{headers:{Accept:'text/html'}},15000);return {source,rows:parseConcertsMetalHtml(html,url),error:null,transport:'direct'}}
- ]);
+ ],errs);
  return r||{source,rows:[],error:new Error('no rows')};
 }
 
@@ -560,14 +565,14 @@ async function correctManualEventCities(rows,targetCity,near=null){
   });
 }
 
-async function fetchBandsintownCity(city,lat=null,lon=null){
+async function fetchBandsintownCity(city,lat=null,lon=null,errs=null){
   const slug=bandsintownSlug(city); if(!slug)return {rows:[]};
   const suffix=(Number.isFinite(Number(lat))&&Number.isFinite(Number(lon)))?`?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}`:'';
   const url=`https://www.bandsintown.com/fr/c/${slug}-france/all-dates/genre/metal${suffix}`;
   const r=await firstWithRows([
     async()=>({rows:parseBandsintownMetalText(await fetchDiscoveryProxy(url,15000),city,url),url,transport:'jina'}),
     async()=>({rows:parseBandsintownMetalText(await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},15000),city,url),url,transport:'direct'})
-  ]);
+  ],errs);
   return r||{rows:[],url};
 }
 // Resolve a concert venue (e.g. "Le Trabendo") to coordinates and its real
@@ -614,8 +619,8 @@ async function geocodeEventVenue(venue,targetCity,near=null){
   if(out&&!out.city){try{const r=await reverseCity(out.lat,out.lon);out.city=String(r?.city||'').trim()}catch{}}
   geoCache.set(key,out); return out;
 }
-async function discoverBandsintownMetal(city,lat,lon,radiusKm){
-  const r=await fetchBandsintownCity(city,lat,lon); if(!r.rows.length)return [];
+async function discoverBandsintownMetal(city,lat,lon,radiusKm,diag={}){
+  const errs=[];const r=await fetchBandsintownCity(city,lat,lon,errs);diag.raw=r.rows.length;diag.errors=errs;if(!r.rows.length)return [];
   const venueFreq=new Map();for(const x of r.rows)if(x.venue)venueFreq.set(x.venue,(venueFreq.get(x.venue)||0)+1);
   const uniqueVenues=[...venueFreq.keys()].sort((a,b)=>venueFreq.get(b)-venueFreq.get(a)).slice(0,80);
   const venueCoords=await geocodeVenuesWithin(uniqueVenues,city,{lat:Number(lat),lon:Number(lon)});
@@ -626,6 +631,7 @@ async function discoverBandsintownMetal(city,lat,lon,radiusKm){
   // the target-city radius filter.
   const located=[];
   for(const row of r.rows){const p=venueCoords.get(norm(row.venue)); if(!p)continue; located.push({...row,city:p.city||'',_place:{coordinates:{latitude:p.lat,longitude:p.lon}}});}
+  diag.located=located.length;
   const filtered=await withDistance(located,lat,lon,radiusKm);
   return filtered;
 }
@@ -694,19 +700,20 @@ function parseSongkickMetalText(text,metro){
   return rows;
 }
 
-async function fetchSongkickMetro(metro){
+async function fetchSongkickMetro(metro,errs=null){
   const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/2026/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/2026/genre/metal`];
   const r=await firstWithRows(urls.flatMap(url=>[
     async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);return {metro,rows,transport:'jina'}},
     async()=>{const html=await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},12000);return {metro,rows:parseSongkickMetalHtml(html,metro),transport:'direct'}}
-  ]));
+  ]),errs);
   return r||{metro,rows:[]};
 }
-async function discoverSongkickMetal(lat,lon,radiusKm){
+async function discoverSongkickMetal(lat,lon,radiusKm,diag={}){
   const ranked=SONGKICK_METAL_METROS.map(m=>({...m,distance:distanceKm(lat,lon,m.lat,m.lon)})).sort((a,b)=>a.distance-b.distance);
   // Always keep the nearest metro; add a second nearby metro when the user radius reaches it.
   const selected=ranked.filter(m=>m.distance<=Math.max(radiusKm+120,180)).slice(0,3);
-  const results=await Promise.all(selected.map(fetchSongkickMetro));
+  const errs=[];const results=await Promise.all(selected.map(m=>fetchSongkickMetro(m,errs)));
+  diag.raw=results.reduce((n,r)=>n+r.rows.length,0);diag.errors=errs;
   const all=[];
   for(const r of results){for(const row of r.rows){
     if(row.date && row.date < new Date().toISOString().slice(0,10))continue;
@@ -742,7 +749,9 @@ async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
 function discoverConcertsMetalScan(lat,lon,radiusKm,targetCityOverride=''){
   const key=[Number(lat).toFixed(3),Number(lon).toFixed(3),radiusKm,norm(targetCityOverride)].join('|');
   const hit=scanCache.get(key); if(hit&&Date.now()-hit.at<SCAN_TTL)return hit.job;
-  const job=scanConcertsMetal(lat,lon,radiusKm,targetCityOverride).catch(e=>{scanCache.delete(key);throw e});
+  // An empty scan usually means a source was slow or refused us: share it with
+  // concurrent callers, but do not keep it, so the next search tries again.
+  const job=scanConcertsMetal(lat,lon,radiusKm,targetCityOverride).then(res=>{if(!(res?.concerts?.length||res?.festivals?.length)&&scanCache.get(key)?.job===job)scanCache.delete(key);return res},e=>{scanCache.delete(key);throw e});
   scanCache.set(key,{at:Date.now(),job});
   for(const [k,v] of scanCache)if(Date.now()-v.at>=SCAN_TTL)scanCache.delete(k);
   return job;
@@ -756,9 +765,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const all=[];
   // The three sources are independent: query them in parallel.
   // 1) Bandsintown city Metal agenda: broad coverage and a public city/genre page.
-  const bandsintownJob=effectiveCity?discoverBandsintownMetal(effectiveCity,lat,lon,radiusKm).catch(()=>[]):Promise.resolve([]);
+  const biDiag={raw:0,errors:[]},skDiag={raw:0,errors:[]},cmErrs=[];let cmRaw=0;
+  const bandsintownJob=effectiveCity?discoverBandsintownMetal(effectiveCity,lat,lon,radiusKm,biDiag).catch(e=>{biDiag.errors.push(fetchErrorLabel(e));return []}):Promise.resolve([]);
   // 2) Songkick city/metro Metal agenda: second independent nationwide source.
-  const songkickJob=discoverSongkickMetal(lat,lon,radiusKm).catch(()=>[]);
+  const songkickJob=discoverSongkickMetal(lat,lon,radiusKm,skDiag).catch(e=>{skDiag.errors.push(fetchErrorLabel(e));return []});
 
   // 3) Specialist Concerts-Metal regional feed: keep it because it is especially
   // rich for local French metal shows. Force the region containing the target city.
@@ -770,7 +780,8 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   if(nearParis&&paris&&!selected.some(s=>s.slug==='paris'))selected[selected.length-1]=paris;
   const uniqueSelected=[...new Map(selected.map(s=>[s.slug,s])).values()];
   try{
-    const results=await Promise.all(uniqueSelected.map(fetchMetalRegionalSource));
+    const results=await Promise.all(uniqueSelected.map(s=>fetchMetalRegionalSource(s,cmErrs)));
+    cmRaw=results.reduce((n,r)=>n+r.rows.length,0);
     for(const rr of results){for(const row of rr.rows){
       if(!row?.date)continue;
       if(new Date(String(row.date).slice(0,10))<new Date(new Date().toISOString().slice(0,10)))continue;
@@ -781,7 +792,13 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
 
   const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob;
   // Rows each source returned before the distance filter (shown when nothing is found).
-  const sources={bandsintown:biRows.length,songkick:skRows.length,concertsMetal:cmCount};
+  // Raw rows per source (before the distance filter) and why a source failed.
+  const uniq=a=>[...new Set(a)].slice(0,3);
+  const sources={
+    bandsintown:{raw:biDiag.raw,kept:biRows.length,located:biDiag.located??null,errors:biDiag.raw?[]:uniq(biDiag.errors)},
+    songkick:{raw:skDiag.raw,kept:skRows.length,errors:skDiag.raw?[]:uniq(skDiag.errors)},
+    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs)}
+  };
   all.push(...biRows,...skRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const filtered=await withDistance(dated,lat,lon,radiusKm);
@@ -790,6 +807,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     const k=`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.venue)}|${norm(x.title)}`;
     if(!unique.has(k))unique.set(k,x);
   }
+  // Pages read through r.jina.ai come back as Markdown: drop the emphasis
+  // marks ("**Title**", "*Venue*") that would otherwise show in the cards.
+  const clean=v=>typeof v==='string'?v.replace(/\*+/g,' ').replace(/(^|\s)_+|_+(?=\s|$)/g,'$1').replace(/\s{2,}/g,' ').trim():v;
+  for(const [k,x] of unique)unique.set(k,{...x,title:clean(x.title),venue:clean(x.venue),city:clean(x.city)});
   let final=[...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
   if(final.length)return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival),sources};
   const nearNantes=distanceKm(lat,lon,47.2184,-1.5536)<=150;
