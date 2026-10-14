@@ -1,6 +1,7 @@
 import {fetchJson,fetchText,sleep,eventKey} from "../utils.js";
 import {XMLParser} from "fast-xml-parser";
 import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
+import {d1LoadGeoCache,d1PutGeoBatch} from "../d1.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -8,8 +9,13 @@ const geoCache={
   has(k){if(geoMem.has(k))return true;try{const v=geoCacheGet(k);if(v!==undefined){geoMem.set(k,v);return true}}catch{}return false},
   get(k){return this.has(k)?geoMem.get(k):undefined},
   // Misses stay in memory only: they may come from a network error.
-  set(k,v){geoMem.set(k,v);if(v!=null){try{geoCacheSet(k,v)}catch{}}return this}
+  set(k,v){geoMem.set(k,v);if(v!=null){try{geoCacheSet(k,v)}catch{}geoD1Queue.set(k,v);scheduleGeoFlush()}return this}
 };
+// Located venues/cities are also copied to D1 (Render's disk is wiped on
+// restart): loaded once at startup, written in small batches.
+const geoD1Queue=new Map();let geoFlushTimer=null;
+function scheduleGeoFlush(){if(geoFlushTimer)return;geoFlushTimer=setTimeout(async()=>{geoFlushTimer=null;const batch=[...geoD1Queue.entries()].slice(0,200);for(const [k] of batch)geoD1Queue.delete(k);try{await d1PutGeoBatch(batch)}catch(e){console.error('Geo cache D1:',e?.message||e)}if(geoD1Queue.size)scheduleGeoFlush()},5000);geoFlushTimer.unref?.()}
+export async function warmGeoCache(){try{const rows=await d1LoadGeoCache();let n=0;for(const r of rows){if(!geoMem.has(r.key)){try{const v=JSON.parse(r.value);if(v!=null){geoMem.set(r.key,v);try{geoCacheSet(r.key,v)}catch{}n++}}catch{}}}return n}catch(e){console.error('Geo cache warm:',e?.message||e);return 0}}
 let geoLast=0;
 const MB_BASE="https://musicbrainz.org/ws/2";
 let mbLast=0;
@@ -28,7 +34,20 @@ const FESTIVAL_METAL_TAGS=["metal","metalcore","deathcore","hardcore","death met
 const BROAD_METAL_TERMS=[...FESTIVAL_METAL_TAGS,"punk","post-metal","mathcore","metallic hardcore","electronicore","folk metal","power metal","speed metal","sludge","gothic metal","symphonic metal","avant-garde metal"];
 
 const REGIONAL_CITY_COORDS={
-  Nantes:[47.2184,-1.5536],Vallet:[47.1627,-1.2667],Clisson:[47.0875,-1.2826],Cugand:[47.0638,-1.2517],Montaigu:[46.9744,-1.3116],"Montaigu-Vendée":[46.9744,-1.3116],Rezé:[47.1911,-1.5441],Carquefou:[47.2979,-1.4937],"Saint-Herblain":[47.226,-1.6484],"Le Bignon":[47.0997,-1.4924],Pontchâteau:[47.4367,-2.0911],Angers:[47.4784,-0.5632],"La Roche-sur-Yon":[46.6705,-1.426],Savenay:[47.3606,-1.942],"Saint-Macaire-en-Mauges":[47.1233,-0.994],"Saint-Hilaire-de-Riez":[46.7211,-1.9465],"Saint-Nazaire":[47.2738,-2.2137],Cholet:[47.0594,-0.878],Cordemais:[47.2917,-1.8783],"Le Bignon":[47.0997,-1.4924],"Chemillé-en-Anjou":[47.2142,-0.7268],"Saint-Prouant":[46.771,-0.967],"Saint-Macaire-en-Mauges":[47.1233,-0.994],"Saint-Sébastien-sur-Loire":[47.207,-1.503],"Saint-Julien-de-Concelles":[47.253,-1.385]
+  Nantes:[47.2184,-1.5536],Vallet:[47.1627,-1.2667],Clisson:[47.0875,-1.2826],Cugand:[47.0638,-1.2517],Montaigu:[46.9744,-1.3116],"Montaigu-Vendée":[46.9744,-1.3116],Rezé:[47.1911,-1.5441],Carquefou:[47.2979,-1.4937],"Saint-Herblain":[47.226,-1.6484],"Le Bignon":[47.0997,-1.4924],Pontchâteau:[47.4367,-2.0911],Angers:[47.4784,-0.5632],"La Roche-sur-Yon":[46.6705,-1.426],Savenay:[47.3606,-1.942],"Saint-Macaire-en-Mauges":[47.1233,-0.994],"Saint-Hilaire-de-Riez":[46.7211,-1.9465],"Saint-Nazaire":[47.2738,-2.2137],Cholet:[47.0594,-0.878],Cordemais:[47.2917,-1.8783],"Le Bignon":[47.0997,-1.4924],"Chemillé-en-Anjou":[47.2142,-0.7268],"Saint-Prouant":[46.771,-0.967],"Saint-Macaire-en-Mauges":[47.1233,-0.994],"Saint-Sébastien-sur-Loire":[47.207,-1.503],"Saint-Julien-de-Concelles":[47.253,-1.385],
+  // Main French cities (instant, no geocoding needed).
+  Paris:[48.8566,2.3522],Lyon:[45.764,4.8357],Marseille:[43.2965,5.3698],Lille:[50.6292,3.0573],Bordeaux:[44.8378,-0.5792],Toulouse:[43.6047,1.4442],
+  Rennes:[48.1173,-1.6778],Strasbourg:[48.5734,7.7521],Montpellier:[43.6108,3.8767],Nice:[43.7102,7.262],Rouen:[49.4432,1.0999],Grenoble:[45.1885,5.7245],
+  Dijon:[47.322,5.0415],Reims:[49.2583,4.0317],"Le Havre":[49.4944,0.1079],"Saint-Étienne":[45.4397,4.3872],Toulon:[43.1242,5.928],"Clermont-Ferrand":[45.7772,3.087],
+  Brest:[48.3904,-4.4861],Tours:[47.3941,0.6848],Limoges:[45.8336,1.2611],Amiens:[49.8941,2.2958],Metz:[49.1193,6.1757],Nancy:[48.6921,6.1844],Besançon:[47.2378,6.0241],
+  Orléans:[47.9029,1.9093],Caen:[49.1829,-0.3707],Poitiers:[46.5802,0.3404],Perpignan:[42.6887,2.8948],Nîmes:[43.8367,4.3601],"Aix-en-Provence":[43.5297,5.4474],
+  Avignon:[43.9493,4.8055],Pau:[43.2951,-0.3708],Bayonne:[43.4929,-1.4748],"Le Mans":[48.0061,0.1996],"Saint-Nazaire":[47.2735,-2.2138],Lorient:[47.748,-3.3702],Vannes:[47.6582,-2.7608],
+  Quimper:[47.996,-4.0969],"La Rochelle":[46.1603,-1.1511],Niort:[46.3237,-0.4588],Mulhouse:[47.7508,7.3359],Colmar:[48.0794,7.3585],Troyes:[48.2973,4.0744],Valence:[44.9334,4.8924],
+  Annecy:[45.8992,6.1294],Chambéry:[45.5646,5.9178],"Saint-Brieuc":[48.5136,-2.7603],Laval:[48.0707,-0.7734],Cherbourg:[49.6339,-1.6222],Dunkerque:[51.0344,2.3768],
+  Montreuil:[48.8638,2.4485],"Saint-Denis":[48.9362,2.3574],"Boulogne-Billancourt":[48.8397,2.2399],Nanterre:[48.8924,2.2071],Versailles:[48.8049,2.1204],"Saint-Ouen":[48.9119,2.3338],
+  "Saint-Ouen-sur-Seine":[48.9119,2.3338],Pantin:[48.8944,2.4092],Bobigny:[48.9077,2.4396],"Issy-les-Moulineaux":[48.8245,2.2734],Argenteuil:[48.9472,2.2467],Créteil:[48.7904,2.4556],
+  "Saint-Germain-en-Laye":[48.8989,2.0938],"Cergy":[49.0364,2.0761],Évry:[48.6247,2.4413],Massy:[48.7309,2.2713],"Bagnolet":[48.8695,2.4183],"Vincennes":[48.8475,2.4392],
+  "Ris-Orangis":[48.6533,2.4167],"Savigny-le-Temple":[48.5743,2.5827],"Clermont":[49.3792,2.4128],Beauvais:[49.4295,2.0807],Évreux:[49.0241,1.1508]
 };
 
 function norm(s){return String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
@@ -174,11 +193,14 @@ async function withDistance(rows,lat,lon,radiusKm){
   const cityOf=row=>row.city||row._place?.area?.name||'';
   // Locate each missing city once, within a time budget (see VENUE_BUDGET_MS);
   // unfinished lookups keep running in the background to fill the cache.
-  const missing=new Map();
-  for(const row of rows){const c=coordsOf(row);if(!Number.isFinite(c.lat)||!Number.isFinite(c.lon)){const city=cityOf(row);if(city)missing.set(norm(`${city}|${row.country||''}`),[city,row.country||''])}}
+  const missing=new Map(),freq=new Map();
+  for(const row of rows){const c=coordsOf(row);if(!Number.isFinite(c.lat)||!Number.isFinite(c.lon)){const city=cityOf(row);if(city){const k=norm(`${city}|${row.country||''}`);missing.set(k,[city,row.country||'']);freq.set(k,(freq.get(k)||0)+1)}}}
+  // Most frequent cities first (e.g. Paris for an Ile-de-France agenda), so
+  // the time budget is spent where most concerts are.
+  const ordered=new Map([...missing.entries()].sort((a,b)=>(freq.get(b[0])||0)-(freq.get(a[0])||0)));
   const found=new Map();
   if(missing.size){
-    const run=(async()=>{for(const [k,[city,country]] of missing){const g=await geocodeCity(city,country);if(g)found.set(k,g)}})().catch(()=>{});
+    const run=(async()=>{for(const [k,[city,country]] of ordered){const g=await geocodeCity(city,country);if(g)found.set(k,g)}})().catch(()=>{});
     await withinBudget(run);
   }
   const out=[];
@@ -594,7 +616,8 @@ async function geocodeEventVenue(venue,targetCity,near=null){
 }
 async function discoverBandsintownMetal(city,lat,lon,radiusKm){
   const r=await fetchBandsintownCity(city,lat,lon); if(!r.rows.length)return [];
-  const uniqueVenues=[...new Set(r.rows.map(x=>x.venue).filter(Boolean))].slice(0,80);
+  const venueFreq=new Map();for(const x of r.rows)if(x.venue)venueFreq.set(x.venue,(venueFreq.get(x.venue)||0)+1);
+  const uniqueVenues=[...venueFreq.keys()].sort((a,b)=>venueFreq.get(b)-venueFreq.get(a)).slice(0,80);
   const venueCoords=await geocodeVenuesWithin(uniqueVenues,city,{lat:Number(lat),lon:Number(lon)});
   // Never assume that an event belongs to the requested city when its venue
   // could not be geocoded. That assumption was the exact mechanism that could
@@ -707,7 +730,16 @@ async function discoverSongkickMetal(lat,lon,radiusKm){
 // Concerts and festivals come from the same scan; the browser asks for both at
 // once, so share one in-flight run and keep its result for a few minutes.
 const scanCache=new Map(); const SCAN_TTL=20*60*1000;
-function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
+// One scan at the widest radius per place, then each request keeps the
+// concerts within its own radius: switching 10/20/50/100 km is instant and
+// consistent, and the shared scan cache is reused.
+const SCAN_RADIUS_KM=100;
+async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
+  const r=Number(radiusKm)||50;const res=await discoverConcertsMetalScan(lat,lon,SCAN_RADIUS_KM,targetCityOverride);
+  const keep=x=>!Number.isFinite(Number(x?.distanceKm))||Number(x.distanceKm)<=r;
+  return {concerts:(res.concerts||[]).filter(keep),festivals:(res.festivals||[]).filter(keep),sources:res.sources||null};
+}
+function discoverConcertsMetalScan(lat,lon,radiusKm,targetCityOverride=''){
   const key=[Number(lat).toFixed(3),Number(lon).toFixed(3),radiusKm,norm(targetCityOverride)].join('|');
   const hit=scanCache.get(key); if(hit&&Date.now()-hit.at<SCAN_TTL)return hit.job;
   const job=scanConcertsMetal(lat,lon,radiusKm,targetCityOverride).catch(e=>{scanCache.delete(key);throw e});
@@ -747,7 +779,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     }}
   }catch{}
 
-  all.push(...await bandsintownJob,...await songkickJob);
+  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob;
+  // Rows each source returned before the distance filter (shown when nothing is found).
+  const sources={bandsintown:biRows.length,songkick:skRows.length,concertsMetal:cmCount};
+  all.push(...biRows,...skRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const filtered=await withDistance(dated,lat,lon,radiusKm);
   const unique=new Map();
@@ -756,10 +791,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     if(!unique.has(k))unique.set(k,x);
   }
   let final=[...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
-  if(final.length)return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival)};
+  if(final.length)return {concerts:final.filter(x=>!x.isFestival),festivals:final.filter(x=>x.isFestival),sources};
   const nearNantes=distanceKm(lat,lon,47.2184,-1.5536)<=150;
   const fallback=nearNantes?await curatedConcertFallback(lat,lon,radiusKm):[];
-  return {concerts:fallback,festivals:[]};
+  return {concerts:fallback,festivals:[],sources};
 }
 
 async function googleLocalFestivalDiscovery(place){const deadline=Date.now()+10000;const queries=[`festival metal ${place.city||''} ${place.state||''}`,`concert metal festival ${place.city||''} ${place.state||''}`];const found=new Map();for(const q of queries){try{const xml=await fetchText(`https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=fr&gl=FR&ceid=FR:fr`,{},15000);const d=new XMLParser({ignoreAttributes:false}).parse(xml);let items=d?.rss?.channel?.item||[];if(!Array.isArray(items))items=[items];for(const x of items.slice(0,20)){if(Date.now()>deadline)break;const title=String(x.title||'').trim(),url=String(x.link||'').trim(),desc=stripHtml(x.description||'');const hay=`${title} ${desc}`.toLowerCase();if(!title||!url||!/festival|concert|live|metal/i.test(hay))continue;const key=title.toLowerCase();if(found.has(key))continue;const gp=await geocodeQuery(`${title} ${desc}`);if(!gp)continue;const dkm=distanceKm(latOr(place),lonOr(place),gp.lat,gp.lon);if(dkm>100)continue;const metalDetected=FESTIVAL_METAL_TAGS.some(t=>hay.includes(t));if(!metalDetected)continue;found.set(key,{id:`google-local-${Buffer.from(url).toString('base64url').slice(0,24)}`,title,date:parseRssDate(x.pubDate),venue:'',city:gp.display_name?.split(',')[0]||'',country:'France',url,provider:'google-news-local',metalDetected:true,distanceKm:Math.round(dkm*10)/10});}}catch{}}return [...found.values()]}
@@ -807,7 +842,8 @@ export async function discoverNearbyFestivals(lat,lon,radiusKm=50,placeOverride=
 export async function discoverNearbyConcerts(lat,lon,radiusKm=50,placeOverride=null){
   const resolved=await resolveTargetCoordinates(lat,lon,placeOverride);lat=resolved.lat;lon=resolved.lon;const place=resolved.place;let items=[];
   const manualTarget=Boolean(placeOverride?.manualTarget);
-  try{const cm=await discoverConcertsMetal(lat,lon,radiusKm,place?.city||'');items=cm.concerts}catch{}
+  let sources=null;
+  try{const cm=await discoverConcertsMetal(lat,lon,radiusKm,place?.city||'');items=cm.concerts;sources=cm.sources}catch{}
   // A manual city search must NEVER fall back to the browser/current-location
   // or to the historical Nantes/Cugand curated data. If the city-targeted
   // sources fail, return an empty result rather than showing concerts from
@@ -816,7 +852,7 @@ export async function discoverNearbyConcerts(lat,lon,radiusKm=50,placeOverride=n
     const today=new Date().toISOString().slice(0,10);
     items=items.filter(x=>!x.date || String(x.date).slice(0,10)>=today)
       .sort((a,b)=>String(a.date||'9999-12-31').slice(0,10).localeCompare(String(b.date||'9999-12-31').slice(0,10))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
-    return {place,radiusKm,items};
+    return {place,radiusKm,items,sources};
   }
   if(!items.length){
     const today=new Date().toISOString().slice(0,10),end=new Date(Date.now()+1000*60*60*24*180).toISOString().slice(0,10),tags=['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock'];const areas=[...new Set([place.locality,place.city,place.municipality,place.county,place.state].filter(Boolean))];const all=new Map();
