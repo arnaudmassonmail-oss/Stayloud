@@ -498,7 +498,7 @@ async function discoverManualCityConcerts(city){
     for(const url of cmUrls){
       try{const source={slug:new URL(url).hostname.split('.')[0],name:`Concerts-Metal · ${requested}`};const text=await fetchDiscoveryProxy(url,18000);let rows=parseConcertsMetalHtml(text,url);if(!rows.length)rows=parseConcertsMetalText(text,url);if(rows.length){all.push(...rows);sources.push({provider:'Concerts-Metal.com',url,mode:'city-search'});break;}}catch{}
     }
-    const skUrls=found.songkick.filter(u=>/genre\/metal|2026\/genre\/metal/i.test(u));
+    const skUrls=found.songkick.filter(u=>/genre\/metal/i.test(u));
     for(const url of skUrls.slice(0,3)){
       try{const metro=songkickMetroFromUrl(url);if(!metro)continue;const text=await fetchDiscoveryProxy(url,18000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);if(rows.length){all.push(...rows);sources.push({provider:'Songkick',url,mode:'city-search'});break;}}catch{}
     }
@@ -745,9 +745,15 @@ function parseSongkickMetalText(text,metro){
   return rows;
 }
 
-function fetchSongkickMetro(metro,errs=null){return cachedSourceRows('sk:'+metro.slug,()=>fetchSongkickMetroLive(metro,errs)).then(r=>({...r,metro}))}
-async function fetchSongkickMetroLive(metro,errs=null){
-  const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/2026/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/2026/genre/metal`];
+// Songkick agendas are per calendar year: the current one, plus next year
+// from July on (the app shows the next 6 months).
+function songkickYears(){const d=new Date(),y=d.getFullYear();return d.getMonth()>=6?[y,y+1]:[y]}
+function fetchSongkickMetro(metro,errs=null){const years=songkickYears();return cachedSourceRows(`sk:${metro.slug}:${years.join('-')}`,async()=>{
+  const parts=await Promise.all(years.map(y=>fetchSongkickMetroLive(metro,y,errs)));
+  return {metro,rows:parts.flatMap(r=>r.rows)};
+}).then(r=>({...r,metro}))}
+async function fetchSongkickMetroLive(metro,year,errs=null){
+  const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/${year}/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/${year}/genre/metal`];
   const r=await firstWithRows(urls.flatMap(url=>[
     async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);return {metro,rows,transport:'jina'}},
     async()=>{const html=await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},12000);return {metro,rows:parseSongkickMetalHtml(html,metro),transport:'direct'}}
@@ -819,7 +825,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const all=[];
   // The three sources are independent: query them in parallel.
   // 1) Bandsintown city Metal agenda: broad coverage and a public city/genre page.
-  const biDiag={raw:0,errors:[]},skDiag={raw:0,errors:[]},cmErrs=[];let cmRaw=0;
+  const biDiag={raw:0,errors:[]},skDiag={raw:0,errors:[]},cmErrs=[];let cmRaw=0,cmRegions=[];
   const bandsintownJob=effectiveCity?discoverBandsintownMetal(effectiveCity,lat,lon,radiusKm,biDiag).catch(e=>{biDiag.errors.push(fetchErrorLabel(e));return []}):Promise.resolve([]);
   // 2) Songkick city/metro Metal agenda: second independent nationwide source.
   const songkickJob=discoverSongkickMetal(lat,lon,radiusKm,skDiag).catch(e=>{skDiag.errors.push(fetchErrorLabel(e));return []});
@@ -836,6 +842,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   try{
     const results=await Promise.all(uniqueSelected.map(s=>fetchMetalRegionalSource(s,cmErrs)));
     cmRaw=results.reduce((n,r)=>n+r.rows.length,0);
+    // Per regional page: row count, most frequent cities, and whether its list
+    // is identical to another region's (i.e. the site ignores the region).
+    const sig=r=>r.rows.map(x=>`${x.date}|${norm(x.title)}`).sort().join('~');const seen=new Map();
+    cmRegions=results.map(r=>{const f=new Map();for(const x of r.rows){const c=cleanPlaceName(x.city);if(c)f.set(c,(f.get(c)||0)+1)}const g=r.rows.length?sig(r):'';const same=g&&seen.get(g)||null;if(g&&!seen.has(g))seen.set(g,r.source.slug);return {slug:r.source.slug,rows:r.rows.length,cities:[...f.entries()].sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]),same}});
     for(const rr of results){for(const row of rr.rows){
       if(!row?.date)continue;
       if(new Date(String(row.date).slice(0,10))<new Date(new Date().toISOString().slice(0,10)))continue;
@@ -851,7 +861,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const sources={
     bandsintown:{raw:biDiag.raw,kept:biRows.length,located:biDiag.located??null,errors:biDiag.raw?[]:uniq(biDiag.errors)},
     songkick:{raw:skDiag.raw,kept:skRows.length,errors:skDiag.raw?[]:uniq(skDiag.errors)},
-    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs)}
+    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs),regions:cmRegions}
   };
   all.push(...biRows,...skRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
@@ -941,5 +951,5 @@ export async function discoverNearbyConcerts(lat,lon,radiusKm=50,placeOverride=n
     .sort((a,b)=>String(a.date||'9999-12-31').slice(0,10).localeCompare(String(b.date||'9999-12-31').slice(0,10))||a.distanceKm-b.distanceKm);
   // Discovery is deliberately isolated from the tracked-artist concert engine.
   // Tracked concerts come only from Bandsintown + InfoConcert.
-  return {place,radiusKm,items};
+  return {place,radiusKm,items,sources};
 }

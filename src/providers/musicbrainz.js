@@ -505,7 +505,7 @@ async function bandsintownPhotoCandidates(artistName,explicitUrl=''){
  // Bing and fetch those pages directly. This does not touch the concert engine.
  const webQueries=[
    `site:bandsintown.com/e/ "${artist.name}" "Live Photos"`,
-   `site:bandsintown.com/e/ "${artist.name}" "Live Photos" 2026`,
+   `site:bandsintown.com/e/ "${artist.name}" "Live Photos" ${new Date().getFullYear()}`,
    `site:bandsintown.com/a/ "${artist.name}" "Live Photos"`
  ];
  for(const q of webQueries){
@@ -525,7 +525,7 @@ async function bandsintownPhotoCandidates(artistName,explicitUrl=''){
  const imageQueries=[
    `site:bandsintown.com/e/ "${artist.name}" "Live Photos"`,
    `site:bandsintown.com/a/ "${artist.name}" "Live Photos"`,
-   `site:bandsintown.com "${artist.name}" "at" "2026" "Live Photos"`
+   `site:bandsintown.com "${artist.name}" "at" "${new Date().getFullYear()}" "Live Photos"`
  ];
  for(const q of imageQueries){
    try{
@@ -627,7 +627,7 @@ export async function discoverArtistPhotos(name,limit=5,context='',options={}){
  const cleanCtx=identity.replace(/\s+/g,' ').trim();
  const queries=[
   `"${wanted}" ${cleanCtx} band live concert photo`,
-  `"${wanted}" ${cleanCtx} live 2026 photo`,
+  `"${wanted}" ${cleanCtx} live ${nowYear} photo`,
   `"${wanted}" ${cleanCtx} official band photo`,
   `"${wanted}" ${cleanCtx} promo press photo`,
   `"${wanted}" ${cleanCtx} studio portrait band`,
