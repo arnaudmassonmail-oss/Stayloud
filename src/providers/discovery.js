@@ -185,10 +185,32 @@ export async function geocodeQuery(query){
   }
   geoCache.set(key,null);return null;
 }
-async function geocodeCity(city,country=''){const c=String(city||'').trim();if(!c)return null;const direct=REGIONAL_CITY_COORDS[Object.keys(REGIONAL_CITY_COORDS).find(k=>norm(k)===norm(c))];if(direct)return {lat:direct[0],lon:direct[1]};const key=norm(`${c}|${country}`);if(geoCache.has(key))return geoCache.get(key);const wait=Math.max(0,1050-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();try{const q=encodeURIComponent([c,country].filter(Boolean).join(', '));const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${q}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);const hit=d?.[0];const out=hit?{lat:Number(hit.lat),lon:Number(hit.lon)}:null;geoCache.set(key,out);return out}catch{geoCache.set(key,null);return null}}
+// City names scraped through r.jina.ai can carry Markdown and extras:
+// "**Paris**", "[Paris](https://…)", "Paris 11e", "Paris (75)", "Montreuil 93100".
+function cleanPlaceName(value){
+  let v=String(value||'');
+  v=v.replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/https?:\/\/\S+/gi,' ').replace(/[*_\[\]]+/g,' ');
+  v=v.replace(/\(\s*\d{2,5}\s*\)/g,' ').replace(/\b\d{5}\b/g,' ').replace(/\s+-\s+france$/i,'').replace(/,\s*france$/i,'');
+  v=v.replace(/^(paris|lyon|marseille)\s+(?:\d{1,2}|[ivxl]{1,5})\s*(?:e|er|eme|ème|è)?\b.*$/i,'$1');
+  return v.replace(/\s{2,}/g,' ').replace(/^[\s,.;:|-]+|[\s,.;:|-]+$/g,'').trim();
+}
+function knownCityCoords(name){const n=norm(name);const k=Object.keys(REGIONAL_CITY_COORDS).find(x=>norm(x)===n);return k?{lat:REGIONAL_CITY_COORDS[k][0],lon:REGIONAL_CITY_COORDS[k][1]}:null}
+async function geocodeCity(city,country=''){
+  const c=cleanPlaceName(city);if(!c)return null;
+  const direct=knownCityCoords(c);if(direct)return direct;
+  const key=norm(`${c}|${country}`);if(geoCache.has(key))return geoCache.get(key);
+  const fr=!country||/^(fr|france)$/i.test(String(country).trim());
+  // French communes: the national geocoder first (fast, generous limits), then
+  // Nominatim. A failed request is NOT remembered as "unknown city", so a
+  // temporary refusal (429/403) cannot hide a city for the rest of the day.
+  let failed=false;
+  if(fr){try{const d=await fetchJson(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(c)}&type=municipality&limit=5`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},10000);const f=(d?.features||[]).find(x=>strictCityMatch(x,c));if(f){const [lon,lat]=f.geometry.coordinates;const out={lat:Number(lat),lon:Number(lon)};if(Number.isFinite(out.lat)&&Number.isFinite(out.lon)){geoCache.set(key,out);return out}}}catch{failed=true}}
+  const wait=Math.max(0,1050-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
+  try{const q=encodeURIComponent([c,country].filter(Boolean).join(', '));const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${q}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);const hit=d?.[0];const out=hit?{lat:Number(hit.lat),lon:Number(hit.lon)}:null;if(out||!failed)geoCache.set(key,out);return out}catch{return null}
+}
 function distanceKm(lat1,lon1,lat2,lon2){const toRad=v=>v*Math.PI/180,dLat=toRad(lat2-lat1),dLon=toRad(lon2-lon1),a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
 
-async function withDistance(rows,lat,lon,radiusKm){
+async function withDistance(rows,lat,lon,radiusKm,diag=null){
   const coordsOf=row=>{const p=row._place||{};return {lat:Number(p.coordinates?.latitude),lon:Number(p.coordinates?.longitude)}};
   const cityOf=row=>row.city||row._place?.area?.name||'';
   // Locate each missing city once, within a time budget (see VENUE_BUDGET_MS);
@@ -208,6 +230,7 @@ async function withDistance(rows,lat,lon,radiusKm){
     let {lat:elat,lon:elon}=coordsOf(row);
     if(!Number.isFinite(elat)||!Number.isFinite(elon)){const g=found.get(norm(`${cityOf(row)}|${row.country||''}`));if(g){elat=g.lat;elon=g.lon}}
     if(Number.isFinite(elat)&&Number.isFinite(elon)){const d=distanceKm(lat,lon,elat,elon);if(d<=radiusKm)out.push({...row,distanceKm:Math.round(d*10)/10})}
+    else if(diag){diag.unlocated=(diag.unlocated||0)+1;const c=String(cityOf(row)||'?').slice(0,30);diag.samples=diag.samples||[];if(diag.samples.length<3&&!diag.samples.includes(c))diag.samples.push(c)}
   }
   return out;
 }
@@ -273,7 +296,7 @@ function parseConcertsMetalHtml(html,sourceUrl=''){
     const locMatch=header.match(/(?:20\d{2}-\d{2}-\d{2})(?:\s*\([^)]*\))?\s*-\s*(.+)$/i);
     const location=locMatch?locMatch[1].trim():'';
     const bits=location.split(',').map(x=>x.trim()).filter(Boolean);
-    const city=bits.pop()||''; const venue=bits.join(', ')||location;
+    const city=cleanPlaceName(bits.pop()||''); const venue=cleanPlaceName(bits.join(', ')||location);
     const details=cells.slice(1).join(' ').replace(/\s+/g,' ').trim();
     if(!details||!isMetalText(details))continue;
     const title=extractConcertTitle(details)||details.slice(0,160);
@@ -293,9 +316,9 @@ function parseConcertsMetalText(text,sourceUrl=''){
   for(let i=0;i<lines.length;i++){
     const cleanLine=lines[i].replace(/^\|+|\|+$/g,'').replace(/\s*\|\s*/g,' ').replace(/^[-*]\s*/,'').replace(/\s+/g,' ').trim();
     const m=cleanLine.match(dateLine); if(!m)continue;
-    const date=m[1], location=m[2].trim();
+    const date=m[1], location=m[2].replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').trim();
     const bits=location.split(',').map(x=>x.trim()).filter(Boolean);
-    const city=bits.pop()||''; const venue=bits.join(', ')||location;
+    const city=cleanPlaceName(bits.pop()||''); const venue=cleanPlaceName(bits.join(', ')||location);
     const detailParts=[];
     for(let j=i+1;j<Math.min(lines.length,i+5);j++){
       const next=lines[j].replace(/^\|+|\|+$/g,'').replace(/\s*\|\s*/g,' ').replace(/^[-*]\s*/,'').replace(/\s+/g,' ').trim();
@@ -801,7 +824,9 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   };
   all.push(...biRows,...skRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-  const filtered=await withDistance(dated,lat,lon,radiusKm);
+  const placeDiag={};
+  const filtered=await withDistance(dated,lat,lon,radiusKm,placeDiag);
+  if(placeDiag.unlocated)sources.unlocated={count:placeDiag.unlocated,samples:placeDiag.samples||[]};
   const unique=new Map();
   for(const x of filtered){
     const k=`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.venue)}|${norm(x.title)}`;
