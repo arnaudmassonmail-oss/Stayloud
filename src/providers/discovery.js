@@ -245,6 +245,7 @@ const DISCOVER_FALLBACK={
   'Black Metal':[['Gaerea','Black Metal'],['Kanonenfieber','Black Metal'],['Spectral Wound','Black Metal']],
   'Thrash Metal':[['Warbringer','Thrash Metal'],['Municipal Waste','Thrash Metal'],['Evile','Thrash Metal']],
   Alternative:[['Loathe','Alternative'],['Spiritbox','Alternative'],['Sleep Token','Alternative']],
+  France:[['Landmvrks','Metalcore'],['Rise Of The Northstar','Hardcore'],['Alcest','Black Metal'],['Hypno5e','Progressif'],['Klone','Progressif'],['Novelists','Metalcore'],['Betraying The Martyrs','Deathcore'],['Ultra Vomit','Metal'],['Mass Hysteria','Metal'],['Dagoba','Metal'],['Benighted','Death Metal'],['Svart Crown','Black Metal'],['Regarde Les Hommes Tomber','Black Metal'],['Igorrr','Metal'],['Loudblast','Death Metal'],['Tagada Jones','Hardcore'],['Smash Hit Combo','Nu Metal'],['Gojira','Death Metal']],
   'Post-Hardcore':[['Holding Absence','Post-Hardcore'],['Static Dress','Post-Hardcore'],['Thornhill','Post-Hardcore']],
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
@@ -281,21 +282,25 @@ const ALL_METAL_TAGS=['metal','metalcore','deathcore','hardcore','death metal','
 const discoverCache=new Map();const DISCOVER_TTL=6*60*60*1000;
 export async function discoverArtists(style='all',limit=18,page=0){
   const followed=followedNames();
-  const tags=style==='all'?ALL_METAL_TAGS:(STYLE_TAGS[style]||['metal']);
-  const q=`type:group AND (${tags.map(t=>`tag:"${t}"`).join(' OR ')})`;
+  // "France": French bands of any metal style (MusicBrainz country FR).
+  const french=style==='France';
+  const tags=style==='all'?ALL_METAL_TAGS:french?[...ALL_METAL_TAGS,'heavy metal','doom metal','post-metal','sludge metal','djent','industrial metal','groove metal','symphonic metal','power metal','progressive metal']:(STYLE_TAGS[style]||['metal']);
+  const q=`type:group AND ${french?'country:FR AND ':''}(${tags.map(t=>`tag:"${t}"`).join(' OR ')})`;
   const want=(Number(page)+1)*limit;
   try{
     let c=discoverCache.get(style);if(!c||Date.now()-c.at>DISCOVER_TTL){c={at:Date.now(),rows:[],seen:new Set(),offset:0,done:false};discoverCache.set(style,c)}
     // Fetch MusicBrainz pages (100 artists each) until this page is full.
+    // A failed MusicBrainz call keeps what was already found (and "Suivant"
+    // stays available to retry) instead of falling back to the short list.
     let calls=0;
     while(!c.done&&c.rows.length<want+1&&calls<4){
       calls++;
-      const d=await mb(`${MB_BASE}/artist/?query=${encodeURIComponent(q)}&fmt=json&limit=100&offset=${c.offset}`);
+      let d;try{d=await mb(`${MB_BASE}/artist/?query=${encodeURIComponent(q)}&fmt=json&limit=100&offset=${c.offset}`)}catch(e){if(c.rows.length)break;throw e}
       const list=d.artists||[];c.offset+=100;if(list.length<100||c.offset>=Number(d.count||0))c.done=true;
       for(const raw of list){
         const main=mainTags(raw);
-        const broad=style==='all'||style==='Metal';if(!main.some(t=>tags.includes(t)||(broad&&/\bmetal\b/.test(t))))continue;
-        const a=cleanArtist(raw);a.style=style==='all'?inferStyle(main):style;if(!a.style)continue;
+        const broad=style==='all'||style==='Metal'||french;if(!main.some(t=>tags.includes(t)||(broad&&/\bmetal\b/.test(t))))continue;
+        const a=cleanArtist(raw);a.style=(style==='all'||french)?(inferStyle(main)||'Metal'):style;if(!a.style)continue;
         const k=norm(a.name);if(c.seen.has(k))continue;c.seen.add(k);c.rows.push(a);
       }
     }
@@ -309,7 +314,7 @@ export async function discoverArtists(style='all',limit=18,page=0){
     for(const [name,st] of (DISCOVER_FALLBACK[style]||DISCOVER_FALLBACK.all)){
       const k=norm(name);if(seen.has(k)||followed.has(k))continue;seen.add(k);out.push({id:`fallback-${k.replace(/[^a-z0-9]+/g,'-')}`,name,sortname:name,score:0,disambiguation:'Suggestion métal',style:st,mbid:''});if(out.length>=limit)break;
     }
-    if(out.length)return {items:out,hasMore:false};
+    if(out.length)return {items:out,hasMore:false,fallback:true};
     throw e;
   }
 }
