@@ -1,10 +1,14 @@
 import {fetchJson,fetchText,sleep,eventKey,countryGuess} from "../utils.js";
 import {providerRun,updateArtist} from "../db.js";
+import {d1GetBandCache,d1PutBandEvents} from "../d1.js";
 import {resolveBandsintown} from "./concert-web.js";
 const BASE="https://musicbrainz.org/ws/2";let last=0;
-async function mb(url){
- const wait=Math.max(0,1050-(Date.now()-last));if(wait)await sleep(wait);last=Date.now();
- let err;for(let i=0;i<4;i++){try{return await fetchJson(url,{headers:{Accept:"application/json"}},20000)}catch(e){err=e;await sleep(1500*2**i)}}throw err;
+// MusicBrainz allows ~1 request/second. Calls go through one queue so that
+// concurrent jobs (news, concerts, profiles) do not trigger "503 slow down".
+let mbQueue=Promise.resolve();
+function mbSlot(){const p=mbQueue.then(async()=>{const wait=Math.max(0,1050-(Date.now()-last));if(wait)await sleep(wait);last=Date.now()});mbQueue=p.catch(()=>{});return p}
+async function mb(url,{tries=4,timeout=20000}={}){
+ let err;for(let i=0;i<tries;i++){await mbSlot();try{return await fetchJson(url,{headers:{Accept:"application/json","User-Agent":"STAYLOUD-Music-Radar/3.0 (stayloud-radar.online)"}},timeout)}catch(e){err=e;if(i<tries-1)await sleep(1500*2**i)}}throw err;
 }
 const ARTIST_ALIASES={
   "landmarks":"LANDMVRKS",
@@ -698,9 +702,23 @@ export async function discoverArtistPhoto(name){
  return out;
 }
 
+// Band profiles (name, albums, Wikipedia text) change rarely: keep them 7 days
+// in memory and in D1, answer from the copy at once and refresh it in the
+// background after a day. A failed refresh never hides a profile we have.
+const PROFILE_FRESH=24*60*60*1000,PROFILE_MAX=7*24*60*60*1000;const profileMem=new Map(),profileJobs=new Map();
+async function cachedProfile(key){let hit=profileMem.get(key);if(!hit){try{const r=(await d1GetBandCache([key])).get(key);if(r?.events_json){hit={data:JSON.parse(r.events_json),at:Date.parse(r.events_at)||0};profileMem.set(key,hit)}}catch{}}return hit||null}
+function withArtist(p,artist){return {...p,id:artist.id,description:String(artist.description||'').trim()||p.description||''}}
 export async function fetchArtistProfile(artist){
+ const key=artist.mbid?`prof:${artist.mbid}`:`prof:name:${String(artist.name||'').toLowerCase().trim()}`;
+ const hit=await cachedProfile(key);
+ const refresh=()=>{if(profileJobs.has(key))return profileJobs.get(key);const job=fetchArtistProfileLive(artist).then(p=>{const k=p.mbid?`prof:${p.mbid}`:key;const v={data:p,at:Date.now()};profileMem.set(k,v);profileMem.set(key,v);d1PutBandEvents(k,p).catch(()=>{});return p}).finally(()=>profileJobs.delete(key));profileJobs.set(key,job);return job};
+ if(hit&&Date.now()-hit.at<PROFILE_MAX){if(Date.now()-hit.at>PROFILE_FRESH)refresh().catch(()=>{});return withArtist(hit.data,artist)}
+ try{return withArtist(await refresh(),artist)}catch(e){if(hit)return withArtist(hit.data,artist);throw e}
+}
+async function fetchArtistProfileLive(artist){
  let mbid=artist.mbid,canonical=artist.name;
  if(!mbid){const r=await resolve(artist.name);mbid=r.mbid;canonical=r.name;updateArtist(artist.id,{name:canonical,mbid})}
+ const wikiJob=wikipediaProfile(canonical).catch(()=>({}));
  const profile=await mb(`${BASE}/artist/${mbid}?inc=tags+url-rels&fmt=json`);
  const releases=await mb(`${BASE}/release-group?artist=${mbid}&fmt=json&limit=100`);
  const today=new Date().toISOString().slice(0,10);
@@ -709,7 +727,8 @@ export async function fetchArtistProfile(artist){
   .filter(x=>String(x['first-release-date']||'').trim())
   .filter(x=>String(x['first-release-date']).slice(0,10)<=today)
   .sort((a,b)=>String(b['first-release-date']).localeCompare(String(a['first-release-date'])));
- const wiki=await wikipediaProfile(canonical);
+ // Wikipedia only adds the description/photo: never wait for it more than 10 s.
+ const wiki=await Promise.race([wikiJob,sleep(10000).then(()=>({}))]);
  const official=Array.isArray(profile.relations)?profile.relations.find(r=>String(r.type||'').toLowerCase()==='official homepage' && r.url?.resource):null;
  return {
   id:artist.id,
