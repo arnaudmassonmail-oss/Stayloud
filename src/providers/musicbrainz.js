@@ -660,6 +660,31 @@ async function enrichImageDates(rows){
  return results.concat(rows.slice(45));
 }
 
+// Real photos of the band from sources that identify the artist itself,
+// best first: Bandsintown (official artist image), Deezer (artist picture),
+// TheAudioDB (several photos per band, checked to be a rock/metal act) and
+// the band's Wikipedia page. Fast (a few API calls in parallel) and reliable.
+const reliablePhotoCache=new Map();
+async function reliableBandPhotos(name,mbid=''){
+ const wanted=String(name||'').trim();if(!wanted)return [];
+ const key=`${normArtistName(wanted)}|${mbid}`;const hit=reliablePhotoCache.get(key);if(hit&&Date.now()-hit.at<6*3600e3)return hit.rows;
+ const same=n=>normArtistName(n)===normArtistName(wanted);
+ const J=u=>fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYLOUD/7.18'}},8000);
+ const [bit,dz,adb,wiki]=await Promise.all([
+  bandsintownIdentity(wanted).catch(()=>null),
+  J(`https://api.deezer.com/search/artist?q=${encodeURIComponent(wanted)}&limit=10`).catch(()=>null),
+  J(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(wanted)}`).catch(()=>null),
+  mbid?cachedProfile(`prof2:${mbid}`).then(h=>h?.data?.photoUrl?h.data:null).catch(()=>null):Promise.resolve(null)
+ ]);
+ const rows=[];const add=(url,thumb,source,title)=>{const u=String(url||'').trim();if(!/^https?:\/\//.test(u)||/placeholder|default|blank|no[-_]?image/i.test(u))return;if(rows.some(r=>r.url===u))return;rows.push({url:u,thumbUrl:String(thumb||u),title:title||wanted,sourceTitle:source,credit:source,date:'',_reliable:true})};
+ if(bit&&same(bit.name)&&bit.imageUrl)add(bit.imageUrl,bit.imageUrl,'Bandsintown',bit.name);
+ const dzA=(dz?.data||[]).filter(a=>same(a.name)).sort((a,b)=>(b.nb_fan||0)-(a.nb_fan||0))[0];
+ if(dzA&&!/\/artist\/\/|\/images\/artist\/\//.test(String(dzA.picture_xl||'')))add(dzA.picture_xl||dzA.picture_big,dzA.picture_big||dzA.picture_xl,'Deezer',dzA.name);
+ const adbA=(adb?.artists||[]).find(x=>same(x.strArtist)&&/metal|core|rock|punk|grunge|djent|grind|doom|sludge|stoner/i.test(`${x.strGenre||''} ${x.strStyle||''}`));
+ if(adbA)for(const f of ['strArtistThumb','strArtistFanart','strArtistFanart2','strArtistFanart3','strArtistFanart4','strArtistWideThumb'])if(adbA[f])add(adbA[f],adbA[f]+'/preview','TheAudioDB',adbA.strArtist);
+ if(wiki?.photoUrl)add(wiki.photoUrl,wiki.photoUrl,'Wikipédia',wanted);
+ reliablePhotoCache.set(key,{at:Date.now(),rows});return rows;
+}
 export async function discoverArtistPhotos(name,limit=5,context='',options={}){
  const wanted=String(name||'').trim();
  const ctx=String(context||'').trim();
@@ -669,6 +694,9 @@ export async function discoverArtistPhotos(name,limit=5,context='',options={}){
  const excluded=new Set((Array.isArray(options?.exclude)?options.exclude:[]).map(cleanImageUrl).filter(Boolean));
  const cacheKey=`${wanted}|${ctx}|${String(options?.bandsintownUrl||'')}|${page}`.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  if(!force&&page===0&&excluded.size===0&&discoverPhotoCache.has(cacheKey))return discoverPhotoCache.get(cacheKey);
+ // Reliable sources first; the wide image search only completes the list.
+ let reliable=[];try{reliable=(await reliableBandPhotos(wanted,String(options?.mbid||''))).filter(x=>!excluded.has(cleanImageUrl(x.url)))}catch{}
+ if(reliable.length>=max)return reliable.slice(0,max);
  const nowYear=new Date().getFullYear();
  const identity=ctx;
  const cleanCtx=identity.replace(/\s+/g,' ').trim();
@@ -728,7 +756,7 @@ export async function discoverArtistPhotos(name,limit=5,context='',options={}){
    if(Boolean(b._bandsintownProfile)!==Boolean(a._bandsintownProfile))return Boolean(b._bandsintownProfile)?1:-1;
    return b.score-a.score;
   });
- const out=[];const seen=new Set(excluded);
+ const out=[...reliable];const seen=new Set([...excluded,...reliable.map(x=>cleanImageUrl(x.url))]);
  for(const x of rows){const keys=[cleanImageUrl(x.url),cleanImageUrl(x.thumbUrl)].filter(Boolean);if(!keys.length||keys.some(k=>seen.has(k)))continue;keys.forEach(k=>seen.add(k));out.push({...x,credit:x.sourceTitle||'Recherche d’images'});if(out.length>=max)break}
  if(page===0&&excluded.size===0)discoverPhotoCache.set(cacheKey,out);
  return out;

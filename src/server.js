@@ -171,7 +171,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.52",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.53",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -190,7 +190,7 @@ app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
 }catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/photo",async(req,res)=>{try{const name=String(req.query.name||"").trim();if(!name)return res.status(400).json({error:"name requis"});res.json(await discoverArtistPhoto(name))}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/artists/candidates",async(req,res)=>{try{const name=String(req.query.name||"").trim();if(!name)return res.status(400).json({error:"name requis"});res.json({input:name,items:await searchArtistCandidates(name,8)})}catch(e){res.status(502).json({error:e.message})}});
-app.get("/api/artists/photo-candidates",async(req,res)=>{try{const name=String(req.query.name||"").trim(),context=String(req.query.context||"").trim(),force=String(req.query.force||"")==="1",page=Math.max(0,Number(req.query.page||0)||0);let exclude=[];try{exclude=JSON.parse(String(req.query.exclude||"[]"));if(!Array.isArray(exclude))exclude=[]}catch{};if(!name)return res.status(400).json({error:"name requis"});const bandsintownUrl=String(req.query.bandsintownUrl||'').trim();res.json({items:await discoverArtistPhotos(name,5,context,{force,page,exclude,bandsintownUrl})})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/artists/photo-candidates",async(req,res)=>{try{const name=String(req.query.name||"").trim(),context=String(req.query.context||"").trim(),force=String(req.query.force||"")==="1",page=Math.max(0,Number(req.query.page||0)||0);let exclude=[];try{exclude=JSON.parse(String(req.query.exclude||"[]"));if(!Array.isArray(exclude))exclude=[]}catch{};if(!name)return res.status(400).json({error:"name requis"});const bandsintownUrl=String(req.query.bandsintownUrl||'').trim();res.json({items:await discoverArtistPhotos(name,5,context,{force,page,exclude,bandsintownUrl,mbid:String(req.query.mbid||'').trim()})})}catch(e){res.status(502).json({error:e.message})}});
 const deezerPreviewCache=new Map();
 function normMusic(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
 app.get("/api/music/album-tracks",async(req,res)=>{

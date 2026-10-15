@@ -1120,7 +1120,7 @@ async function loadPhotoEditorChoices(force=false,reset=false){
  addModalOpen('Changer la photo',`Choisis une nouvelle photo pour ${a.name}. Photos récentes : live, studio, promotionnelles ou pochettes pertinentes.`,'<div class="add-modal-loading">Recherche des photos les plus récentes…</div>','<button type="button" class="mini" onclick="closeAddModal()">Annuler</button>');
  try{
   const context=[a.country,a.style,a.identity_source,a.identity_key].filter(Boolean).join(' · '); const biUrl=a.bandsintown_url||'';
-  const qs='?name='+encodeURIComponent(a.name)+'&context='+encodeURIComponent(context)+'&bandsintownUrl='+encodeURIComponent(biUrl)+'&force=1&page='+photoEdit.photoPage+'&exclude='+encodeURIComponent(JSON.stringify(photoEdit.shownPhotoUrls));
+  const qs='?name='+encodeURIComponent(a.name)+'&mbid='+encodeURIComponent(a.mbid||'')+'&context='+encodeURIComponent(context)+'&bandsintownUrl='+encodeURIComponent(biUrl)+'&force=1&page='+photoEdit.photoPage+'&exclude='+encodeURIComponent(JSON.stringify(photoEdit.shownPhotoUrls));
   const d=await api('/api/artists/photo-candidates'+qs); photoEdit.photos=Array.isArray(d?.items)?d.items.slice(0,5):[];
   photoEdit.photos.forEach(x=>{const u=x.url||x.thumbUrl;if(u&&!photoEdit.shownPhotoUrls.includes(u))photoEdit.shownPhotoUrls.push(u);});
   const cards=photoEdit.photos.map((x,i)=>{
