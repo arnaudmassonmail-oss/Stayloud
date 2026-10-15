@@ -130,7 +130,10 @@ export async function ensureD1Schema(){
       )`,
       `CREATE TABLE IF NOT EXISTS geo_cache(key TEXT PRIMARY KEY,value TEXT,updated_at TEXT)`,
       // Concerts a user marked "J'y vais" (going) or "Intéressé" (interested).
-      `CREATE TABLE IF NOT EXISTS user_concerts(user_id INTEGER NOT NULL,ckey TEXT NOT NULL,status TEXT NOT NULL,data TEXT,updated_at TEXT,PRIMARY KEY(user_id,ckey))`
+      `CREATE TABLE IF NOT EXISTS user_concerts(user_id INTEGER NOT NULL,ckey TEXT NOT NULL,status TEXT NOT NULL,data TEXT,updated_at TEXT,PRIMARY KEY(user_id,ckey))`,
+      // Friends: one row per request (requester -> addressee); status
+      // 'pending' until the addressee accepts, then 'accepted'.
+      `CREATE TABLE IF NOT EXISTS friendships(requester_id INTEGER NOT NULL,addressee_id INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT,updated_at TEXT,PRIMARY KEY(requester_id,addressee_id))`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -345,4 +348,51 @@ export async function d1DeleteUserConcert(userId,ckey){
   if(!d1ConfigStatus().configured)return;
   await ensureD1Schema();
   await query("DELETE FROM user_concerts WHERE user_id=? AND ckey=?",[Number(userId),String(ckey)]);
+}
+
+// ---- Friends ----
+export async function d1FindUserByUsername(username){
+  await ensureD1Schema();
+  return publicUser((await query("SELECT id,username,email,created_at FROM users WHERE username=? COLLATE NOCASE LIMIT 1",[String(username||"").trim()])).rows[0]);
+}
+export async function d1ListFriendships(userId){
+  await ensureD1Schema();
+  const id=Number(userId);
+  return (await query(
+    "SELECT f.requester_id,f.addressee_id,f.status,f.created_at,u.id AS other_id,u.username AS other_name FROM friendships f JOIN users u ON u.id=(CASE WHEN f.requester_id=? THEN f.addressee_id ELSE f.requester_id END) WHERE f.requester_id=? OR f.addressee_id=?",
+    [id,id,id]
+  )).rows;
+}
+export async function d1RequestFriend(userId,otherId){
+  await ensureD1Schema();
+  const a=Number(userId),b=Number(otherId),t=now();
+  const back=(await query("SELECT status FROM friendships WHERE requester_id=? AND addressee_id=?",[b,a])).rows[0];
+  // The other person already asked: adding them back accepts the request.
+  if(back){
+    await query("UPDATE friendships SET status='accepted',updated_at=? WHERE requester_id=? AND addressee_id=?",[t,b,a]);
+    return "accepted";
+  }
+  const mine=(await query("SELECT status FROM friendships WHERE requester_id=? AND addressee_id=?",[a,b])).rows[0];
+  if(mine)return mine.status;
+  await query("INSERT INTO friendships(requester_id,addressee_id,status,created_at,updated_at) VALUES(?,?,'pending',?,?)",[a,b,t,t]);
+  return "pending";
+}
+export async function d1AcceptFriend(userId,otherId){
+  await ensureD1Schema();
+  const r=await query("UPDATE friendships SET status='accepted',updated_at=? WHERE requester_id=? AND addressee_id=? AND status='pending'",[now(),Number(otherId),Number(userId)]);
+  return Number(r?.meta?.changes||0)>0;
+}
+export async function d1RemoveFriend(userId,otherId){
+  await ensureD1Schema();
+  const a=Number(userId),b=Number(otherId);
+  await query("DELETE FROM friendships WHERE (requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)",[a,b,b,a]);
+}
+// Concerts marked by the user's accepted friends.
+export async function d1FriendsConcerts(userId){
+  await ensureD1Schema();
+  const id=Number(userId);
+  return (await query(
+    "SELECT c.user_id,u.username,c.ckey,c.status,c.data,c.updated_at FROM user_concerts c JOIN users u ON u.id=c.user_id WHERE c.user_id IN (SELECT addressee_id FROM friendships WHERE requester_id=? AND status='accepted' UNION SELECT requester_id FROM friendships WHERE addressee_id=? AND status='accepted')",
+    [id,id]
+  )).rows;
 }

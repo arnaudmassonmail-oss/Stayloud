@@ -1,6 +1,6 @@
 import express from "express";
 import cron from "node-cron";
-import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert} from "./d1.js";
+import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
@@ -172,7 +172,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.62",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.63",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -285,6 +285,12 @@ function agendaData(x){const o=x&&typeof x==="object"?x:{};const pick=k=>String(
 app.get("/api/agenda",requireAuth,async(req,res)=>{try{const rows=d1Enabled?await d1ListUserConcerts(req.user.id):[...(localAgenda.get(req.user.id)||new Map()).values()];res.json({items:rows.map(r=>({key:r.ckey,status:r.status,data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{},updatedAt:r.updated_at}))})}catch(e){res.status(502).json({error:e.message})}});
 app.put("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.body?.key||"").trim().slice(0,200),status=String(req.body?.status||"");if(!key||!AGENDA_STATUS.has(status))return res.status(400).json({error:"Concert ou statut invalide"});const data=agendaData(req.body?.data);if(d1Enabled)await d1SetUserConcert(req.user.id,key,status,data);else{if(!localAgenda.has(req.user.id))localAgenda.set(req.user.id,new Map());localAgenda.get(req.user.id).set(key,{ckey:key,status,data,updated_at:new Date().toISOString()})}res.json({ok:true,key,status})}catch(e){res.status(502).json({error:e.message})}});
 app.delete("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.query.key||req.body?.key||"").trim();if(!key)return res.status(400).json({error:"Concert manquant"});if(d1Enabled)await d1DeleteUserConcert(req.user.id,key);else localAgenda.get(req.user.id)?.delete(key);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+// ---- Friends: see which concerts friends marked "J'y vais" / "Intéressé" ----
+app.get("/api/friends",requireAuth,async(req,res)=>{try{const me=req.user.id,out={friends:[],incoming:[],outgoing:[]};for(const r of await d1ListFriendships(me)){const u={id:Number(r.other_id),username:r.other_name};if(r.status==="accepted")out.friends.push(u);else if(Number(r.addressee_id)===me)out.incoming.push(u);else out.outgoing.push(u)}const by=(a,b)=>a.username.localeCompare(b.username,"fr",{sensitivity:"base"});out.friends.sort(by);out.incoming.sort(by);out.outgoing.sort(by);res.json(out)}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/friends",requireAuth,async(req,res)=>{try{const name=String(req.body?.username||"").trim();if(!name)return res.status(400).json({error:"Nom d’utilisateur manquant"});const other=await d1FindUserByUsername(name);if(!other)return res.status(404).json({error:`Aucun compte STAYLOUD « ${name.slice(0,40)} »`});if(other.id===req.user.id)return res.status(400).json({error:"C’est ton propre compte 🙂"});const status=await d1RequestFriend(req.user.id,other.id);res.json({ok:true,status,user:{id:other.id,username:other.username}})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/friends/:id/accept",requireAuth,async(req,res)=>{try{const ok=await d1AcceptFriend(req.user.id,Number(req.params.id));if(!ok)return res.status(404).json({error:"Demande introuvable"});res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.delete("/api/friends/:id",requireAuth,async(req,res)=>{try{await d1RemoveFriend(req.user.id,Number(req.params.id));res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/friends/agenda",requireAuth,async(req,res)=>{try{const rows=await d1FriendsConcerts(req.user.id);res.json({items:rows.map(r=>({key:r.ckey,status:r.status,user:{id:Number(r.user_id),username:r.username},data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{}}))})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});res.json(await discoverManualCityConcerts(q));}catch(e){res.status(502).json({error:e.message})}});
