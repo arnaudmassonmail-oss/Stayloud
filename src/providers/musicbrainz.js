@@ -671,7 +671,7 @@ async function reliableBandPhotos(name,mbid=''){
  const same=n=>normArtistName(n)===normArtistName(wanted);
  const J=u=>fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYLOUD/7.18'}},8000);
  const [bit,dz,adb,wiki]=await Promise.all([
-  bandsintownIdentity(wanted).catch(()=>null),
+  Promise.race([bandsintownIdentity(wanted),sleep(6000).then(()=>null)]).catch(()=>null),
   J(`https://api.deezer.com/search/artist?q=${encodeURIComponent(wanted)}&limit=10`).catch(()=>null),
   J(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(wanted)}`).catch(()=>null),
   mbid?cachedProfile(`prof2:${mbid}`).then(h=>h?.data?.photoUrl?h.data:null).catch(()=>null):Promise.resolve(null)
@@ -695,8 +695,15 @@ export async function discoverArtistPhotos(name,limit=5,context='',options={}){
  const cacheKey=`${wanted}|${ctx}|${String(options?.bandsintownUrl||'')}|${page}`.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  if(!force&&page===0&&excluded.size===0&&discoverPhotoCache.has(cacheKey))return discoverPhotoCache.get(cacheKey);
  // Reliable sources first; the wide image search only completes the list.
+ const t0=Date.now();
  let reliable=[];try{reliable=(await reliableBandPhotos(wanted,String(options?.mbid||''))).filter(x=>!excluded.has(cleanImageUrl(x.url)))}catch{}
  if(reliable.length>=max)return reliable.slice(0,max);
+ // The wide image search can be very slow (or blocked) from the server: never
+ // let it hold the photo picker more than 12 s — answer with what we have.
+ const heavy=discoverArtistPhotosWide(wanted,ctx,max,page,excluded,options,reliable,cacheKey,force);
+ return Promise.race([heavy,sleep(Math.max(3000,14000-(Date.now()-t0))).then(()=>reliable.slice(0,max))]);
+}
+async function discoverArtistPhotosWide(wanted,ctx,max,page,excluded,options,reliable,cacheKey,force){
  const nowYear=new Date().getFullYear();
  const identity=ctx;
  const cleanCtx=identity.replace(/\s+/g,' ').trim();
