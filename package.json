@@ -1,6 +1,6 @@
 {
   "name": "music-radar-backend-v2",
-  "version": "7.18.64",
+  "version": "7.18.65",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
+    "compression": "^1.8.1",
     "express": "^4.21.2",
     "fast-xml-parser": "^5.2.5",
     "node-cron": "^4.2.1"

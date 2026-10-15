@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import cron from "node-cron";
 import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts} from "./d1.js";
 import path from "node:path";
@@ -10,8 +11,8 @@ import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichA
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts} from "./providers/discovery.js";
 
-const app=express();app.use(express.json({limit:"10mb"}));
-const dir=path.dirname(fileURLToPath(import.meta.url));app.use(express.static(path.join(dir,"../public"),{etag:false,lastModified:false,setHeaders:(res,filePath)=>{if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store");}}));
+const app=express();app.use(compression());app.use(express.json({limit:"10mb"}));
+const dir=path.dirname(fileURLToPath(import.meta.url));app.use(express.static(path.join(dir,"../public"),{etag:false,lastModified:false,setHeaders:(res,filePath)=>{if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store");else if(/\.(png|jpe?g|webp|svg|ico)$/i.test(filePath))res.setHeader("Cache-Control","public, max-age=604800");}}));
 
 // Explicit root route: allows a normal browser reload/F5 on the production URL.
 app.get("/",(req,res)=>res.sendFile(path.join(dir,"../public/index.html")));
@@ -103,9 +104,27 @@ async function bootstrapD1(){
   for(const a of localArtistsForUser(u.id)) await d1UpsertGroup(u.id,a);
  }
 }
+// Each API call used to cost two Cloudflare D1 round trips (session lookup
+// + full group restore). Sessions are cached in memory for a few minutes and
+// a user's groups are restored from D1 once per server process (writes keep
+// the local copy and D1 in sync afterwards).
+const SESSION_CACHE_MS=5*60e3,sessionCache=new Map(),restoredUsers=new Map();
+async function sessionUser(token){
+ if(!token||!d1Enabled)return null;
+ const hit=sessionCache.get(token);
+ if(hit&&Date.now()-hit.at<SESSION_CACHE_MS)return hit.user;
+ const user=await d1GetSession(token);
+ if(user){sessionCache.set(token,{user,at:Date.now()});if(sessionCache.size>2000)sessionCache.delete(sessionCache.keys().next().value)}else sessionCache.delete(token);
+ return user;
+}
+function ensureUserRestored(userId){
+ const uid=Number(userId);let p=restoredUsers.get(uid);
+ if(!p){p=restoreUserGroups(uid).catch(e=>{restoredUsers.delete(uid);throw e});restoredUsers.set(uid,p)}
+ return p;
+}
 // Signed-in user when there is one (public endpoints that personalise results).
-async function optionalUser(req){try{const user=d1Enabled?await d1GetSession(parseCookies(req).stayloud_session):null;if(user){upsertLocalUserMirror(user);await restoreUserGroups(user.id)}return user||null}catch{return null}}
-async function requireAuth(req,res,next){try{const user=d1Enabled?await d1GetSession(parseCookies(req).stayloud_session):null;if(!user)return res.status(401).json({error:'Connexion requise'});upsertLocalUserMirror(user);await restoreUserGroups(user.id);req.user=user;next()}catch(e){console.error('Auth:',e?.message||e);res.status(503).json({error:'Service de comptes indisponible'})}}
+async function optionalUser(req){try{const user=await sessionUser(parseCookies(req).stayloud_session);if(user){upsertLocalUserMirror(user);await ensureUserRestored(user.id)}return user||null}catch{return null}}
+async function requireAuth(req,res,next){try{const user=await sessionUser(parseCookies(req).stayloud_session);if(!user)return res.status(401).json({error:'Connexion requise'});upsertLocalUserMirror(user);await ensureUserRestored(user.id);warmUserArtists(user.id);req.user=user;next()}catch(e){console.error('Auth:',e?.message||e);res.status(503).json({error:'Service de comptes indisponible'})}}
 function ownedArtist(req,id){return getArtist(Number(id),req.user.id)}
 app.post('/api/auth/register',async(req,res)=>{
  try{
@@ -124,20 +143,20 @@ app.post('/api/auth/login',async(req,res)=>{
   if(!d1Enabled)return res.status(503).json({error:'D1 n’est pas configuré sur le serveur'});
   const user=await d1AuthenticateUser(req.body?.username,req.body?.password);
   if(!user)return res.status(401).json({error:'Nom d’utilisateur ou mot de passe incorrect'});
-  upsertLocalUserMirror(user); await restoreUserGroups(user.id);
+  upsertLocalUserMirror(user); restoredUsers.delete(Number(user.id)); await ensureUserRestored(user.id);
   const session=await d1CreateSession(user.id); setSessionCookie(res,session.token); res.json({user});
  }catch(e){res.status(503).json({error:e.message||'Connexion impossible'})}
 });
 app.post('/api/auth/logout',async(req,res)=>{
- try{if(d1Enabled)await d1DeleteSession(parseCookies(req).stayloud_session);}catch(e){console.error('Logout:',e?.message||e)}
+ try{sessionCache.delete(parseCookies(req).stayloud_session);if(d1Enabled)await d1DeleteSession(parseCookies(req).stayloud_session);}catch(e){console.error('Logout:',e?.message||e)}
  clearSessionCookie(res); res.status(204).end();
 });
 app.get('/api/auth/me',async(req,res)=>{
  try{
   if(!d1Enabled)return res.status(401).json({error:'Non connecté'});
-  const user=await d1GetSession(parseCookies(req).stayloud_session);
+  const user=await sessionUser(parseCookies(req).stayloud_session);
   if(!user)return res.status(401).json({error:'Non connecté'});
-  upsertLocalUserMirror(user); await restoreUserGroups(user.id); res.json({user});
+  upsertLocalUserMirror(user); await ensureUserRestored(user.id); res.json({user});
  }catch(e){res.status(503).json({error:'Service de comptes indisponible'})}
 });
 app.patch('/api/auth/email',requireAuth,async(req,res)=>{
@@ -172,7 +191,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.64",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.65",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
