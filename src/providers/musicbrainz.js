@@ -312,18 +312,19 @@ async function linkedWikipedia(relations){
 }
 async function audioDbBio(name){
  try{const d=await fetchJson(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(name)}`,{headers:{Accept:'application/json'}},8000);
-  const a=(d?.artists||[]).find(x=>String(x.strArtist||'').toLowerCase().trim()===String(name).toLowerCase().trim());
+  // Same name is not enough (homonyms): the entry must be a rock/metal act.
+  const a=(d?.artists||[]).find(x=>String(x.strArtist||'').toLowerCase().trim()===String(name).toLowerCase().trim()&&/metal|core|rock|punk|djent|grind|doom|sludge/i.test(`${x.strGenre||''} ${x.strStyle||''}`));
   const text=String(a?.strBiographyFR||a?.strBiographyEN||'').trim();
   return text?{description:text.length>1800?text.slice(0,1800).replace(/\s+\S*$/,'')+'…':text,photoUrl:String(a?.strArtistThumb||'')}:null}catch{return null}
 }
 const STYLE_FR={metalcore:'metalcore',deathcore:'deathcore','post-hardcore':'post-hardcore',hardcore:'hardcore','death metal':'death metal','black metal':'black metal','thrash metal':'thrash metal','nu metal':'nu metal','progressive metal':'métal progressif','alternative metal':'métal alternatif','heavy metal':'heavy metal','doom metal':'doom metal','groove metal':'groove metal','djent':'djent','sludge metal':'sludge','stoner rock':'stoner','hard rock':'hard rock',metal:'métal'};
-const COUNTRY_FR={'United States':'des États-Unis','United Kingdom':'du Royaume-Uni',France:'de France',Germany:"d'Allemagne",Sweden:'de Suède',Norway:'de Norvège',Finland:'de Finlande',Australia:"d'Australie",Canada:'du Canada',Belgium:'de Belgique',Switzerland:'de Suisse',Japan:'du Japon',Italy:"d'Italie",Spain:"d'Espagne",Netherlands:'des Pays-Bas',Poland:'de Pologne',Brazil:'du Brésil',Denmark:'du Danemark',Ireland:"d'Irlande",Austria:"d'Autriche"};
+const COUNTRY_ADJ={'United States':'américain','United Kingdom':'britannique',France:'français',Germany:'allemand',Sweden:'suédois',Norway:'norvégien',Finland:'finlandais',Australia:'australien',Canada:'canadien',Belgium:'belge',Switzerland:'suisse',Japan:'japonais',Italy:'italien',Spain:'espagnol',Netherlands:'néerlandais',Poland:'polonais',Brazil:'brésilien',Denmark:'danois',Ireland:'irlandais',Austria:'autrichien',Portugal:'portugais',Greece:'grec',Russia:'russe',Mexico:'mexicain','New Zealand':'néo-zélandais'};
 function builtDescription(p){
  const tags=(p.tags||[]).slice().sort((a,b)=>(b.count||0)-(a.count||0)).map(t=>String(t.name||'').toLowerCase());
  const styles=[...new Set(tags.map(t=>STYLE_FR[t]).filter(Boolean))].slice(0,2);
- const area=String(p.area?.name||'');const from=COUNTRY_FR[area]||(area?`originaire de ${area}`:'');
+ const area=String(p.area?.name||'');const adj=COUNTRY_ADJ[area]||'';
  const year=String(p['life-span']?.begin||'').slice(0,4);
- let t=`${p.name} est un groupe${styles.length?` de ${styles.join(' / ')}`:''}${from?(from.startsWith('originaire')?` ${from}`:` ${from}`):''}${year?`, formé en ${year}`:''}.`;
+ let t=`${p.name} est un groupe${adj?` ${adj}`:''}${styles.length?` de ${styles.join(' / ')}`:''}${!adj&&area?` originaire de ${area}`:''}${year?`, formé en ${year}`:''}.`;
  if(p._latest)t+=` Dernier album : ${p._latest.title}${p._latest.date?` (${String(p._latest.date).slice(0,4)})`:''}.`;
  if(p._albums>1)t+=` ${p._albums} albums au compteur.`;
  return t;
@@ -345,9 +346,17 @@ async function wikipediaProfile(name){
     const hay=(title+' '+text+' '+cats).normalize('NFKD').replace(/[\u0300-\u036f]/g,'');
     const titleNorm=title.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     // Ne jamais prendre une biographie/personnage ou une homonymie simplement parce que le nom correspond.
-    const exactName=titleNorm===wantedNorm || titleNorm.startsWith(wantedNorm+' ' ) || titleNorm.includes(wantedNorm);
+    // The page must be about the band itself: exact title, or the title plus a
+    // "(groupe…)"/"(band)" qualifier — never an album, song or person page
+    // ("Dali (album)" of Dalida is not the band Dali), and its first lines must
+    // call it a group/band.
+    const qualifier=titleNorm.startsWith(wantedNorm+' (')?titleNorm.slice(wantedNorm.length+2):'';
+    const exactName=titleNorm===wantedNorm||/^(groupe|band|musical group|groupe de musique|metal band|rock band)/.test(qualifier);
+    const notBand=/\((album|chanson|single|song|ep|film|roman|livre|personnage|chanteuse|chanteur|singer|musicien|musician|peintre|painter)\b/i.test(title);
+    const lead=text.slice(0,320).normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const callsItBand=/\b(groupe|band|formation)\b/.test(lead)&&!/\b(album|chanson|single|song)\s+(de|by|du|of)\b/.test(lead.slice(0,160));
     const isMusic=musicSignals.test(hay)||/musique|metal|rock|hardcore|discograph|album|single|groupe/.test(cats);
-    if(exactName && isMusic && text) return {title,description:text,photoUrl:String(page.thumbnail?.source||'')};
+    if(exactName && !notBand && callsItBand && isMusic && text) return {title,description:text,photoUrl:String(page.thumbnail?.source||'')};
    }
   }catch{}
  }
@@ -743,9 +752,9 @@ const PROFILE_FRESH=24*60*60*1000,PROFILE_MAX=7*24*60*60*1000;const profileMem=n
 async function cachedProfile(key){let hit=profileMem.get(key);if(!hit){try{const r=(await d1GetBandCache([key])).get(key);if(r?.events_json){hit={data:JSON.parse(r.events_json),at:Date.parse(r.events_at)||0};profileMem.set(key,hit)}}catch{}}return hit||null}
 function withArtist(p,artist){return {...p,id:artist.id,description:String(artist.description||'').trim()||p.description||''}}
 export async function fetchArtistProfile(artist){
- const key=artist.mbid?`prof:${artist.mbid}`:`prof:name:${String(artist.name||'').toLowerCase().trim()}`;
+ const key=artist.mbid?`prof2:${artist.mbid}`:`prof2:name:${String(artist.name||'').toLowerCase().trim()}`;
  const hit=await cachedProfile(key);
- const refresh=()=>{if(profileJobs.has(key))return profileJobs.get(key);const job=fetchArtistProfileLive(artist).then(p=>{const k=p.mbid?`prof:${p.mbid}`:key;const v={data:p,at:Date.now()};profileMem.set(k,v);profileMem.set(key,v);d1PutBandEvents(k,p).catch(()=>{});return p}).finally(()=>profileJobs.delete(key));profileJobs.set(key,job);return job};
+ const refresh=()=>{if(profileJobs.has(key))return profileJobs.get(key);const job=fetchArtistProfileLive(artist).then(p=>{const k=p.mbid?`prof2:${p.mbid}`:key;const v={data:p,at:Date.now()};profileMem.set(k,v);profileMem.set(key,v);d1PutBandEvents(k,p).catch(()=>{});return p}).finally(()=>profileJobs.delete(key));profileJobs.set(key,job);return job};
  if(hit&&Date.now()-hit.at<PROFILE_MAX){if(Date.now()-hit.at>PROFILE_FRESH||!hit.data?.description||hit.data?.descriptionSource==='auto'&&Date.now()-hit.at>6*60*60*1000)refresh().catch(()=>{});return withArtist(hit.data,artist)}
  try{return withArtist(await refresh(),artist)}catch(e){if(hit)return withArtist(hit.data,artist);throw e}
 }
