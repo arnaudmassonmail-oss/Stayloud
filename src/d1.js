@@ -128,7 +128,9 @@ export async function ensureD1Schema(){
         events_json TEXT,
         events_at TEXT
       )`,
-      `CREATE TABLE IF NOT EXISTS geo_cache(key TEXT PRIMARY KEY,value TEXT,updated_at TEXT)`
+      `CREATE TABLE IF NOT EXISTS geo_cache(key TEXT PRIMARY KEY,value TEXT,updated_at TEXT)`,
+      // Concerts a user marked "J'y vais" (going) or "Intéressé" (interested).
+      `CREATE TABLE IF NOT EXISTS user_concerts(user_id INTEGER NOT NULL,ckey TEXT NOT NULL,status TEXT NOT NULL,data TEXT,updated_at TEXT,PRIMARY KEY(user_id,ckey))`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -324,4 +326,20 @@ export async function d1MigrateLocalUser(user){
     [Number(user.id),user.username,normalizeEmail(user.email),user.password_hash,user.password_salt,user.created_at||t,user.updated_at||t]
   );
   return publicUser((await query("SELECT id,username,email,created_at FROM users WHERE id=?",[Number(user.id)])).rows[0]);
+}
+
+export async function d1ListUserConcerts(userId){
+  if(!d1ConfigStatus().configured)return [];
+  await ensureD1Schema();
+  return (await query("SELECT ckey,status,data,updated_at FROM user_concerts WHERE user_id=?",[Number(userId)])).rows;
+}
+export async function d1SetUserConcert(userId,ckey,status,data){
+  if(!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query("INSERT INTO user_concerts(user_id,ckey,status,data,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,ckey) DO UPDATE SET status=excluded.status,data=excluded.data,updated_at=excluded.updated_at",[Number(userId),String(ckey),String(status),JSON.stringify(data||{}),now()]);
+}
+export async function d1DeleteUserConcert(userId,ckey){
+  if(!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query("DELETE FROM user_concerts WHERE user_id=? AND ckey=?",[Number(userId),String(ckey)]);
 }
