@@ -664,7 +664,7 @@ function renderNameSuggest(){const el=$('nameSuggest'),q=String($('name').value|
  el.innerHTML=(rows.length?'<div class="sl-suggest-head">Vos groupes</div>'+rows.map(a=>`<button type="button" class="sl-suggest-item" data-id="${a.id}"><span class="sl-suggest-img" ${photoStyle(imgForArtist(a))}></span><span class="sl-suggest-txt"><strong>${esc(a.name)}</strong><small>${esc(styleOf(a))}</small></span><span class="sl-suggest-go">›</span></button>`).join(''):`<div class="sl-suggest-empty">Aucun de vos groupes ne correspond à « ${esc(q)} ».</div>`)
   +`<button type="button" class="sl-suggest-item sl-suggest-search"><span class="sl-suggest-plus">+</span><span class="sl-suggest-txt"><strong>Rechercher « ${esc(q)} »</strong><small>pour l’ajouter à vos groupes</small></span></button>`;
  el.hidden=false;
- el.querySelectorAll('.sl-suggest-item').forEach(b=>b.addEventListener('mousedown',e=>{e.preventDefault();const id=+b.dataset.id;hideNameSuggest();if(id){$('name').value='';openArtistProfile(id)}else add()}));
+ el.querySelectorAll('.sl-suggest-item').forEach(b=>b.addEventListener('mousedown',e=>{e.preventDefault();const id=+b.dataset.id;try{$('name').blur()}catch{}hideNameSuggest();if(id){$('name').value='';openArtistProfile(id)}else add()}));
 }
 
 // ---- Group picker (v7.18.20): STAYLOUD-styled sheet with search, replaces
@@ -1262,6 +1262,7 @@ function showAutomaticBandsintownPhoto(x){
 async function selectArtistCandidate(x){showAutomaticBandsintownPhoto(x)}
 async function startAddWizard(){
  const input=$('name').value.trim(); if(!input)return;
+ try{$('name').blur();document.activeElement?.blur?.()}catch{}
  const btn=$('add');btn.disabled=true;btn.textContent='RECHERCHE…';addWizard={rawName:input,candidate:null,photos:[],selectedPhoto:null,photoPage:0,shownPhotoUrls:[]};
  try{
   const d=await api('/api/artists/candidates?name='+encodeURIComponent(input));
