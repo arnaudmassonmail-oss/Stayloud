@@ -246,12 +246,15 @@ export async function d1UpsertGroup(userId,artist){
     if(sameName.length===1) existing=sameName[0];
   }
   const values=[uid,key,String(artist.name||""),String(artist.normalized_name||""),artist.mbid||null,artist.style||null,artist.disambiguation||null,artist.country||null,artist.photo_url||null,artist.bandsintown_url||null,artist.infoconcert_url||null,artist.identity_source||null,artist.identity_key||null,artist.identity_locked?1:0,artist.description||null,artist.created_at||t,t];
+  // UPDATE takes name…description + updated_at (never created_at): passing
+  // created_at too made D1 reject the query ("Too many parameter values").
+  const upd=[...values.slice(2,15),t];
   if(existing){
     if(existing.sync_key!==key){
       await query("DELETE FROM groups WHERE user_id=? AND sync_key=? AND id<>?",[uid,key,existing.id]);
-      await query(`UPDATE groups SET sync_key=?,name=?,normalized_name=?,mbid=?,style=?,disambiguation=?,country=?,photo_url=?,bandsintown_url=?,infoconcert_url=?,identity_source=?,identity_key=?,identity_locked=?,description=?,updated_at=? WHERE id=?`,[key,...values.slice(2),existing.id]);
+      await query(`UPDATE groups SET sync_key=?,name=?,normalized_name=?,mbid=?,style=?,disambiguation=?,country=?,photo_url=?,bandsintown_url=?,infoconcert_url=?,identity_source=?,identity_key=?,identity_locked=?,description=?,updated_at=? WHERE id=?`,[key,...upd,existing.id]);
     }else{
-      await query(`UPDATE groups SET name=?,normalized_name=?,mbid=?,style=?,disambiguation=?,country=?,photo_url=?,bandsintown_url=?,infoconcert_url=?,identity_source=?,identity_key=?,identity_locked=?,description=?,updated_at=? WHERE id=?`,[...values.slice(2),existing.id]);
+      await query(`UPDATE groups SET name=?,normalized_name=?,mbid=?,style=?,disambiguation=?,country=?,photo_url=?,bandsintown_url=?,infoconcert_url=?,identity_source=?,identity_key=?,identity_locked=?,description=?,updated_at=? WHERE id=?`,[...upd,existing.id]);
     }
     return;
   }
