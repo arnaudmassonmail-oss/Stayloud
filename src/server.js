@@ -62,9 +62,10 @@ function warmUserArtists(userId){
  enrichingByUser.set(uid,(enrichingByUser.get(uid)||0)+1);
  let warmDone=false;const endWarming=()=>{if(warmDone)return;warmDone=true;warmingByUser.set(uid,Math.max(0,(warmingByUser.get(uid)||1)-1))};
  let pending=[],staleNews=ids,staleEvents=ids;
- warmChain=warmChain
-  // 0) restore the saved 6 months of news + upcoming concerts from D1: instant display.
-  .then(async()=>{
+ // 0) restore the saved 6 months of news + upcoming concerts from D1 right
+ // away: instant display. This must not wait in the shared refresh queue
+ // behind other accounts' (slow, network-bound) refreshes.
+ const restored=(async()=>{
    const arts=ids.map(id=>getArtist(id)).filter(Boolean);let cache=new Map();
    try{cache=await d1GetBandCache(arts.map(bandKey))}catch(e){logWarm(e)}
    staleNews=[];staleEvents=[];const t=Date.now();
@@ -75,7 +76,9 @@ function warmUserArtists(userId){
     if(!c?.events_at||t-Date.parse(c.events_at)>EVENTS_CACHE_TTL)staleEvents.push(a.id);
    }
    if(arts.length&&arts.every(a=>cache.get(bandKey(a))?.news_json))endWarming();
-  })
+ })().catch(e=>logWarm(e));
+ warmChain=warmChain
+  .then(()=>restored)
   // 1) new articles of stale groups 2) photos of the 10 newest new articles
   .then(async()=>{for(const id of staleNews){try{pending.push(...(await refreshArtistNews(id,{enrich:false})).pending.map(row=>({artistId:id,row})))}catch(e){logWarm(e)}}
    pending.sort((a,b)=>String(b.row.published_at||'').localeCompare(String(a.row.published_at||'')));
@@ -168,7 +171,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.41",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.42",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -296,4 +299,4 @@ try{
   }
 }catch(e){console.error("D1 bootstrap error:",e?.message||e)}
 app.listen(port,()=>{console.log(`Music Radar V2: http://localhost:${port}`);setTimeout(()=>refreshAll().catch(e=>console.error(e)),500)});
-cron.schedule(process.env.REFRESH_CRON||"*/30 * * * *",()=>refreshAll().catch(e=>console.error(e)));
+cron.schedule(process.env.REFRESH_CRON||"7 */2 * * *",()=>refreshAll().catch(e=>console.error(e)));
