@@ -180,9 +180,12 @@ export async function d1UpdateUserEmail(userId,email){
   return publicUser((await query("SELECT id,username,email,created_at FROM users WHERE id=?",[Number(userId)])).rows[0]);
 }
 
+// Login lasts 24 h, then name + password are asked again.
+const SESSION_MS=1000*60*60*24;
+
 export async function d1CreateSession(userId){
   await ensureD1Schema();
-  const token=crypto.randomBytes(32).toString("base64url"),t=now(),expires=new Date(Date.now()+1000*60*60*24*30).toISOString();
+  const token=crypto.randomBytes(32).toString("base64url"),t=now(),expires=new Date(Date.now()+SESSION_MS).toISOString();
   await query("INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)",[hashToken(token),Number(userId),t,expires]);
   return {token,expiresAt:expires};
 }
@@ -191,13 +194,13 @@ export async function d1GetSession(token){
   if(!token)return null;
   await ensureD1Schema();
   const h=hashToken(token), rows=(await query(
-    "SELECT u.id,u.username,u.email,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
-    [h,now()]
+    "SELECT u.id,u.username,u.email,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND s.created_at>?",
+    [h,now(),new Date(Date.now()-SESSION_MS).toISOString()]
   )).rows;
   const u=rows[0];
   if(!u)return null;
-  const expires=new Date(Date.now()+1000*60*60*24*30).toISOString();
-  await query("UPDATE sessions SET expires_at=? WHERE token_hash=?",[expires,h]);
+  // Sessions are fixed 24 h from login (no rolling extension): the user
+  // signs in again once a day.
   return publicUser(u);
 }
 

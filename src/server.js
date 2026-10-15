@@ -16,7 +16,7 @@ const dir=path.dirname(fileURLToPath(import.meta.url));app.use(express.static(pa
 // Explicit root route: allows a normal browser reload/F5 on the production URL.
 app.get("/",(req,res)=>res.sendFile(path.join(dir,"../public/index.html")));
 function parseCookies(req){const out={};for(const part of String(req.headers.cookie||'').split(';')){const i=part.indexOf('=');if(i>0)out[part.slice(0,i).trim()]=decodeURIComponent(part.slice(i+1).trim())}return out}
-function setSessionCookie(res,token){res.setHeader('Set-Cookie',`stayloud_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${process.env.NODE_ENV==='production'?'; Secure':''}`)}
+function setSessionCookie(res,token){res.setHeader('Set-Cookie',`stayloud_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${process.env.NODE_ENV==='production'?'; Secure':''}`)}
 function clearSessionCookie(res){res.setHeader('Set-Cookie','stayloud_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0')}
 async function restoreUserGroups(userId){
  if(!d1Enabled)return;
@@ -172,7 +172,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.61",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.62",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});

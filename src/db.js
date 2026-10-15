@@ -197,18 +197,17 @@ export function upsertLocalUserMirror(user,credentials={}){
 export function localUsers(){return db.prepare("SELECT id,username,email,password_hash,password_salt,created_at,updated_at FROM users ORDER BY id").all()}
 export function localArtistsForUser(userId){return db.prepare("SELECT * FROM artists WHERE user_id=? ORDER BY id").all(Number(userId))}
 
+// Login lasts 24 h (fixed, not rolling), then the user signs in again.
+const SESSION_MS=1000*60*60*24;
 export function createSession(userId){
- const token=crypto.randomBytes(32).toString("base64url"),t=now(),expires=new Date(Date.now()+1000*60*60*24*30).toISOString();
+ const token=crypto.randomBytes(32).toString("base64url"),t=now(),expires=new Date(Date.now()+SESSION_MS).toISOString();
  db.prepare("INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)").run(hashToken(token),userId,t,expires);
  return {token,expiresAt:expires};
 }
 export function getSession(token){
  if(!token)return null;
- const row=db.prepare("SELECT s.user_id,u.id,u.username,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?").get(hashToken(token),now());
+ const row=db.prepare("SELECT s.user_id,u.id,u.username,u.created_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND s.created_at>?").get(hashToken(token),now(),new Date(Date.now()-SESSION_MS).toISOString());
  if(!row)return null;
- // Refresh the 30-day rolling session so reopening STAYLOUD does not
- // unexpectedly log a user out while the account is still active.
- db.prepare("UPDATE sessions SET expires_at=? WHERE token_hash=?").run(new Date(Date.now()+1000*60*60*24*30).toISOString(),hashToken(token));
  return publicUser(row.id);
 }
 export function deleteSession(token){if(token)db.prepare("DELETE FROM sessions WHERE token_hash=?").run(hashToken(token))}
