@@ -1,5 +1,6 @@
 import express from "express";
 import cron from "node-cron";
+import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
@@ -171,7 +172,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.55",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.56",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -276,6 +277,14 @@ app.get("/api/artists/:id/concert-sources",requireAuth,async(req,res)=>{try{cons
 app.get("/api/artists/:id/bandsintown-id",requireAuth,(req,res)=>{const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});res.json({id:bandsintownArtistId(a)})});
 app.get("/api/radar",requireAuth,(req,res)=>res.json({warming:isWarming(req.user.id),enriching:isEnriching(req.user.id),items:newsList({artistId:req.query.artistId?Number(req.query.artistId):undefined,userId:req.user.id,limit:Math.min(Number(req.query.limit||500),1000)})}));
 app.get("/api/live",requireAuth,(req,res)=>res.json({warming:isWarming(req.user.id),items:eventList({artistId:req.query.artistId?Number(req.query.artistId):undefined,userId:req.user.id,country:String(req.query.country||"").trim()||undefined,limit:Math.min(Number(req.query.limit||500),1000)})}));
+// "Mon agenda": concerts marked "J'y vais" / "Intéressé" by the user (D1, all devices).
+// Without D1 (local runs) they are kept in memory.
+const localAgenda=new Map();
+const AGENDA_STATUS=new Set(["going","interested"]);
+function agendaData(x){const o=x&&typeof x==="object"?x:{};const pick=k=>String(o[k]??"").slice(0,300);return {title:pick("title"),artist:pick("artist"),date:pick("date").slice(0,25),time:pick("time"),venue:pick("venue"),city:pick("city"),country:pick("country"),url:pick("url"),provider:pick("provider")}}
+app.get("/api/agenda",requireAuth,async(req,res)=>{try{const rows=d1Enabled?await d1ListUserConcerts(req.user.id):[...(localAgenda.get(req.user.id)||new Map()).values()];res.json({items:rows.map(r=>({key:r.ckey,status:r.status,data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{},updatedAt:r.updated_at}))})}catch(e){res.status(502).json({error:e.message})}});
+app.put("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.body?.key||"").trim().slice(0,200),status=String(req.body?.status||"");if(!key||!AGENDA_STATUS.has(status))return res.status(400).json({error:"Concert ou statut invalide"});const data=agendaData(req.body?.data);if(d1Enabled)await d1SetUserConcert(req.user.id,key,status,data);else{if(!localAgenda.has(req.user.id))localAgenda.set(req.user.id,new Map());localAgenda.get(req.user.id).set(key,{ckey:key,status,data,updated_at:new Date().toISOString()})}res.json({ok:true,key,status})}catch(e){res.status(502).json({error:e.message})}});
+app.delete("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.query.key||req.body?.key||"").trim();if(!key)return res.status(400).json({error:"Concert manquant"});if(d1Enabled)await d1DeleteUserConcert(req.user.id,key);else localAgenda.get(req.user.id)?.delete(key);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});res.json(await discoverManualCityConcerts(q));}catch(e){res.status(502).json({error:e.message})}});
