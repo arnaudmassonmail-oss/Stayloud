@@ -252,7 +252,7 @@ const DISCOVER_FALLBACK={
   'Post-Hardcore':[['Holding Absence','Post-Hardcore'],['Static Dress','Post-Hardcore'],['Thornhill','Post-Hardcore']],
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
-export {discoverManualCityConcerts,splitBandsFromGenres};
+export {discoverManualCityConcerts,splitBandsFromGenres,dedupeAcrossSources,parseSongkickMetalText};
 // Concerts of the user's own bands (from "Mes groupes") that fall inside the
 // searched radius are added to the city / near-me lists. When the same show is
 // already listed (same date and venue), the band is added to its title instead
@@ -780,7 +780,8 @@ function parseSongkickDate(text){
   return `${m[3]}-${String(month).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
 }
 function songkickRow(metro,date,title,venue,city){
-  title=String(title||'').replace(/\s+/g,' ').trim(); venue=String(venue||'').replace(/\s+/g,' ').trim(); city=String(city||'').replace(/\s+/g,' ').trim()||metro.name.split(' / ')[0];
+  const unlink=v=>String(v||'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1');
+  title=unlink(title).replace(/\s+/g,' ').trim(); venue=unlink(venue).replace(/\s+/g,' ').trim(); city=String(city||'').replace(/\s+/g,' ').trim()||metro.name.split(' / ')[0];
   if(!date||!title||!venue)return null;
   return {id:`songkick-${metro.slug}-${date}-${norm(title)}-${norm(city)}`.slice(0,190),title,date,venue,city,country:'France',url:`https://www.songkick.com/fr/metro-areas/${metro.slug}/genre/metal`,provider:'Songkick Metal',metalDetected:true,isFestival:/festival|fest\b/i.test(title),details:'Source: Songkick, agenda Metal'};
 }
@@ -805,9 +806,16 @@ function parseSongkickMetalHtml(html,metro){
 function parseSongkickMetalText(text,metro){
   const src=String(text||''); const rows=[]; const seen=new Set();
   const lines=src.split(/\r?\n/).map(x=>stripHtml(x).replace(/\s+/g,' ').trim()).filter(Boolean);
-  const add=(date,title,venue,city)=>{const row=songkickRow(metro,date,title,venue,city);if(!row)return;const key=`${date}|${norm(title)}|${norm(venue)}|${norm(city)}`;if(seen.has(key))return;seen.add(key);rows.push(row)};
-  // Current Songkick server-rendered page layout is: title / venue, city, France / date.
-  for(let i=0;i<lines.length;i++){
+  const add=(date,title,venue,city)=>{const row=songkickRow(metro,date,title,venue,city);if(!row)return;const key=`${row.date}|${norm(row.title)}|${norm(row.venue)}|${norm(row.city)}`;if(seen.has(key))return;seen.add(key);rows.push(row)};
+  // Layout detection: date headings first (date, then its shows) or each show
+  // followed by its date. Reading one layout with the other's rule shifts
+  // every show onto a neighbouring date.
+  const rawLines=src.split(/\r?\n/);
+  const firstDateIdx=lines.findIndex(l=>parseSongkickDate(l));
+  const firstEventIdx=rawLines.findIndex(l=>/^[-*]?\s*\[[^\]]+\]\([^)]+\/concerts\//i.test(l));
+  const dateFirst=firstDateIdx>=0&&firstEventIdx>=0&&firstDateIdx<firstEventIdx;
+  // Layout "title / venue, city, France / date".
+  if(!dateFirst)for(let i=0;i<lines.length;i++){
     const date=parseSongkickDate(lines[i]); if(!date)continue;
     let venue='',city='',title='';
     for(let j=i-1;j>=Math.max(0,i-3);j--){
@@ -819,12 +827,17 @@ function parseSongkickMetalText(text,metro){
     }
     if(title&&venue&&city)add(date,title,venue,city);
   }
-  // Markdown link layout fallback.
+  // Markdown link layout fallback. Songkick groups shows under date headings:
+  // when the page starts with a date, an event belongs to the LAST date above
+  // it (taking the next one shifted shows by a few days, e.g. 31 Jan → 2 Feb).
+  let lastDate=null;
   for(let i=0;i<lines.length;i++){
-    const tm=String(src.split(/\r?\n/)[i]||'').match(/^[-*]?\s*\[([^\]]+)\]\(([^)]+\/concerts\/[^)]*)\)/i);if(!tm)continue;
-    const title=tm[1].trim();let date=null,venue='',city='';
+    const hd=parseSongkickDate(lines[i]);if(hd)lastDate=hd;
+    const tm=String(rawLines[i]||'').match(/^[-*]?\s*\[([^\]]+)\]\(([^)]+\/concerts\/[^)]*)\)/i);if(!tm)continue;
+    const title=tm[1].trim();let date=dateFirst?lastDate:null,venue='',city='';
     for(let j=i+1;j<Math.min(lines.length,i+8);j++){
-      const d=parseSongkickDate(lines[j]);if(d)date=d;
+      const d=dateFirst?null:parseSongkickDate(lines[j]);if(d)date=d;
+      if(dateFirst&&parseSongkickDate(lines[j]))break;
       const vm=lines[j].match(/^[-*]?\s*(?:\[([^\]]+)\]\([^)]*\/venues\/[^)]*\)|([^,]+))\s*,\s*([^,]+)\s*,\s*France$/i);
       if(vm){venue=(vm[1]||vm[2]||'').trim();city=(vm[3]||'').trim();}
       if(date&&venue&&city)break;
@@ -893,7 +906,29 @@ async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     for(const x of await curatedConcertFallback(lat,lon,r))if(!have.has(k(x))){have.add(k(x));concerts.push(x)}
     concerts.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
   }
+  const merged=dedupeAcrossSources(concerts);concerts.length=0;concerts.push(...merged);
   return {concerts,festivals:(res.festivals||[]).filter(keep),sources:res.sources||null};
+}
+// The same show often comes from two sources with a slightly different venue
+// name ("Zenith Nantes Métropole" / "Zénith de Nantes Métropole") and, for
+// Songkick, sometimes a shifted date. Same band + same venue within 10 days
+// from DIFFERENT sources = one concert: keep the most reliable source.
+const VENUE_STOP=new Set('le la les l de du des d salle grande petite maxi club the a au aux et metropole'.split(' '));
+function venueTokens(v){return new Set(norm(v).replace(/[^a-z0-9]+/g,' ').split(' ').filter(w=>w&&!VENUE_STOP.has(w)))}
+function sameVenue(a,b){const A=venueTokens(a),B=venueTokens(b);if(!A.size||!B.size)return false;let n=0;for(const w of A)if(B.has(w))n++;return n/Math.min(A.size,B.size)>=0.8}
+function headliner(t){return norm(String(t||'').split(/\s\+\s|,|\s\/\s|\s-\s/)[0]).replace(/[^a-z0-9]+/g,' ').trim()}
+function sourceRank(x){const p=String(x?.provider||'').toLowerCase();return /concerts-metal/.test(p)?3:/bandsintown/.test(p)?3:/songkick/.test(p)?1:2}
+function sourceFamily(x){const p=String(x?.provider||'').toLowerCase();return /songkick/.test(p)?'sk':/bandsintown/.test(p)?'bi':/concerts-metal/.test(p)?'cm':p}
+function dedupeAcrossSources(rows){
+  const out=[];
+  for(const x of rows){
+    const h=headliner(x.title),t=Date.parse(String(x.date).slice(0,10));
+    const i=out.findIndex(y=>sourceFamily(y)!==sourceFamily(x)&&headliner(y.title)===h&&h&&Math.abs(Date.parse(String(y.date).slice(0,10))-t)<=10*864e5&&sameVenue(y.venue,x.venue));
+    if(i<0){out.push(x);continue}
+    const y=out[i];const keep=sourceRank(x)>sourceRank(y)?x:y;const other=keep===x?y:x;
+    out[i]={...keep,title:String(keep.title||'').length>=String(other.title||'').length?keep.title:other.title};
+  }
+  return out;
 }
 function discoverConcertsMetalScan(lat,lon,radiusKm,targetCityOverride=''){
   const key=[Number(lat).toFixed(3),Number(lon).toFixed(3),radiusKm,norm(targetCityOverride)].join('|');
