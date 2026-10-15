@@ -469,7 +469,10 @@ async function loadRealPhotos(){
 
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function cleanDiscoverText(value){let v=String(value??'');v=v.replace(/!\[\s*Image[^\]]*\]\([^)]*\)/gi,' ');v=v.replace(/\[\s*Image[^\]]*\]\([^)]*\)/gi,' ');v=v.replace(/\[([^\]]+)\]\(([^)]*)\)/g,'$1');v=v.replace(/\((?:https?:\/\/|www\.)[^)]*\)/gi,' ');v=v.replace(/https?:\/\/\S+/gi,' ');v=v.replace(/!\s*(?=\])/g,' ');v=v.replace(/[\[\]]/g,' ');v=v.replace(/\(([^)]*)\)/g,' ');v=v.replace(/\*+/g,' ').replace(/(^|\s)_+|_+(?=\s|$)/g,'$1');return v.replace(/\s{2,}/g,' ').trim();}
-async function api(u,o){const r=await fetch(u,o);if(r.status===401){showAuthGate();throw Error('Connexion requise')}if(!r.ok){let msg='Erreur serveur';try{const d=await r.json();msg=d?.error||msg}catch{try{msg=await r.text()}catch{}}throw Error(msg)}return r.status===204?null:r.json()}
+// After a server restart the groups can get new numbers: when an action on a
+// group answers 404, reload the list so the next action uses the right ones.
+let artistsReloading=null;function reloadArtistsSoon(){if(artistsReloading)return;artistsReloading=fetch('/api/artists').then(r=>r.ok?r.json():null).then(d=>{if(Array.isArray(d?.artists)){A=d.artists;render()}}).catch(()=>{}).finally(()=>{artistsReloading=null})}
+async function api(u,o){const r=await fetch(u,o);if(r.status===401){showAuthGate();throw Error('Connexion requise')}if(r.status===404&&/\/api\/artists\/\d+/.test(String(u)))reloadArtistsSoon();if(!r.ok){let msg='Erreur serveur';try{const d=await r.json();msg=d?.error||msg}catch{try{msg=await r.text()}catch{}}throw Error(msg)}return r.status===204?null:r.json()}
 // Status line: only shown for real messages (loading, errors, confirmations).
 // The signed-in user and the logout button live in #userBar above the add form.
 const IDLE_STATUS=/^(Données agrégées|Connecté\b|Prêt\b)/;
@@ -556,7 +559,26 @@ function styleOf(a){let s=String(a.style||'').trim();if(/^hard rock$/i.test(s))s
 // Style of a band: a button opening the same choice sheet as the other menus
 // (a native <select> inside a tappable card did not open on iPhone).
 function styleBtnHTML(a){const cur=knownStyle(a.style)?styleOf(a):'À classer';return `<button type="button" class="sl-style-btn" onclick="event.stopPropagation();openStyleSheet(${a.id})" aria-label="Changer le style de ${esc(a.name)}">${esc(cur)}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>`}
-function openStyleSheet(id){const a=A.find(x=>x.id===id);if(!a)return;const cur=knownStyle(a.style)?styleOf(a):'__unclassify__';openChoiceSheet({title:'Classer '+a.name,items:[{value:'__unclassify__',label:'À classer',icon:'?'},...styles.map(s=>({value:s[0],label:s[0],icon:STYLE_ICON}))],current:cur,onPick:v=>setStyle(id,v)})}
+function openStyleSheet(id){const a=A.find(x=>x.id===id);if(!a)return;const cur=knownStyle(a.style)?styleOf(a):'__unclassify__';openChoiceSheet({title:'Classer '+a.name,items:[{value:'__unclassify__',label:'À classer',icon:'?'},...styles.map(s=>({value:s[0],label:s[0],icon:STYLE_ICON}))],current:cur,onPick:v=>openStyleConfirm(id,v)})}
+// Confirmation step with a "Valider" button, then a clear success/error message.
+function openStyleConfirm(id,value){const a=A.find(x=>x.id===id);if(!a)return;closeChoiceSheet();
+ const label=value==='__unclassify__'?'À classer':value;const m=document.createElement('div');m.id='choiceSheet';m.className='sl-sheet-backdrop';
+ m.innerHTML=`<div class="sl-sheet sl-confirm" role="dialog" aria-modal="true" aria-label="Confirmer le style"><div class="sl-sheet-head"><span class="sl-sheet-title">Classer ${esc(a.name)}</span><button type="button" class="sl-sheet-close" aria-label="Fermer">✕</button></div><p class="sl-confirm-txt">Ranger <b>${esc(a.name)}</b> dans <b>${esc(label)}</b> ?</p><p class="sl-confirm-err" hidden></p><div class="sl-confirm-actions"><button type="button" class="sl-confirm-cancel">Annuler</button><button type="button" class="sl-confirm-ok">Valider</button></div></div>`;
+ document.body.appendChild(m);document.body.classList.add('sl-sheet-open');
+ m.querySelector('.sl-sheet-close').onclick=closeChoiceSheet;m.querySelector('.sl-confirm-cancel').onclick=closeChoiceSheet;m.addEventListener('click',e=>{if(e.target===m)closeChoiceSheet()});
+ const ok=m.querySelector('.sl-confirm-ok'),err=m.querySelector('.sl-confirm-err');
+ ok.onclick=async()=>{ok.disabled=true;ok.textContent='Enregistrement…';err.hidden=true;
+  try{await saveStyle(id,value);closeChoiceSheet();slToast(`${a.name} classé dans ${label}`)}
+  catch(e){ok.disabled=false;ok.textContent='Réessayer';err.hidden=false;err.textContent='Impossible d’enregistrer : '+(e.message||e)}}}
+async function saveStyle(id,value){
+ const style=value==='__unclassify__'?null:String(value||'').trim()||null;const a=A.find(x=>x.id===id);
+ const patch=i=>api('/api/artists/'+i,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({style})});
+ let r;try{r=await patch(id)}catch(e){
+  // The server may have restarted and renumbered the groups: reload them and retry by name.
+  if(!/introuvable/i.test(String(e.message||''))||!a)throw e;
+  const d=await api('/api/artists');A=Array.isArray(d?.artists)?d.artists:A;const b=A.find(x=>normUi(x.name)===normUi(a.name));if(!b)throw e;r=await patch(b.id);id=b.id}
+ const saved=r?.artist;const t=A.find(x=>x.id===id);if(t){t.style=saved?saved.style:style}render()}
+function slToast(msg){let t=$('slToast');if(!t){t=document.createElement('div');t.id='slToast';t.className='sl-toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2600)}
 function styleOptions(selected){const current=knownStyle(selected)?String(selected):'__unclassify__';return '<option value="__unclassify__" '+(current==='__unclassify__'?'selected':'')+'>À classer</option>'+styles.map(s=>`<option value="${esc(s[0])}" ${current===s[0]?'selected':''}>${esc(s[0])}</option>`).join('')}
 async function setStyle(id,value){const style=value==='__unclassify__'?null:String(value||'').trim()||null;try{await api('/api/artists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({style})});const a=A.find(x=>x.id===id);if(a)a.style=style;render();}catch(e){status('Erreur de classement : '+e.message)}}
 function renderStyles(){
@@ -1362,6 +1384,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
 .tr-final{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,rgba(229,9,20,.35),#050607 65%)}
 .tr-horns{font-size:64px;animation:trHorns 1.4s ease-in-out infinite}.tr-final-txt{font:900 30px 'Barlow Condensed',Arial;letter-spacing:.2em;color:#fff;margin-top:6px}
 .tr-dots{display:flex;justify-content:center;gap:6px;margin:14px 0 10px}.tr-dots i{width:7px;height:7px;border-radius:50%;background:#2c343d}.tr-dots i.on{background:#ff2733;width:20px;border-radius:7px}
+.sl-confirm{padding-bottom:calc(18px + env(safe-area-inset-bottom))}.sl-confirm-txt{margin:14px 4px 6px;font:500 15px/1.45 Inter,Arial,sans-serif;color:#dfe3e7}.sl-confirm-err{margin:6px 4px;color:#ff6b6b;font:500 13px Inter,Arial,sans-serif}.sl-confirm-actions{display:flex;gap:10px;margin-top:14px}.sl-confirm-actions button{flex:1;border-radius:999px;padding:12px 14px;font:700 14px Inter,Arial,sans-serif;cursor:pointer;touch-action:manipulation}.sl-confirm-cancel{border:1px solid #2c343d;background:#0d1116;color:#e8ebee}.sl-confirm-ok{border:0;background:linear-gradient(180deg,#ff2733,#b90009);color:#fff}.sl-confirm-ok:disabled{opacity:.6}.sl-toast{position:fixed;left:50%;bottom:calc(140px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(10px);z-index:100600;background:#14191f;border:1px solid #2f8f4e;color:#e8ebee;padding:10px 16px;border-radius:999px;font:600 13px Inter,Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:90vw;text-align:center}.sl-toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .sl-style-btn{display:inline-flex;align-items:center;gap:6px;margin-top:6px;border:1px solid #2c343d;background:#0d1116;color:#e8ebee;border-radius:999px;padding:6px 10px 6px 12px;font:600 12px Inter,Arial,sans-serif;cursor:pointer;touch-action:manipulation}.sl-style-btn svg{width:14px;height:14px;opacity:.7}
 .tr-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:66px}.tr-close{display:block;visibility:hidden;margin:10px auto 0;border:0;background:transparent;color:#9aa3ad;font:600 13px Inter,Arial,sans-serif;padding:8px 16px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .tr-prev{border:1px solid #2c343d;background:#0d1116;color:#e8ebee;border-radius:999px;padding:10px 14px;font:600 13px Inter,Arial,sans-serif;cursor:pointer}
