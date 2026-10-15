@@ -798,7 +798,7 @@ function inferStyle(tags){
  const rules=[
   ["Deathcore",/deathcore/],["Metalcore",/metalcore/],["Post-Hardcore",/post-hardcore/],["Hardcore",/hardcore/],
   ["Nu Metal",/nu metal|nu-metal/],["Death Metal",/death metal/],["Black Metal",/black metal/],["Thrash Metal",/thrash metal/],
-  ["Progressif",/progressive metal|progressive rock/],["Alternative",/alternative metal|alternative rock/],["Metal",/metal/],["Hard Rock",/hard rock/],["Rock",/rock/]
+  ["Progressif",/progressive metal|progressive rock/],["Alternative",/alternative metal/],["Metal",/metal/],["Grunge",/grunge/],["Punk",/punk/],["Alternative",/alternative rock/],["Rock",/rock/]
  ];
  return rules.find(([,re])=>re.test(t))?.[0]||null;
 }

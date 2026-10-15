@@ -29,7 +29,7 @@ async function mb(url){
   throw err;
 }
 
-const STYLE_TAGS={"Metalcore":["metalcore"],"Deathcore":["deathcore"],"Hardcore":["hardcore"],"Nu Metal":["nu metal","nu-metal"],"Death Metal":["death metal","death-metal"],"Black Metal":["black metal","black-metal"],"Thrash Metal":["thrash metal","thrash-metal"],"Alternative":["alternative metal","alternative-metal","alternative rock"],"Post-Hardcore":["post-hardcore"],"Progressif":["progressive metal","progressive rock"],"Hard Rock":["hard rock"],"Metal":["metal"]};
+const STYLE_TAGS={"Metalcore":["metalcore"],"Deathcore":["deathcore"],"Hardcore":["hardcore"],"Nu Metal":["nu metal","nu-metal"],"Death Metal":["death metal","death-metal"],"Black Metal":["black metal","black-metal"],"Thrash Metal":["thrash metal","thrash-metal"],"Alternative":["alternative metal","alternative-metal","alternative rock"],"Post-Hardcore":["post-hardcore"],"Progressif":["progressive metal","progressive rock"],"Punk":["punk","punk rock","pop punk","skate punk","street punk"],"Grunge":["grunge","post-grunge"],"Rock":["rock","hard rock","alternative rock","stoner rock","rock and roll"],"Hard Rock":["hard rock"],"Metal":["metal"]};
 const FESTIVAL_METAL_TAGS=["metal","metalcore","deathcore","hardcore","death metal","black metal","thrash metal","nu metal","progressive metal","alternative metal","post-hardcore","hard rock","doom","stoner","djent","grind","heavy metal","crossover","industrial metal","groove metal","technical death metal","punk hardcore"];
 const BROAD_METAL_TERMS=[...FESTIVAL_METAL_TAGS,"punk","post-metal","mathcore","metallic hardcore","electronicore","folk metal","power metal","speed metal","sludge","gothic metal","symphonic metal","avant-garde metal"];
 
@@ -98,7 +98,7 @@ function syncNearbyEventsToFollowedArtists(items){
   return linked;
 }
 function cleanArtist(a){return {id:a.id,name:a.name,sortname:a.sortname||a.name,score:a.score||0,disambiguation:a.disambiguation||'',style:inferStyle((a.tags||[]).map(t=>String(t.name||'').toLowerCase())),mbid:a.id,source:'MusicBrainz'}}
-function inferStyle(tags){const t=tags.join(' ');const rules=[['Deathcore',/deathcore/],['Metalcore',/metalcore/],['Post-Hardcore',/post-hardcore/],['Hardcore',/hardcore/],['Nu Metal',/nu metal|nu-metal/],['Death Metal',/death metal/],['Black Metal',/black metal/],['Thrash Metal',/thrash metal/],['Progressif',/progressive metal|progressive rock/],['Alternative',/alternative metal|alternative rock/],['Hard Rock',/hard rock/],['Metal',/metal/]];return rules.find(([,re])=>re.test(t))?.[0]||null}
+function inferStyle(tags){const t=tags.join(' ');const rules=[['Deathcore',/deathcore/],['Metalcore',/metalcore/],['Post-Hardcore',/post-hardcore/],['Hardcore',/hardcore/],['Nu Metal',/nu metal|nu-metal/],['Death Metal',/death metal/],['Black Metal',/black metal/],['Thrash Metal',/thrash metal/],['Progressif',/progressive metal|progressive rock/],['Alternative',/alternative metal/],['Metal',/metal/],['Grunge',/grunge/],['Punk',/punk/],['Alternative',/alternative rock/],['Rock',/rock/]];return rules.find(([,re])=>re.test(t))?.[0]||null}
 
 export async function reverseCity(lat,lon){
   for(const zoom of [14,12,10]){try{const u=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=${zoom}&addressdetails=1`;const d=await fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0'}},12000);const a=d?.address||{};const locality=a.village||a.hamlet||a.suburb||a.locality||'';const city=a.city||a.town||a.municipality||a.city_district||locality||'';const county=a.county||'';const state=a.state||'';const country=a.country||'';if(city||country)return {city,locality,municipality:a.municipality||'',county,state,country,lat:Number(lat),lon:Number(lon),display_name:String(d?.display_name||'')}}catch{}}
@@ -246,6 +246,9 @@ const DISCOVER_FALLBACK={
   'Thrash Metal':[['Warbringer','Thrash Metal'],['Municipal Waste','Thrash Metal'],['Evile','Thrash Metal']],
   Alternative:[['Loathe','Alternative'],['Spiritbox','Alternative'],['Sleep Token','Alternative']],
   France:[['Landmvrks','Metalcore'],['Rise Of The Northstar','Hardcore'],['Alcest','Black Metal'],['Hypno5e','Progressif'],['Klone','Progressif'],['Novelists','Metalcore'],['Betraying The Martyrs','Deathcore'],['Ultra Vomit','Metal'],['Mass Hysteria','Metal'],['Dagoba','Metal'],['Benighted','Death Metal'],['Svart Crown','Black Metal'],['Regarde Les Hommes Tomber','Black Metal'],['Igorrr','Metal'],['Loudblast','Death Metal'],['Tagada Jones','Hardcore'],['Smash Hit Combo','Nu Metal'],['Gojira','Death Metal']],
+  Punk:[['The Offspring','Punk'],['Bad Religion','Punk'],['Rancid','Punk'],['NOFX','Punk'],['Pennywise','Punk'],['Bérurier Noir','Punk'],['Les Sheriff','Punk'],['Ramones','Punk']],
+  Grunge:[['Nirvana','Grunge'],['Soundgarden','Grunge'],['Alice In Chains','Grunge'],['Pearl Jam','Grunge'],['Mudhoney','Grunge'],['Screaming Trees','Grunge']],
+  Rock:[['Foo Fighters','Rock'],['Queens Of The Stone Age','Rock'],['AC/DC','Rock'],['Royal Blood','Rock'],['Black Stone Cherry','Rock'],['Shaka Ponk','Rock'],['Highly Suspect','Rock']],
   'Post-Hardcore':[['Holding Absence','Post-Hardcore'],['Static Dress','Post-Hardcore'],['Thornhill','Post-Hardcore']],
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
@@ -300,6 +303,8 @@ export async function discoverArtists(style='all',limit=18,page=0){
       for(const raw of list){
         const main=mainTags(raw);
         const broad=style==='all'||style==='Metal'||french;if(!main.some(t=>tags.includes(t)||(broad&&/\bmetal\b/.test(t))))continue;
+        // Rock is the wide family: only bands whose first tag is rock (Nirvana stays in Grunge).
+        if(style==='Rock'&&!tags.includes(main[0]))continue;
         const a=cleanArtist(raw);a.style=(style==='all'||french)?(inferStyle(main)||'Metal'):style;if(!a.style)continue;
         const k=norm(a.name);if(c.seen.has(k))continue;c.seen.add(k);c.rows.push(a);
       }
