@@ -171,7 +171,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.50",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.51",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -268,7 +268,7 @@ app.post("/api/artists",requireAuth,async(req,res)=>{
   setTimeout(()=>{refreshArtist(a.id).catch(e=>console.error(`Background refresh failed for artist ${a.id}:`,e?.message||e))},0);
  }catch(e){res.status(502).json({error:e.message})}
 });
-app.patch("/api/artists/:id",requireAuth,async(req,res)=>{const id=Number(req.params.id),a=ownedArtist(req,id);if(!a)return res.status(404).json({error:"introuvable"});const style=req.body?.style===null?null:String(req.body?.style??"").trim()||null;const photoUrl=req.body?.photoUrl===null?null:String(req.body?.photoUrl??"").trim()||null;const description=req.body?.description===null?null:String(req.body?.description??"").trim()||null;const saved=updateArtist(id,{style,photoUrl,description});if(d1Enabled)await d1UpsertGroup(req.user.id,saved);res.json({artist:saved})});
+app.patch("/api/artists/:id",requireAuth,async(req,res)=>{const id=Number(req.params.id),a=ownedArtist(req,id);if(!a)return res.status(404).json({error:"introuvable"});const style=req.body?.style===null?null:String(req.body?.style??"").trim()||null;const photoUrl=req.body?.photoUrl===null?null:String(req.body?.photoUrl??"").trim()||null;const description=req.body?.description===null?null:String(req.body?.description??"").trim()||null;const saved=updateArtist(id,{style,photoUrl,description});if(d1Enabled){try{await d1UpsertGroup(req.user.id,saved)}catch(e){console.error("D1 group update:",e?.message||e)}}res.json({artist:saved})});
 app.delete("/api/artists/:id",requireAuth,async(req,res)=>{const id=Number(req.params.id),a=ownedArtist(req,id);if(!a)return res.status(404).json({error:"introuvable"});deleteArtist(id);if(d1Enabled)await d1DeleteGroup(req.user.id,a);res.status(204).end()});
 app.post("/api/artists/:id/refresh",requireAuth,async(req,res)=>{try{if(!ownedArtist(req,req.params.id))return res.status(404).json({error:"introuvable"});res.json(await refreshArtist(Number(req.params.id)))}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/artists/:id/bandsintown-widget",requireAuth,(req,res)=>{try{const id=Number(req.params.id);const a=ownedArtist(req,id);if(!a)return res.status(404).json({error:"introuvable"});const rows=Array.isArray(req.body?.rows)?req.body.rows:[];const safe=rows.map(x=>({...x,provider:"Bandsintown"}));res.json({ok:true,count:mergeArtistEvents(id,safe)})}catch(e){res.status(400).json({error:e.message})}});
@@ -286,6 +286,10 @@ app.get("/api/discover/festivals",async(req,res)=>{let lat=Number(req.query.lat)
 app.get("/api/discover/concerts",async(req,res)=>{let lat=Number(req.query.lat),lon=Number(req.query.lon),radius=Number(req.query.radius||75);const targetCity=String(req.query.targetCity||req.query.city||"").trim();const place={city:targetCity,locality:String(req.query.locality||"").trim(),municipality:String(req.query.municipality||"").trim(),county:String(req.query.county||"").trim(),state:String(req.query.state||"").trim(),country:String(req.query.country||"").trim(),manualTarget:Boolean(targetCity),targetLat:Number(req.query.targetLat),targetLon:Number(req.query.targetLon),resolvedCityVerified:String(req.query.resolvedCityVerified||"")==='1'};try{if(targetCity){const g=await geocodeQuery(targetCity);if(!g)throw new Error(`Ville introuvable : ${targetCity}`);lat=g.lat;lon=g.lon;place.city=g.city||targetCity;place.lat=g.lat;place.lon=g.lon;place.country=g.country||"France"}else if(!Number.isFinite(lat)||!Number.isFinite(lon))return res.status(400).json({error:"lat/lon requis"});const r=Math.min(Math.max(radius,5),100);const out=await discoverNearbyConcerts(lat,lon,r,place.city||place.country?place:null);try{const user=await optionalUser(req);if(user){const followed=eventList({userId:user.id});const base=Number.isFinite(Number(out?.place?.lat))?out.place:{lat,lon};out.items=await mergeFollowedConcerts(out.items,followed,Number(base.lat),Number(base.lon),r)}}catch(e){console.error('Followed concerts merge:',e?.message||e)}res.json(out)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/live/sources",(_,res)=>res.json({sources:[{name:"Bandsintown",type:"artist-calendar",free:true,configured:true},{name:"InfoConcert",type:"artist-calendar",free:true,configured:true},{name:"LineupDiscovery",type:"event-lineup-discovery",free:true,configured:true}]}));
 
+// An error in a background job or an async route must never bring the whole
+// server down (a restart empties the local cache of news and concerts).
+process.on('unhandledRejection',e=>console.error('Unhandled rejection:',e?.message||e));
+process.on('uncaughtException',e=>console.error('Uncaught exception:',e?.message||e));
 const port=Number(process.env.PORT||8787);
 const d1Status=d1ConfigStatus();
 console.log(`D1 configuration: account=${d1Status.accountId}(${d1Status.accountIdLength}) database=${d1Status.databaseId}(${d1Status.databaseIdLength}) token=${d1Status.apiToken}(${d1Status.apiTokenLength})`);
