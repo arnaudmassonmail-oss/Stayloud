@@ -294,6 +294,40 @@ function findCountryArea(area){
 }
 
 
+// Description sources, best first: the Wikipedia page MusicBrainz links to
+// (via Wikidata, exact page, no name guessing), Wikipedia search by name,
+// TheAudioDB biography, then a short text built from the MusicBrainz data.
+async function wikipediaSummary(lang,title){
+ const d=await fetchJson(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g,'_'))}`,{headers:{Accept:'application/json'}},8000);
+ const text=String(d?.extract||'').trim();return text?{title:d.title||title,description:text,photoUrl:String(d?.originalimage?.source||d?.thumbnail?.source||'')}:null;
+}
+async function linkedWikipedia(relations){
+ const rels=Array.isArray(relations)?relations:[];
+ const wp=rels.map(r=>String(r?.url?.resource||'')).filter(u=>/wikipedia\.org\/wiki\//.test(u));
+ for(const lang of ['fr','en']){const u=wp.find(x=>x.includes(`//${lang}.wikipedia.org`));if(u){try{const r=await wikipediaSummary(lang,decodeURIComponent(u.split('/wiki/')[1]));if(r)return r}catch{}}}
+ const wd=rels.map(r=>String(r?.url?.resource||'')).find(u=>/wikidata\.org\/wiki\/Q\d+/.test(u));
+ if(wd){try{const q=wd.match(/Q\d+/)[0];const d=await fetchJson(`https://www.wikidata.org/wiki/Special:EntityData/${q}.json`,{headers:{Accept:'application/json'}},8000);const links=d?.entities?.[q]?.sitelinks||{};
+  for(const lang of ['fr','en']){const t=links[`${lang}wiki`]?.title;if(t){try{const r=await wikipediaSummary(lang,t);if(r)return r}catch{}}}}catch{}}
+ return null;
+}
+async function audioDbBio(name){
+ try{const d=await fetchJson(`https://www.theaudiodb.com/api/v1/json/2/search.php?s=${encodeURIComponent(name)}`,{headers:{Accept:'application/json'}},8000);
+  const a=(d?.artists||[]).find(x=>String(x.strArtist||'').toLowerCase().trim()===String(name).toLowerCase().trim());
+  const text=String(a?.strBiographyFR||a?.strBiographyEN||'').trim();
+  return text?{description:text.length>1800?text.slice(0,1800).replace(/\s+\S*$/,'')+'…':text,photoUrl:String(a?.strArtistThumb||'')}:null}catch{return null}
+}
+const STYLE_FR={metalcore:'metalcore',deathcore:'deathcore','post-hardcore':'post-hardcore',hardcore:'hardcore','death metal':'death metal','black metal':'black metal','thrash metal':'thrash metal','nu metal':'nu metal','progressive metal':'métal progressif','alternative metal':'métal alternatif','heavy metal':'heavy metal','doom metal':'doom metal','groove metal':'groove metal','djent':'djent','sludge metal':'sludge','stoner rock':'stoner','hard rock':'hard rock',metal:'métal'};
+const COUNTRY_FR={'United States':'des États-Unis','United Kingdom':'du Royaume-Uni',France:'de France',Germany:"d'Allemagne",Sweden:'de Suède',Norway:'de Norvège',Finland:'de Finlande',Australia:"d'Australie",Canada:'du Canada',Belgium:'de Belgique',Switzerland:'de Suisse',Japan:'du Japon',Italy:"d'Italie",Spain:"d'Espagne",Netherlands:'des Pays-Bas',Poland:'de Pologne',Brazil:'du Brésil',Denmark:'du Danemark',Ireland:"d'Irlande",Austria:"d'Autriche"};
+function builtDescription(p){
+ const tags=(p.tags||[]).slice().sort((a,b)=>(b.count||0)-(a.count||0)).map(t=>String(t.name||'').toLowerCase());
+ const styles=[...new Set(tags.map(t=>STYLE_FR[t]).filter(Boolean))].slice(0,2);
+ const area=String(p.area?.name||'');const from=COUNTRY_FR[area]||(area?`originaire de ${area}`:'');
+ const year=String(p['life-span']?.begin||'').slice(0,4);
+ let t=`${p.name} est un groupe${styles.length?` de ${styles.join(' / ')}`:''}${from?(from.startsWith('originaire')?` ${from}`:` ${from}`):''}${year?`, formé en ${year}`:''}.`;
+ if(p._latest)t+=` Dernier album : ${p._latest.title}${p._latest.date?` (${String(p._latest.date).slice(0,4)})`:''}.`;
+ if(p._albums>1)t+=` ${p._albums} albums au compteur.`;
+ return t;
+}
 async function wikipediaProfile(name){
  const wanted=String(name||'').trim();
  const wantedNorm=wanted.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
@@ -712,14 +746,14 @@ export async function fetchArtistProfile(artist){
  const key=artist.mbid?`prof:${artist.mbid}`:`prof:name:${String(artist.name||'').toLowerCase().trim()}`;
  const hit=await cachedProfile(key);
  const refresh=()=>{if(profileJobs.has(key))return profileJobs.get(key);const job=fetchArtistProfileLive(artist).then(p=>{const k=p.mbid?`prof:${p.mbid}`:key;const v={data:p,at:Date.now()};profileMem.set(k,v);profileMem.set(key,v);d1PutBandEvents(k,p).catch(()=>{});return p}).finally(()=>profileJobs.delete(key));profileJobs.set(key,job);return job};
- if(hit&&Date.now()-hit.at<PROFILE_MAX){if(Date.now()-hit.at>PROFILE_FRESH)refresh().catch(()=>{});return withArtist(hit.data,artist)}
+ if(hit&&Date.now()-hit.at<PROFILE_MAX){if(Date.now()-hit.at>PROFILE_FRESH||!hit.data?.description||hit.data?.descriptionSource==='auto'&&Date.now()-hit.at>6*60*60*1000)refresh().catch(()=>{});return withArtist(hit.data,artist)}
  try{return withArtist(await refresh(),artist)}catch(e){if(hit)return withArtist(hit.data,artist);throw e}
 }
 async function fetchArtistProfileLive(artist){
  let mbid=artist.mbid,canonical=artist.name;
  if(!mbid){const r=await resolve(artist.name);mbid=r.mbid;canonical=r.name;updateArtist(artist.id,{name:canonical,mbid})}
- const wikiJob=wikipediaProfile(canonical).catch(()=>({}));
  const profile=await mb(`${BASE}/artist/${mbid}?inc=tags+url-rels&fmt=json`);
+ const wikiJob=(async()=>(await linkedWikipedia(profile.relations))||(await wikipediaProfile(canonical))||{})().catch(()=>({}));
  const releases=await mb(`${BASE}/release-group?artist=${mbid}&fmt=json&limit=100`);
  const today=new Date().toISOString().slice(0,10);
  const albumGroups=(releases['release-groups']||[])
@@ -727,8 +761,11 @@ async function fetchArtistProfileLive(artist){
   .filter(x=>String(x['first-release-date']||'').trim())
   .filter(x=>String(x['first-release-date']).slice(0,10)<=today)
   .sort((a,b)=>String(b['first-release-date']).localeCompare(String(a['first-release-date'])));
- // Wikipedia only adds the description/photo: never wait for it more than 10 s.
- const wiki=await Promise.race([wikiJob,sleep(10000).then(()=>({}))]);
+ // Wikipedia only adds the description/photo: never wait for it more than 15 s.
+ let wiki=await Promise.race([wikiJob,sleep(15000).then(()=>({}))]);
+ let descriptionSource=wiki?.description?'Wikipédia':'';
+ if(!wiki?.description){const adb=await audioDbBio(profile.name||canonical);if(adb){wiki={...wiki,description:adb.description,photoUrl:wiki?.photoUrl||adb.photoUrl};descriptionSource='TheAudioDB'}}
+ if(!wiki?.description){wiki={...wiki,description:builtDescription({...profile,name:profile.name||canonical,_latest:albumGroups[0]?{title:albumGroups[0].title,date:albumGroups[0]['first-release-date']}:null,_albums:albumGroups.length})};descriptionSource='auto'}
  const official=Array.isArray(profile.relations)?profile.relations.find(r=>String(r.type||'').toLowerCase()==='official homepage' && r.url?.resource):null;
  return {
   id:artist.id,
@@ -738,6 +775,7 @@ async function fetchArtistProfileLive(artist){
   country:profile.area?.name||'',
   formed:profile['life-span']?.begin||'',
   description:String(artist.description||'').trim()||wiki.description||'',
+  descriptionSource,
   photoUrl:wiki.photoUrl||'',
   photoSource:wiki.title?'Wikipédia':'',
   officialUrl:official?.url?.resource||'',
