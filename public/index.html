@@ -645,7 +645,7 @@ function backToProfileFromNews(){
  if(!r.html){openArtistProfile(r.id);return}
  currentProfileId=r.id;profileReturnSection=r.section;$('profileBackBtn').textContent=r.back;show('artistProfile');
  $('artistProfileContent').innerHTML=r.html;document.querySelectorAll('#artistProfileContent .album-player').forEach(x=>x.innerHTML='');loadProfileShows(r.id)}
-async function openArtistProfile(id){
+async function openArtistProfile(id,retry=0){
  currentProfileId=id;profileReturnSection='styles';$('profileBackBtn').textContent='← Retour à Styles/Groupes';show('artistProfile');
  const a=A.find(x=>x.id===id);$('artistProfileContent').innerHTML='<div class="profile-loading">Chargement du profil de '+esc(a?.name||'ce groupe')+'…</div>';
  try{
@@ -657,7 +657,7 @@ async function openArtistProfile(id){
   const photo=recentPhoto?`<div class="profile-photo" style="background-image:url('${esc(recentPhoto)}')"></div>`:'<div class="profile-photo-empty">Aucune photo de référence disponible</div>';
   $('artistProfileContent').innerHTML=`<div class="artist-profile"><div><div class="profile-hero">${photo}</div></div><div class="profile-body"><h1 class="profile-title">${esc(p.name)}</h1><div class="profile-meta">${esc(meta||'Groupe suivi')}</div><div class="profile-desc">${esc(p.description||'Aucun descriptif disponible pour le moment.')}</div><div class="profile-links">${p.officialUrl?`<a class="profile-link" href="${esc(p.officialUrl)}" target="_blank" rel="noopener">SITE OFFICIEL ↗</a>`:''}<button class="profile-link sl-news-btn" onclick="showGroupNews(${id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18h-5"/><path d="M18 14h-8"/><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9a2 2 0 0 1 2-2h2"/><rect width="8" height="4" x="10" y="6" rx="1"/></svg>ACTUALITÉS DU GROUPE</button></div><div class="profile-shows"><h2 class="profile-section-title">Prochains concerts</h2><div id="profileShows" class="profile-shows-list"><div class="sl-album-empty">Recherche des concerts…</div></div></div>${albumsSectionHTML(latest,previous,p.name)}</div></div>`;
   loadProfileShows(id);
- }catch(e){$('artistProfileContent').innerHTML='<div class="empty">Impossible de charger le profil pour le moment.<br><br><button class="mini" onclick="openArtistProfile('+id+')">Réessayer</button></div>';status('Profil indisponible : '+e.message)}
+ }catch(e){if(retry<1&&currentProfileId===id){$('artistProfileContent').innerHTML='<div class="profile-loading">Les sources musicales sont lentes, nouvel essai…</div>';setTimeout(()=>{if(currentProfileId===id)openArtistProfile(id,retry+1)},2500);return}$('artistProfileContent').innerHTML='<div class="empty">Impossible de charger le profil pour le moment.<br><br><button class="mini" onclick="openArtistProfile('+id+')">Réessayer</button></div>';status('Profil indisponible : '+e.message)}
 }
 function renderDiscoverProfile(p){
  const latest=p.latestAlbum, previous=(p.albums||[]).slice(1);
