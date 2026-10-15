@@ -1277,7 +1277,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
   el.querySelector('.tr-prev').style.visibility=i?'visible':'hidden';
   const next=el.querySelector('.tr-next');next.textContent=sl.last?(signedIn()?'Ajouter mon premier groupe':'Créer mon compte'):'Suivant';
   el.querySelector('.tr-skip').style.visibility=sl.last?'hidden':'visible';
-  el.querySelector('.tr-close').style.display=sl.last?'block':'none';
+  el.querySelector('.tr-close').style.visibility=sl.last?'visible':'hidden';
  }
  const signedIn=()=>typeof authUser!=='undefined'&&!!authUser;
  function close(goAdd){
@@ -1292,6 +1292,8 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
   if(el)return;i=0;el=document.createElement('div');el.className='tr-backdrop';
   el.innerHTML=`<div class="tr-box" role="dialog" aria-modal="true" aria-label="Présentation de STAYLOUD"><button class="tr-skip" type="button">Passer</button><div class="tr-stage"></div><div class="tr-dots"></div><div class="tr-actions"><button class="tr-prev" type="button">← Précédent</button><button class="tr-next" type="button">Suivant</button></div><button class="tr-close" type="button">Fermer</button></div>`;
   document.body.appendChild(el);document.body.classList.add('sl-sheet-open');
+  // Same height on every slide, so "Suivant" never moves under the finger.
+  const stage=el.querySelector('.tr-stage');let h=0;for(const sl of SLIDES){stage.innerHTML=`<div class="tr-visual">${sl.v}</div><h2>${sl.t}</h2><p>${sl.p}</p>`;h=Math.max(h,stage.offsetHeight)}stage.style.minHeight=h+'px';
   el.querySelector('.tr-skip').onclick=()=>close(false);
   el.querySelector('.tr-close').onclick=()=>close(false);
   el.querySelector('.tr-prev').onclick=()=>{if(i>0){i--;render()}};
@@ -1310,7 +1312,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
 .sl-help-btn{margin-left:auto!important;width:32px;height:32px;border-radius:50%!important;padding:0!important;font-weight:800!important}
 .sl-help-btn+button{margin-left:0!important}
 .tr-backdrop{position:fixed;inset:0;z-index:100500;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:14px;animation:slFade .2s ease}
-.tr-box{position:relative;width:min(420px,100%);max-height:94vh;overflow-y:auto;background:linear-gradient(180deg,#10151b,#07090b);border:1px solid #2c343d;border-radius:20px;padding:18px 18px 16px;box-shadow:0 20px 60px rgba(0,0,0,.6);color:#e8ebee}
+.tr-box{touch-action:manipulation;-webkit-tap-highlight-color:transparent;position:relative;width:min(420px,100%);max-height:94vh;overflow-y:auto;background:linear-gradient(180deg,#10151b,#07090b);border:1px solid #2c343d;border-radius:20px;padding:18px 18px 16px;box-shadow:0 20px 60px rgba(0,0,0,.6);color:#e8ebee}
 .tr-skip{position:absolute;top:12px;right:12px;z-index:2;border:1px solid #2c343d;background:#0d1116;color:#b7bdc4;border-radius:999px;padding:6px 12px;font:600 12px Inter,Arial,sans-serif;cursor:pointer}
 .tr-stage h2{font:900 24px 'Barlow Condensed',Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:16px 0 6px;color:#fff}
 .tr-stage p{margin:0;font-size:14px;line-height:1.5;color:#b7bdc4}.tr-stage p b{color:#fff}
@@ -1354,7 +1356,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
 .tr-final{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,rgba(229,9,20,.35),#050607 65%)}
 .tr-horns{font-size:64px;animation:trHorns 1.4s ease-in-out infinite}.tr-final-txt{font:900 30px 'Barlow Condensed',Arial;letter-spacing:.2em;color:#fff;margin-top:6px}
 .tr-dots{display:flex;justify-content:center;gap:6px;margin:14px 0 10px}.tr-dots i{width:7px;height:7px;border-radius:50%;background:#2c343d}.tr-dots i.on{background:#ff2733;width:20px;border-radius:7px}
-.tr-actions{display:flex;justify-content:space-between;gap:10px}.tr-close{display:none;margin:10px auto 0;border:0;background:transparent;color:#9aa3ad;font:600 13px Inter,Arial,sans-serif;padding:8px 16px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.tr-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:66px}.tr-close{display:block;visibility:hidden;margin:10px auto 0;border:0;background:transparent;color:#9aa3ad;font:600 13px Inter,Arial,sans-serif;padding:8px 16px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .tr-prev{border:1px solid #2c343d;background:#0d1116;color:#e8ebee;border-radius:999px;padding:10px 14px;font:600 13px Inter,Arial,sans-serif;cursor:pointer}
 .tr-next{flex:1;border:0;border-radius:999px;background:linear-gradient(180deg,#ff2733,#b90009);color:#fff;font:800 14px Inter,Arial,sans-serif;padding:11px 16px;cursor:pointer}
 .sl-empty-groups{text-align:center;padding:26px 16px}
