@@ -1260,7 +1260,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
  };
  const nav=on=>`<div class="tr-nav">${[['radar','Radar'],['cal','Concerts'],['film','Clips'],['guitar','Groupes'],['compass','Découvrir']].map(([i,t])=>`<span class="${t===on?'on':''}">${ICON[i]}<em>${t}</em></span>`).join('')}</div>`;
  const SLIDES=[
-  {t:'Bienvenue sur STAYLOUD',p:'Ton radar metal personnel : les <b>actualités</b>, les <b>concerts</b> et les <b>clips</b> de tes groupes préférés, au même endroit.',v:`<div class="tr-screen tr-welcome"><div class="tr-ban"><img src="/stayloud-banner.png?v=2" alt=""><div class="tr-sweep"></div></div><div class="tr-hint">Pour l’instant, aucun groupe n’est enregistré.</div></div>`},
+  {t:'Bienvenue sur STAYLOUD',p:'Ton radar personnel des groupes métal : les <b>actualités</b>, les <b>concerts</b>, les <b>albums</b> et les <b>clips</b> de tes groupes préférés, au même endroit.',v:`<div class="tr-screen tr-welcome"><div class="tr-ban"><img src="/stayloud-banner.png?v=2" alt=""><div class="tr-sweep"></div></div><div class="tr-hint">Pour l’instant, aucun groupe n’est enregistré.</div></div>`},
   {t:'1 · Ajoute tes groupes',p:'Va dans <b>Styles/Groupes</b>, tape le nom d’un groupe puis touche <b>+ Ajouter</b>. C’est grâce à tes groupes que STAYLOUD trouve les actus, les concerts et les clips.',v:`<div class="tr-screen"><div class="tr-title">STYLES / GROUPES</div><div class="tr-input"><span class="tr-typing">Gojira</span><i class="tr-caret"></i></div><div class="tr-suggest"><span class="tr-av"></span><b>Gojira</b><small>Death Metal</small></div><div class="tr-btn tr-press">+ AJOUTER</div>${nav('Groupes')}<div class="tr-finger tr-f-add"></div></div>`},
   {t:'2 · Le Radar',p:'Toutes les <b>actualités</b> de tes groupes des 6 derniers mois, 20 par page. Touche la pastille rouge pour lire l’article.',v:`<div class="tr-screen"><div class="tr-title">ACTUALITÉS RÉCENTES</div>${[['GOJIRA','Nouvel album annoncé pour 2027'],['LANDMVRKS','Tournée européenne : les dates'],['BEHEMOTH','Nergal en interview']].map(([b,x],i)=>`<div class="tr-card" style="animation-delay:${i*.35}s"><span class="tr-av"></span><div><em>${b}</em><b>${x}</b></div><span class="tr-pill">↗</span></div>`).join('')}${nav('Radar')}</div>`},
   {t:'3 · Les concerts',p:'<b>Mes groupes</b> : leurs concerts en France (et leurs premières parties). <b>Près de moi</b> : tous les concerts metal autour de toi. <b>Une ville</b> : tape une ville et choisis le rayon.',v:`<div class="tr-screen"><div class="tr-title">CONCERTS À VENIR</div><div class="tr-seg"><span>Mes groupes</span><span>Près de moi</span><span>Une ville</span><i class="tr-seg-on"></i></div><div class="tr-chips"><span>10 km</span><span>20 km</span><span class="on">50 km</span><span>100 km</span></div><div class="tr-ev"><div class="tr-date"><b>18</b>OCT</div><div><em>GOJIRA <i class="tr-mine">Ton groupe</i></em><b>Le Zénith · Nantes · 38 km</b></div></div><div class="tr-ev" style="animation-delay:.4s"><div class="tr-date"><b>09</b>NOV</div><div><em>ARCH ENEMY</em><b>Le Trabendo · Paris · 21 km</b></div></div>${nav('Concerts')}</div>`},
@@ -1277,6 +1277,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
   el.querySelector('.tr-prev').style.visibility=i?'visible':'hidden';
   const next=el.querySelector('.tr-next');next.textContent=sl.last?(signedIn()?'Ajouter mon premier groupe':'Créer mon compte'):'Suivant';
   el.querySelector('.tr-skip').style.visibility=sl.last?'hidden':'visible';
+  el.querySelector('.tr-close').style.display=sl.last?'block':'none';
  }
  const signedIn=()=>typeof authUser!=='undefined'&&!!authUser;
  function close(goAdd){
@@ -1289,9 +1290,10 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
  }
  window.openTour=function(){
   if(el)return;i=0;el=document.createElement('div');el.className='tr-backdrop';
-  el.innerHTML=`<div class="tr-box" role="dialog" aria-modal="true" aria-label="Présentation de STAYLOUD"><button class="tr-skip" type="button">Passer</button><div class="tr-stage"></div><div class="tr-dots"></div><div class="tr-actions"><button class="tr-prev" type="button">← Précédent</button><button class="tr-next" type="button">Suivant</button></div></div>`;
+  el.innerHTML=`<div class="tr-box" role="dialog" aria-modal="true" aria-label="Présentation de STAYLOUD"><button class="tr-skip" type="button">Passer</button><div class="tr-stage"></div><div class="tr-dots"></div><div class="tr-actions"><button class="tr-prev" type="button">← Précédent</button><button class="tr-next" type="button">Suivant</button></div><button class="tr-close" type="button">Fermer</button></div>`;
   document.body.appendChild(el);document.body.classList.add('sl-sheet-open');
   el.querySelector('.tr-skip').onclick=()=>close(false);
+  el.querySelector('.tr-close').onclick=()=>close(false);
   el.querySelector('.tr-prev').onclick=()=>{if(i>0){i--;render()}};
   el.querySelector('.tr-next').onclick=()=>{if(SLIDES[i].last)close(true);else{i++;render()}};
   let x0=null;el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX},{passive:true});
@@ -1352,7 +1354,7 @@ $('artistForm').addEventListener('submit',e=>{e.preventDefault();const q=normUi(
 .tr-final{display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,rgba(229,9,20,.35),#050607 65%)}
 .tr-horns{font-size:64px;animation:trHorns 1.4s ease-in-out infinite}.tr-final-txt{font:900 30px 'Barlow Condensed',Arial;letter-spacing:.2em;color:#fff;margin-top:6px}
 .tr-dots{display:flex;justify-content:center;gap:6px;margin:14px 0 10px}.tr-dots i{width:7px;height:7px;border-radius:50%;background:#2c343d}.tr-dots i.on{background:#ff2733;width:20px;border-radius:7px}
-.tr-actions{display:flex;justify-content:space-between;gap:10px}
+.tr-actions{display:flex;justify-content:space-between;gap:10px}.tr-close{display:none;margin:10px auto 0;border:0;background:transparent;color:#9aa3ad;font:600 13px Inter,Arial,sans-serif;padding:8px 16px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .tr-prev{border:1px solid #2c343d;background:#0d1116;color:#e8ebee;border-radius:999px;padding:10px 14px;font:600 13px Inter,Arial,sans-serif;cursor:pointer}
 .tr-next{flex:1;border:0;border-radius:999px;background:linear-gradient(180deg,#ff2733,#b90009);color:#fff;font:800 14px Inter,Arial,sans-serif;padding:11px 16px;cursor:pointer}
 .sl-empty-groups{text-align:center;padding:26px 16px}
