@@ -622,7 +622,7 @@ function albumListenButtons(x,artistName,small=false){if(!x?.title||!artistName)
 // in the Deezer or Spotify app (search page as long as no link is known).
 async function resolveAlbumLinks(root){const rows=[...(root||document).querySelectorAll('.sl-album-actions')].filter(r=>r.querySelector('.sl-dz')&&!r.dataset.links);
  let i=0;const next=async()=>{while(i<rows.length){const r=rows[i++];r.dataset.links='1';const dz=r.querySelector('.sl-dz'),sp=r.querySelector('.sl-sp');
-  try{const d=await api('/api/music/album-links?artist='+encodeURIComponent(dz.dataset.artist)+'&album='+encodeURIComponent(dz.dataset.album));if(d.deezer){dz.href=d.deezer;dz.title='Ouvrir l’album dans Deezer'}if(d.spotify){sp.href=d.spotify;sp.title='Ouvrir l’album dans Spotify'}else if(d.deezer)r.dataset.links=''}catch{r.dataset.links=''}}};
+  try{const d=await api('/api/music/album-links?artist='+encodeURIComponent(dz.dataset.artist)+'&album='+encodeURIComponent(dz.dataset.album));if(d.deezer){dz.href=d.deezer+(d.deezer.includes('?')?'&':'?')+'autoplay=true';dz.title='Ouvrir l’album dans Deezer'}if(d.spotify){sp.href=d.spotify;sp.title='Ouvrir l’album dans Spotify'}else if(d.deezer)r.dataset.links=''}catch{r.dataset.links=''}}};
  await Promise.all([next(),next()])}
 // One audio element for the whole app: the preview keeps playing when the
 // user changes page; a small floating player (prev / stop / next) then
