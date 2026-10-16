@@ -135,7 +135,9 @@ export async function ensureD1Schema(){
       // 'pending' until the addressee accepts, then 'accepted'.
       `CREATE TABLE IF NOT EXISTS friendships(requester_id INTEGER NOT NULL,addressee_id INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT,updated_at TEXT,PRIMARY KEY(requester_id,addressee_id))`,
       // When the user last closed the "Quoi de neuf chez tes amis" popup.
-      `CREATE TABLE IF NOT EXISTS user_seen(user_id INTEGER PRIMARY KEY,friends_seen_at TEXT)`
+      `CREATE TABLE IF NOT EXISTS user_seen(user_id INTEGER PRIMARY KEY,friends_seen_at TEXT)`,
+      // A band a user recommends to a friend ("Partager à un ami").
+      `CREATE TABLE IF NOT EXISTS band_shares(id INTEGER PRIMARY KEY AUTOINCREMENT,from_id INTEGER NOT NULL,to_id INTEGER NOT NULL,artist_json TEXT NOT NULL,message TEXT,created_at TEXT)`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -405,4 +407,13 @@ export async function d1GetFriendsSeen(userId){
 export async function d1SetFriendsSeen(userId,at){
   await ensureD1Schema();
   await query("INSERT INTO user_seen(user_id,friends_seen_at) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET friends_seen_at=excluded.friends_seen_at",[Number(userId),String(at||now())]);
+}
+export async function d1ShareBand(fromId,toIds,artist,message){
+  await ensureD1Schema();
+  const t=now(),json=JSON.stringify(artist||{}),msg=String(message||"").slice(0,280);
+  for(const to of toIds)await query("INSERT INTO band_shares(from_id,to_id,artist_json,message,created_at) VALUES(?,?,?,?,?)",[Number(fromId),Number(to),json,msg,t]);
+}
+export async function d1SharesFor(userId,since){
+  await ensureD1Schema();
+  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.created_at>? ORDER BY s.created_at DESC LIMIT 30",[Number(userId),String(since)])).rows;
 }

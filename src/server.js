@@ -1,7 +1,7 @@
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen} from "./d1.js";
+import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
@@ -191,7 +191,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.66",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.67",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -316,7 +316,13 @@ app.get("/api/friends/agenda",requireAuth,async(req,res)=>{try{const rows=await 
 app.get("/api/friends/news",requireAuth,async(req,res)=>{try{const me=req.user.id;const [rels,rows,seenAt]=await Promise.all([d1ListFriendships(me),d1FriendsConcerts(me),d1GetFriendsSeen(me)]);const since=seenAt||new Date(Date.now()-7*864e5).toISOString(),today=new Date().toISOString().slice(0,10);
  const incoming=rels.filter(r=>r.status!=="accepted"&&Number(r.addressee_id)===me).map(r=>({id:Number(r.other_id),username:r.other_name}));
  const concerts=rows.map(r=>({key:r.ckey,status:r.status,user:{id:Number(r.user_id),username:r.username},data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{},updatedAt:r.updated_at})).filter(r=>String(r.updatedAt||"")>since&&String(r.data?.date||"").slice(0,10)>=today).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0,30);
- res.json({incoming,concerts,since})}catch(e){res.status(502).json({error:e.message})}});
+ const shares=(await d1SharesFor(me,since)).map(r=>{let artist={};try{artist=JSON.parse(r.artist_json||"{}")}catch{}return {id:Number(r.id),from:{id:Number(r.from_id),username:r.username},artist,message:r.message||"",createdAt:r.created_at}});
+ res.json({incoming,concerts,shares,since})}catch(e){res.status(502).json({error:e.message})}});
+// "Partager à un ami": recommend a band to accepted friends only.
+app.post("/api/shares",requireAuth,async(req,res)=>{try{const me=req.user.id,a=req.body?.artist||{},name=String(a.name||"").trim().slice(0,120);if(!name)return res.status(400).json({error:"Groupe manquant"});
+ const friends=new Set((await d1ListFriendships(me)).filter(r=>r.status==="accepted").map(r=>Number(r.other_id)));const to=[...new Set((Array.isArray(req.body?.to)?req.body.to:[]).map(Number))].filter(id=>friends.has(id));if(!to.length)return res.status(400).json({error:"Choisis au moins un ami"});
+ const pick=k=>String(a[k]??"").trim().slice(0,400);const photo=pick("photoUrl");
+ await d1ShareBand(me,to,{name,mbid:pick("mbid"),style:pick("style"),country:pick("country"),photoUrl:/^https?:\/\//.test(photo)?photo:""},req.body?.message);res.json({ok:true,sent:to.length})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/friends/news/seen",requireAuth,async(req,res)=>{try{await d1SetFriendsSeen(req.user.id,new Date().toISOString());res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
