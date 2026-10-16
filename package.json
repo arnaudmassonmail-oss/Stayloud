@@ -1,6 +1,6 @@
 {
   "name": "music-radar-backend-v2",
-  "version": "7.18.74",
+  "version": "7.18.75",
   "private": true,
   "type": "module",
   "scripts": {

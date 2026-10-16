@@ -624,6 +624,20 @@ async function saveStyle(id,value){
 function slToast(msg){let t=$('slToast');if(!t){t=document.createElement('div');t.id='slToast';t.className='sl-toast';document.body.appendChild(t)}t.textContent=msg;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2600)}
 function styleOptions(selected){const current=knownStyle(selected)?String(selected):'__unclassify__';return '<option value="__unclassify__" '+(current==='__unclassify__'?'selected':'')+'>À classer</option>'+styles.map(s=>`<option value="${esc(s[0])}" ${current===s[0]?'selected':''}>${esc(s[0])}</option>`).join('')}
 async function setStyle(id,value){const style=value==='__unclassify__'?null:String(value||'').trim()||null;try{await api('/api/artists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({style})});const a=A.find(x=>x.id===id);if(a)a.style=style;render();}catch(e){status('Erreur de classement : '+e.message)}}
+// The Styles list is rebuilt whenever a group photo arrives: keep each
+// horizontal row where the user left it, skip identical rebuilds, and wait
+// for the finger to lift before touching the DOM (a rebuild during a swipe
+// sent the row back to the first group).
+let stylesHTML='',stylesTouch=false,stylesPending=null;
+function setStylesListHTML(html){const el=$('stylesList');if(!el)return;
+ if(stylesTouch){stylesPending=html;return}stylesPending=null;
+ if(html===stylesHTML&&el.innerHTML)return;stylesHTML=html;
+ const pos={};el.querySelectorAll('.style-row').forEach(d=>{const r=d.querySelector('.sl-hscroll');if(r&&r.scrollLeft)pos[d.id]=r.scrollLeft});
+ el.innerHTML=html;
+ for(const id in pos){const r=document.getElementById(id)?.querySelector('.sl-hscroll');if(r)r.scrollLeft=pos[id]}
+ if(!el.dataset.touchWired){el.dataset.touchWired='1';let t=null;const end=()=>{clearTimeout(t);t=setTimeout(()=>{stylesTouch=false;if(stylesPending!=null)setStylesListHTML(stylesPending)},700)};
+  el.addEventListener('touchstart',()=>{clearTimeout(t);stylesTouch=true},{passive:true});el.addEventListener('touchend',end,{passive:true});el.addEventListener('touchcancel',end,{passive:true});
+  el.addEventListener('scroll',e=>{if(e.target.classList?.contains('sl-hscroll')&&stylesTouch)end()},{capture:true,passive:true})}}
 function renderStyles(){
  const counts={};A.forEach(a=>{const s=styleOf(a);counts[s]=(counts[s]||0)+1});
  if($('stylesHome'))$('stylesHome').innerHTML=styles.map((s,i)=>{
@@ -636,7 +650,7 @@ function renderStyles(){
    return `<details class="style-row" id="style-${i}" data-style="${esc(s[0])}" ${styleClosed(s[0])?'':'open'}><summary class="style-summary"><div><h3>${esc(s[0])}</h3><p>${groups.length} groupe(s)</p></div></summary><div class="style-groups sl-hscroll">${cards}</div>${groups.length>2?'<div class="sl-swipe-hint">← glisser →</div>':''}</details>`;
  }).join('');
  const un=A.filter(a=>styleOf(a)==='À classer').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'fr',{sensitivity:'base'}));
- $('stylesList').innerHTML=blocks+`<details class="style-row" ${styleClosed('À classer')?'':'open'} id="style-unclassified" data-style="À classer"><summary class="style-summary"><div><h3>À classer</h3><p>${un.length} groupe(s) · classement manuel</p></div></summary><div class="style-groups sl-hscroll">${un.length?un.map(a=>`<div class="style-group" role="button" tabindex="0" onclick="openArtistProfile(${a.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openArtistProfile(${a.id})}"><div class="style-group-img" ${photoStyle(imgForArtist(a))}></div><div class="style-group-body"><div class="style-group-name">${esc(a.name)}</div><div class="style-group-meta">À classer · touche pour le classer</div></div></div>`).join(''):'<div class="style-empty">Aucun groupe à classer.</div>'}</div>${un.length>2?'<div class="sl-swipe-hint">← glisser →</div>':''}</details>`;
+ setStylesListHTML(blocks+`<details class="style-row" ${styleClosed('À classer')?'':'open'} id="style-unclassified" data-style="À classer"><summary class="style-summary"><div><h3>À classer</h3><p>${un.length} groupe(s) · classement manuel</p></div></summary><div class="style-groups sl-hscroll">${un.length?un.map(a=>`<div class="style-group" role="button" tabindex="0" onclick="openArtistProfile(${a.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openArtistProfile(${a.id})}"><div class="style-group-img" ${photoStyle(imgForArtist(a))}></div><div class="style-group-body"><div class="style-group-name">${esc(a.name)}</div><div class="style-group-meta">À classer · touche pour le classer</div></div></div>`).join(''):'<div class="style-empty">Aucun groupe à classer.</div>'}</div>${un.length>2?'<div class="sl-swipe-hint">← glisser →</div>':''}</details>`);
 }
 function showStyle(s){show('styles');const i=styles.findIndex(x=>x[0]===s);setStyleClosed(s,false);setTimeout(()=>{const d=document.getElementById('style-'+i);if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},50)}
 
