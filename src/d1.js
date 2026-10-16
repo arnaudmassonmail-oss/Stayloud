@@ -133,7 +133,9 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS user_concerts(user_id INTEGER NOT NULL,ckey TEXT NOT NULL,status TEXT NOT NULL,data TEXT,updated_at TEXT,PRIMARY KEY(user_id,ckey))`,
       // Friends: one row per request (requester -> addressee); status
       // 'pending' until the addressee accepts, then 'accepted'.
-      `CREATE TABLE IF NOT EXISTS friendships(requester_id INTEGER NOT NULL,addressee_id INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT,updated_at TEXT,PRIMARY KEY(requester_id,addressee_id))`
+      `CREATE TABLE IF NOT EXISTS friendships(requester_id INTEGER NOT NULL,addressee_id INTEGER NOT NULL,status TEXT NOT NULL,created_at TEXT,updated_at TEXT,PRIMARY KEY(requester_id,addressee_id))`,
+      // When the user last closed the "Quoi de neuf chez tes amis" popup.
+      `CREATE TABLE IF NOT EXISTS user_seen(user_id INTEGER PRIMARY KEY,friends_seen_at TEXT)`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -395,4 +397,12 @@ export async function d1FriendsConcerts(userId){
     "SELECT c.user_id,u.username,c.ckey,c.status,c.data,c.updated_at FROM user_concerts c JOIN users u ON u.id=c.user_id WHERE c.user_id IN (SELECT addressee_id FROM friendships WHERE requester_id=? AND status='accepted' UNION SELECT requester_id FROM friendships WHERE addressee_id=? AND status='accepted')",
     [id,id]
   )).rows;
+}
+export async function d1GetFriendsSeen(userId){
+  await ensureD1Schema();
+  return (await query("SELECT friends_seen_at FROM user_seen WHERE user_id=?",[Number(userId)])).rows[0]?.friends_seen_at||null;
+}
+export async function d1SetFriendsSeen(userId,at){
+  await ensureD1Schema();
+  await query("INSERT INTO user_seen(user_id,friends_seen_at) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET friends_seen_at=excluded.friends_seen_at",[Number(userId),String(at||now())]);
 }
