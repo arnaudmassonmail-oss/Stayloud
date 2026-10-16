@@ -163,11 +163,12 @@
 .sl-album-title{font:900 20px/1.1 'Barlow Condensed',sans-serif;color:#fff;margin-top:2px;overflow-wrap:anywhere}
 .sl-album-latest .sl-album-title{font-size:26px}
 .sl-album-year{font-size:12px;color:var(--muted);margin-top:3px}
-.sl-album>.sl-album-actions{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:center;margin:0}.sl-album-actions>*{text-align:center;white-space:nowrap}
+.sl-album>.sl-album-actions{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:7px;align-items:center;margin:0}.sl-album-actions>*{text-align:center;white-space:nowrap}
 .sl-play{border:0;border-radius:999px;background:var(--red,#e3101c);color:#fff;font:800 12px Inter,Arial,sans-serif;padding:8px 14px;cursor:pointer;width:auto;min-height:0}
 .sl-play:disabled{opacity:.6;cursor:default}
 .sl-play.is-open{display:none}
 .sl-chip{border:1px solid #2c343d;border-radius:999px;padding:7px 11px;font:700 11px Inter,Arial,sans-serif;color:#cfd5db;text-decoration:none;background:#0d1116}
+.sl-stream{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;padding:7px 10px;font:700 12px Inter,Arial,sans-serif;color:#fff;text-decoration:none;background:#0d1116;border:1px solid #2c343d;min-width:0;overflow:hidden}.sl-stream svg{width:16px;height:16px;flex:0 0 16px}.sl-stream span{overflow:hidden;text-overflow:ellipsis}.sl-stream.sl-dz{border-color:#A238FF}.sl-stream.sl-sp{border-color:#1ED760}.sl-stream:active{transform:scale(.97)}.sl-album-actions>.album-play{grid-column:1/-1}
 .sl-chip:hover{border-color:#ff7c84;color:#fff}
 .sl-album-list{display:grid;grid-template-columns:1fr;gap:0 10px}
 @media(min-width:900px){.sl-album-list{grid-template-columns:1fr 1fr}}
@@ -617,7 +618,11 @@ function googleImagesUrl(name){return 'https://www.google.com/search?tbm=isch&q=
 function profileDate(v){return v?String(v).slice(0,4):'—'}
 function albumCover(x,small=false){const u=x?.coverUrl||'';return u?`<img class="${small?'album-cover-small':'album-cover'}" src="${esc(u)}" alt="Pochette ${esc(x.title||'album')}" loading="lazy" onerror="this.style.display='none'">`:`<div class="${small?'album-cover-small':'album-cover'}"></div>`}
 let activeAlbumPlayer=null;
-function albumListenButtons(x,artistName,small=false){if(!x?.title||!artistName)return '';const q=encodeURIComponent(`${artistName} ${x.title}`);return `<div class="sl-album-actions"><button class="album-play sl-play" type="button" data-artist="${esc(artistName)}" data-album="${esc(x.title)}" onclick="playAlbumPreview(this)">▶ Écouter</button><a class="sl-chip sl-dz" href="https://www.deezer.com/search/${q}" target="_blank" rel="noopener" data-artist="${esc(artistName)}" data-album="${esc(x.title)}">Deezer ↗</a><a class="sl-chip sl-sp" href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener">Spotify ↗</a></div>`}
+// Deezer / Spotify buttons (style B): STAYLOUD dark pill, app logo in its
+// colour and a thin border in the app colour.
+const DZ_LOGO='<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="#A238FF"><rect x="1.5" y="15" width="3.4" height="5.5" rx=".7"/><rect x="6.1" y="11" width="3.4" height="9.5" rx=".7"/><rect x="10.7" y="6.5" width="3.4" height="14" rx=".7"/><rect x="15.3" y="9.5" width="3.4" height="11" rx=".7"/><rect x="19.9" y="3.5" width="3.4" height="17" rx=".7"/></g></svg>';
+const SP_LOGO='<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#1ED760" d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>';
+function albumListenButtons(x,artistName,small=false){if(!x?.title||!artistName)return '';const q=encodeURIComponent(`${artistName} ${x.title}`);return `<div class="sl-album-actions"><button class="album-play sl-play" type="button" data-artist="${esc(artistName)}" data-album="${esc(x.title)}" onclick="playAlbumPreview(this)">▶ Écouter</button><a class="sl-stream sl-dz" href="https://www.deezer.com/search/${q}" target="_blank" rel="noopener" data-artist="${esc(artistName)}" data-album="${esc(x.title)}" aria-label="Ouvrir dans Deezer">${DZ_LOGO}<span>Deezer</span></a><a class="sl-stream sl-sp" href="https://open.spotify.com/search/${q}" target="_blank" rel="noopener" aria-label="Ouvrir dans Spotify">${SP_LOGO}<span>Spotify</span></a></div>`}
 // Point the Deezer / Spotify buttons straight to the album: one tap opens it
 // in the Deezer or Spotify app (search page as long as no link is known).
 async function resolveAlbumLinks(root){const rows=[...(root||document).querySelectorAll('.sl-album-actions')].filter(r=>r.querySelector('.sl-dz')&&!r.dataset.links);
