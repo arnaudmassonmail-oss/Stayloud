@@ -191,7 +191,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.73",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.74",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -214,17 +214,36 @@ app.get("/api/artists/photo-candidates",async(req,res)=>{try{const name=String(r
 const deezerPreviewCache=new Map();
 function normMusic(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
 // Best Deezer album match for "artist + album" (public Deezer API, no key).
+// Deezer public API: max ~50 requests / 5 s per server IP. Over the quota it
+// answers HTTP 200 with {error:{code:4}}; that used to be read as "album not
+// found" and cached. Calls are spaced out, quota errors are retried once and
+// never cached as a miss.
+let deezerGate=Promise.resolve();
+function deezerSlot(){const p=deezerGate.then(()=>new Promise(r=>setTimeout(r,120)));deezerGate=p.catch(()=>{});return p}
+async function deezerJson(url,tries=2){
+ for(let i=0;i<tries;i++){
+  await deezerSlot();
+  const ac=new AbortController(),timer=setTimeout(()=>ac.abort(),8000);
+  try{
+   const r=await fetch(url,{signal:ac.signal,headers:{Accept:"application/json"}});
+   if(!r.ok)throw new Error(`Deezer HTTP ${r.status}`);
+   const d=await r.json();
+   if(d?.error){if(i<tries-1){await new Promise(r=>setTimeout(r,1500));continue}throw new Error("Deezer momentanément saturé")}
+   return d;
+  }catch(e){if(i>=tries-1)throw e;await new Promise(r=>setTimeout(r,800))}
+  finally{clearTimeout(timer)}
+ }
+}
+const deezerAlbumHits=new Map();
 async function findDeezerAlbum(artist,album,{sameArtist=false}={}){
- const ac=new AbortController(); const timer=setTimeout(()=>ac.abort(),8000);
- try{
-  const q=encodeURIComponent(`${artist} ${album}`);
-  const r=await fetch(`https://api.deezer.com/search/album?q=${q}&limit=25`,{signal:ac.signal,headers:{Accept:"application/json"}});
-  if(!r.ok)throw new Error(`Deezer HTTP ${r.status}`);
-  const d=await r.json();
-  const rows=Array.isArray(d?.data)?d.data:[]; const na=normMusic(artist),nb=normMusic(album);
-  const ranked=rows.map(a=>{const aa=normMusic(a?.artist?.name),tt=normMusic(a?.title);let score=0,artistOk=false;if(aa===na){score+=8;artistOk=true}else if(aa&&(aa.includes(na)||na.includes(aa))){score+=4;artistOk=true}if(tt===nb)score+=10;else if(tt.includes(nb)||nb.includes(tt))score+=5;return {a,score,artistOk};}).filter(x=>!sameArtist||x.artistOk).sort((a,b)=>b.score-a.score);
-  return ranked.find(x=>x.a?.id&&x.score>=14)?.a || ranked.find(x=>x.a?.id&&x.score>=9)?.a || null;
- }finally{clearTimeout(timer)}
+ const key=(sameArtist?"s|":"a|")+normMusic(artist)+"|"+normMusic(album),mem=deezerAlbumHits.get(key);
+ if(mem&&mem.until>Date.now())return mem.hit;
+ const d=await deezerJson(`https://api.deezer.com/search/album?q=${encodeURIComponent(`${artist} ${album}`)}&limit=25`);
+ const rows=Array.isArray(d?.data)?d.data:[]; const na=normMusic(artist),nb=normMusic(album);
+ const ranked=rows.map(a=>{const aa=normMusic(a?.artist?.name),tt=normMusic(a?.title);let score=0,artistOk=false;if(aa===na){score+=8;artistOk=true}else if(aa&&(aa.includes(na)||na.includes(aa))){score+=4;artistOk=true}if(tt===nb)score+=10;else if(tt.includes(nb)||nb.includes(tt))score+=5;return {a,score,artistOk};}).filter(x=>!sameArtist||x.artistOk).sort((a,b)=>b.score-a.score);
+ const hit=ranked.find(x=>x.a?.id&&x.score>=14)?.a || ranked.find(x=>x.a?.id&&x.score>=9)?.a || null;
+ deezerAlbumHits.set(key,{hit,until:Date.now()+(hit?24*3600e3:10*60e3)});if(deezerAlbumHits.size>3000)deezerAlbumHits.delete(deezerAlbumHits.keys().next().value);
+ return hit;
 }
 // Direct album links: Deezer from its API, Spotify through Odesli (song.link,
 // free, ~10 requests/min). Results are kept in D1 so each album is looked up
@@ -276,14 +295,12 @@ app.get("/api/music/album-tracks",async(req,res)=>{
   if(cached && cached.expires>Date.now()) return res.json(cached.data);
   const hit=await findDeezerAlbum(artist,album);
   if(!hit?.id){const data={ok:false,error:"Album introuvable"};deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});return res.json(data);}
-  const tr=new AbortController(); const timer2=setTimeout(()=>tr.abort(),8000);
-  const rr=await fetch(`https://api.deezer.com/album/${hit.id}/tracks?limit=100`,{signal:tr.signal,headers:{Accept:"application/json"}});
-  clearTimeout(timer2);
-  if(!rr.ok)throw new Error(`Deezer HTTP ${rr.status}`);
-  const td=await rr.json();
+  const td=await deezerJson(`https://api.deezer.com/album/${hit.id}/tracks?limit=100`);
   const tracks=(Array.isArray(td?.data)?td.data:[]).map((t,i)=>({id:t.id,title:t.title||`Piste ${i+1}`,preview:t.preview||null,trackUrl:t.link||null,artist:t.artist?.name||artist,album:t.album?.title||album}));
+  if(!tracks.length)return res.status(502).json({error:"Pistes indisponibles pour le moment"});
   const data={ok:true,album:hit.title||album,tracks};
-  deezerPreviewCache.set(key,{expires:Date.now()+30*60*1000,data});
+  // Deezer preview URLs are signed and expire: keep them only a few minutes.
+  deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});
   res.json(data);
  }catch(e){res.status(502).json({error:e?.name==="AbortError"?"Deezer trop lent":e.message||"Erreur Deezer"})}
 });
@@ -294,18 +311,13 @@ app.get("/api/music/preview",async(req,res)=>{
   const key="preview|"+normMusic(artist)+"|"+normMusic(album);
   const cached=deezerPreviewCache.get(key);
   if(cached && cached.expires>Date.now()) return res.json(cached.data);
-  const q=encodeURIComponent(`${artist} ${album}`);
-  const ac=new AbortController(); const timer=setTimeout(()=>ac.abort(),7000);
-  const r=await fetch(`https://api.deezer.com/search?q=${q}&limit=25`,{signal:ac.signal,headers:{Accept:"application/json"}});
-  clearTimeout(timer);
-  if(!r.ok)throw new Error(`Deezer HTTP ${r.status}`);
-  const d=await r.json(); const rows=Array.isArray(d?.data)?d.data:[];
+  const d=await deezerJson(`https://api.deezer.com/search?q=${encodeURIComponent(`${artist} ${album}`)}&limit=25`); const rows=Array.isArray(d?.data)?d.data:[];
   const na=normMusic(artist), nb=normMusic(album);
   const ranked=rows.map(t=>{const ta=normMusic(t?.artist?.name),tb=normMusic(t?.album?.title);let score=0;if(ta===na)score+=8;else if(ta.includes(na)||na.includes(ta))score+=4;if(tb===nb)score+=8;else if(tb.includes(nb)||nb.includes(tb))score+=4;if(t?.preview)score+=2;return {t,score};}).sort((a,b)=>b.score-a.score);
   const hit=ranked.find(x=>x.t?.preview && x.score>=12)?.t || ranked.find(x=>x.t?.preview && x.score>=8)?.t;
   if(!hit?.preview){const data={ok:false,error:"Aucun extrait disponible"};deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});return res.json(data);}
   const data={ok:true,preview:hit.preview,title:hit.title||"Extrait",trackUrl:hit.link||null,artist:hit.artist?.name||artist,album:hit.album?.title||album};
-  deezerPreviewCache.set(key,{expires:Date.now()+30*60*1000,data});
+  deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});
   res.json(data);
  }catch(e){res.status(502).json({error:e?.name==="AbortError"?"Deezer trop lent":e.message||"Erreur Deezer"})}
 });
