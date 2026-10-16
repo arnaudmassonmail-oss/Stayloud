@@ -417,3 +417,15 @@ export async function d1SharesFor(userId,since){
   await ensureD1Schema();
   return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.created_at>? ORDER BY s.created_at DESC LIMIT 30",[Number(userId),String(since)])).rows;
 }
+// Small key/value cache (stored in geo_cache) for album streaming links.
+export async function d1GetCacheValue(key){
+  if(!d1ConfigStatus().configured)return null;
+  await ensureD1Schema();
+  const v=(await query("SELECT value FROM geo_cache WHERE key=?",[String(key)])).rows[0]?.value;
+  try{return v?JSON.parse(v):null}catch{return null}
+}
+export async function d1SetCacheValue(key,value){
+  if(!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query("INSERT INTO geo_cache(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",[String(key),JSON.stringify(value),now()]);
+}
