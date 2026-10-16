@@ -191,7 +191,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.75",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.76",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -219,7 +219,7 @@ function normMusic(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u0
 // found" and cached. Calls are spaced out, quota errors are retried once and
 // never cached as a miss.
 let deezerGate=Promise.resolve();
-function deezerSlot(){const p=deezerGate.then(()=>new Promise(r=>setTimeout(r,120)));deezerGate=p.catch(()=>{});return p}
+function deezerSlot(){const p=deezerGate.then(()=>new Promise(r=>setTimeout(r,180)));deezerGate=p.catch(()=>{});return p}
 async function deezerJson(url,tries=2){
  for(let i=0;i<tries;i++){
   await deezerSlot();
@@ -235,13 +235,36 @@ async function deezerJson(url,tries=2){
  }
 }
 const deezerAlbumHits=new Map();
+// Album titles differ between MusicBrainz and Deezer ("… - Live Act" vs
+// "… (Live)", "Deluxe", "Remastered", self-titled albums…). Compare cleaned
+// titles by words, and when the free-text search finds nothing, fall back to
+// the artist's own album list on Deezer.
+function cleanAlbumTitle(t){return normMusic(String(t||"").replace(/\(([^)]*)\)|\[([^\]]*)\]/g," $1$2 ").replace(/\b(deluxe|remaster(ed)?|edition|version|expanded|anniversary|bonus|tracks?|reissue|explicit)\b/gi," "))}
+function albumTitleScore(a,b){const x=cleanAlbumTitle(a),y=cleanAlbumTitle(b);if(!x||!y)return 0;if(x===y)return 10;if(x.includes(y)||y.includes(x))return 7;
+ const A=new Set(x.split(" ")),B=new Set(y.split(" "));let n=0;for(const w of A)if(B.has(w))n++;const j=n/new Set([...A,...B]).size;return j>=0.6?6:j>=0.4?4:0}
+function artistMatch(a,b){const x=normMusic(a),y=normMusic(b);if(!x||!y)return 0;if(x===y)return 8;if(x.includes(y)||y.includes(x))return 4;return 0}
+function bestDeezerAlbum(rows,artist,album,{sameArtist=false,knownArtist=false}={}){
+ const ranked=rows.map(a=>{const am=knownArtist?8:artistMatch(a?.artist?.name,artist),tm=albumTitleScore(a?.title,album);return {a,am,tm,score:am+tm}}).filter(x=>x.a?.id&&x.tm>0&&(!sameArtist||x.am>0)).sort((p,q)=>q.score-p.score||(q.tm-p.tm));
+ const top=ranked[0];if(!top)return null;
+ if(top.am>0&&top.tm>=4)return top.a;
+ if(!sameArtist&&top.tm>=10)return top.a;
+ return null;
+}
 async function findDeezerAlbum(artist,album,{sameArtist=false}={}){
  const key=(sameArtist?"s|":"a|")+normMusic(artist)+"|"+normMusic(album),mem=deezerAlbumHits.get(key);
  if(mem&&mem.until>Date.now())return mem.hit;
+ let hit=null;
  const d=await deezerJson(`https://api.deezer.com/search/album?q=${encodeURIComponent(`${artist} ${album}`)}&limit=25`);
- const rows=Array.isArray(d?.data)?d.data:[]; const na=normMusic(artist),nb=normMusic(album);
- const ranked=rows.map(a=>{const aa=normMusic(a?.artist?.name),tt=normMusic(a?.title);let score=0,artistOk=false;if(aa===na){score+=8;artistOk=true}else if(aa&&(aa.includes(na)||na.includes(aa))){score+=4;artistOk=true}if(tt===nb)score+=10;else if(tt.includes(nb)||nb.includes(tt))score+=5;return {a,score,artistOk};}).filter(x=>!sameArtist||x.artistOk).sort((a,b)=>b.score-a.score);
- const hit=ranked.find(x=>x.a?.id&&x.score>=14)?.a || ranked.find(x=>x.a?.id&&x.score>=9)?.a || null;
+ const rows=Array.isArray(d?.data)?d.data:[];
+ hit=bestDeezerAlbum(rows,artist,album,{sameArtist:true});
+ if(!hit){
+  // Fallback: the artist's discography on Deezer.
+  const sa=await deezerJson(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artist)}&limit=5`);
+  const arts=(Array.isArray(sa?.data)?sa.data:[]).filter(x=>x?.id&&artistMatch(x.name,artist)>0).sort((p,q)=>artistMatch(q.name,artist)-artistMatch(p.name,artist)||(Number(q.nb_fan||0)-Number(p.nb_fan||0)));
+  if(arts[0]){const al=await deezerJson(`https://api.deezer.com/artist/${arts[0].id}/albums?limit=200`);hit=bestDeezerAlbum(Array.isArray(al?.data)?al.data:[],artist,album,{knownArtist:true})}
+ }
+ // Last resort for previews only: same exact title by another credited artist.
+ if(!hit&&!sameArtist)hit=bestDeezerAlbum(rows,artist,album);
  deezerAlbumHits.set(key,{hit,until:Date.now()+(hit?24*3600e3:10*60e3)});if(deezerAlbumHits.size>3000)deezerAlbumHits.delete(deezerAlbumHits.keys().next().value);
  return hit;
 }
