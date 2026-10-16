@@ -376,18 +376,20 @@ body.sl-sheet-open{overflow:hidden}
 </style>
 <style id="sl-hscroll-css">
 /* Horizontal rows: groups of a style, previous albums of a band. */
-.sl-hscroll{display:flex!important;flex-wrap:nowrap;gap:10px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scrollbar-width:none;grid-template-columns:none!important}
+.sl-hscroll{display:flex!important;flex-wrap:nowrap;gap:10px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;scrollbar-width:none;grid-template-columns:none!important}
+/* Free momentum scrolling (no snap: on iPhone a short swipe snapped back to the first card). No hover lift on touch screens. */
+@media(hover:none){.sl-hscroll .style-group:hover{transform:none}}
 .sl-hscroll::-webkit-scrollbar{display:none}
 .style-groups.sl-hscroll{padding:0 12px 6px}
-.style-groups.sl-hscroll>.style-group{flex:0 0 150px;scroll-snap-align:start}
+.style-groups.sl-hscroll>.style-group{flex:0 0 150px;width:150px;min-width:0;transition:none}
 .style-groups.sl-hscroll>.style-group .style-group-img{height:112px!important}
 .style-groups.sl-hscroll>.style-group .style-group-name{font-size:17px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .style-groups.sl-hscroll>.style-empty{padding:4px 0}
 @media(min-width:701px){.style-groups.sl-hscroll>.style-group{flex-basis:200px}.style-groups.sl-hscroll>.style-group .style-group-img{height:150px!important}}
 .sl-swipe-hint{font-size:11px;color:#6f7882;text-align:right;padding:0 14px 10px}
 .sl-album-row{margin:0 -4px;padding:0 4px 4px}
-.sl-album-row>.sl-album-card{flex:0 0 168px;display:flex;flex-direction:column;gap:8px;margin:0;padding:10px;scroll-snap-align:start}
-.sl-album-card .album-cover{width:100%!important;height:auto!important;aspect-ratio:1/1;border-radius:8px;object-fit:cover}
+.sl-album-row>.sl-album-card{flex:0 0 168px;width:168px;min-width:0;max-width:168px;display:flex;flex-direction:column;gap:8px;margin:0;padding:10px;overflow:hidden}.sl-album-card>.album-cover{display:block;flex:0 0 auto}.sl-album-card .sl-album-info{min-width:0;width:100%}
+.sl-album-card .album-cover{width:100%!important;max-width:none!important;height:auto!important;aspect-ratio:1/1;border-radius:8px;object-fit:cover}
 .sl-album-card .sl-album-title{font-size:15px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sl-album-card .sl-album-actions.sl-compact{display:grid;grid-template-columns:minmax(0,1fr) 32px 32px;gap:5px;margin-top:auto}
 .sl-album-card .sl-compact .sl-stream{width:32px;height:32px}.sl-album-card .sl-compact .sl-stream svg{width:16px;height:16px}
