@@ -12,7 +12,13 @@ async function mb(url,{tries=4,timeout=20000}={}){
 }
 const ARTIST_ALIASES={
   "landmarks":"LANDMVRKS",
-  "landmvrks":"LANDMVRKS"
+  "landmvrks":"LANDMVRKS",
+  "hed pe":"(həd) p.e.",
+  "(hed) pe":"(həd) p.e.",
+  "hed p.e.":"(həd) p.e.",
+  "(hed) p.e.":"(həd) p.e.",
+  "hedpe":"(həd) p.e.",
+  "hed planet earth":"(həd) p.e."
 };
 function canonicalInputName(name){
  const raw=String(name||"").trim();
@@ -20,7 +26,15 @@ function canonicalInputName(name){
  return ARTIST_ALIASES[key]||raw;
 }
 
-function normArtistName(s){return String(s||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
+// Names are compared loosely: accents and special letters folded ("(həd) p.e."
+// → "hed pe"), punctuation ignored, and dotted initials joined ("p.e." = "pe").
+const SPECIAL_LETTERS={"ə":"e","ǝ":"e","æ":"ae","œ":"oe","ø":"o","ß":"ss","ł":"l","đ":"d","ð":"d","þ":"th","ı":"i"};
+function normArtistName(s){
+ const base=String(s||"").toLowerCase().replace(/[əǝæœøßłđðþı]/g,c=>SPECIAL_LETTERS[c]||c).normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+ const out=[];let single=false;
+ for(const t of base.split(" ").filter(Boolean)){if(t.length===1&&single)out[out.length-1]+=t;else{out.push(t);single=t.length===1}}
+ return out.join(" ");
+}
 function levenshtein(a,b){const m=a.length,n=b.length;const dp=Array.from({length:m+1},(_,i)=>{const r=new Array(n+1);r[0]=i;return r});for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return dp[m][n];}
 function candidateScore(input,a){
  const n=normArtistName(a?.name), q=normArtistName(input); if(!n)return -999;
@@ -150,11 +164,11 @@ export async function searchArtistCandidates(name,limit=8){
  }
  const mbItems=all.map(a=>{
   const tags=(a.tags||[]).map(t=>String(t?.name||'').toLowerCase());
-  return {source:'MusicBrainz',mbid:a.id,name:a.name||input,disambiguation:a.disambiguation||'',country:a.area?.name||a.country||'',beginDate:a['life-span']?.begin||'',endDate:a['life-span']?.end||'',type:a.type||'',tags,style:inferStyle(tags),score:Math.round(candidateScore(input,a)),area:a.area?.name||'',sortName:a['sort-name']||''};
+  return {source:'MusicBrainz',mbid:a.id,name:a.name||input,aliases:[a['sort-name'],...(a.aliases||[]).map(x=>x?.name)].filter(Boolean),disambiguation:a.disambiguation||'',country:a.area?.name||a.country||'',beginDate:a['life-span']?.begin||'',endDate:a['life-span']?.end||'',type:a.type||'',tags,style:inferStyle(tags),score:Math.round(candidateScore(input,a)),area:a.area?.name||'',sortName:a['sort-name']||''};
  }).filter(x=>x.score>=35 && String(x.type||'').toLowerCase()==='group');
  const bi=await bandsintownIdentity(input);
  if(bi)mbItems.push({...bi,mbid:null,disambiguation:'Bandsintown',beginDate:'',endDate:'',type:'Group',country:bi.country||'',area:bi.hometown||'',style:bi.genre||'',tags:bi.genre?[bi.genre.toLowerCase()]:[],score:Math.round(candidateScore(input,{name:bi.name,tags:bi.genre?[{name:bi.genre}]:[]})+15)});
- const merged=[...metal,...spirit,...mbItems].filter(x=>String(x.type||'Group').toLowerCase()==='group' && normArtistName(x.name)===normArtistName(input));
+ const merged=[...metal,...spirit,...mbItems].filter(x=>String(x.type||'Group').toLowerCase()==='group' && [x.name,...(x.aliases||[])].some(n=>normArtistName(n)===normArtistName(input)||normArtistName(n)===normArtistName(raw)));
  // Every exact-name group candidate gets the same canonical Bandsintown identity
  // when available.  This prevents the selected Metal Archives card from losing
  // the Bandsintown photo source simply because its country/style metadata differs.
