@@ -1,7 +1,7 @@
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor} from "./d1.js";
+import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
@@ -191,7 +191,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.67",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.68",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -213,6 +213,60 @@ app.get("/api/artists/candidates",async(req,res)=>{try{const name=String(req.que
 app.get("/api/artists/photo-candidates",async(req,res)=>{try{const name=String(req.query.name||"").trim(),context=String(req.query.context||"").trim(),force=String(req.query.force||"")==="1",page=Math.max(0,Number(req.query.page||0)||0);let exclude=[];try{exclude=JSON.parse(String(req.query.exclude||"[]"));if(!Array.isArray(exclude))exclude=[]}catch{};if(!name)return res.status(400).json({error:"name requis"});const bandsintownUrl=String(req.query.bandsintownUrl||'').trim();res.json({items:await discoverArtistPhotos(name,5,context,{force,page,exclude,bandsintownUrl,mbid:String(req.query.mbid||'').trim()})})}catch(e){res.status(502).json({error:e.message})}});
 const deezerPreviewCache=new Map();
 function normMusic(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();}
+// Best Deezer album match for "artist + album" (public Deezer API, no key).
+async function findDeezerAlbum(artist,album,{sameArtist=false}={}){
+ const ac=new AbortController(); const timer=setTimeout(()=>ac.abort(),8000);
+ try{
+  const q=encodeURIComponent(`${artist} ${album}`);
+  const r=await fetch(`https://api.deezer.com/search/album?q=${q}&limit=25`,{signal:ac.signal,headers:{Accept:"application/json"}});
+  if(!r.ok)throw new Error(`Deezer HTTP ${r.status}`);
+  const d=await r.json();
+  const rows=Array.isArray(d?.data)?d.data:[]; const na=normMusic(artist),nb=normMusic(album);
+  const ranked=rows.map(a=>{const aa=normMusic(a?.artist?.name),tt=normMusic(a?.title);let score=0,artistOk=false;if(aa===na){score+=8;artistOk=true}else if(aa&&(aa.includes(na)||na.includes(aa))){score+=4;artistOk=true}if(tt===nb)score+=10;else if(tt.includes(nb)||nb.includes(tt))score+=5;return {a,score,artistOk};}).filter(x=>!sameArtist||x.artistOk).sort((a,b)=>b.score-a.score);
+  return ranked.find(x=>x.a?.id&&x.score>=14)?.a || ranked.find(x=>x.a?.id&&x.score>=9)?.a || null;
+ }finally{clearTimeout(timer)}
+}
+// Direct album links: Deezer from its API, Spotify through Odesli (song.link,
+// free, ~10 requests/min). Results are kept in D1 so each album is looked up
+// once; the buttons fall back to a search page until a link is known.
+const albumLinkMem=new Map();let odesliChain=Promise.resolve(),odesliWaiting=0;
+function odesliSpotify(deezerUrl){
+ if(odesliWaiting>=6)return Promise.resolve(undefined);
+ odesliWaiting++;
+ const job=odesliChain.then(async()=>{
+  try{
+   const ac=new AbortController(),t=setTimeout(()=>ac.abort(),9000);
+   try{
+    const r=await fetch(`https://api.song.link/v1-alpha.1/links?userCountry=FR&url=${encodeURIComponent(deezerUrl)}`,{signal:ac.signal,headers:{Accept:"application/json"}});
+    if(r.status===429)return undefined;
+    if(!r.ok)return null;
+    const d=await r.json();const u=String(d?.linksByPlatform?.spotify?.url||"");
+    return /^https:\/\/open\.spotify\.com\//.test(u)?u:null;
+   }finally{clearTimeout(t)}
+  }catch{return undefined}
+  finally{odesliWaiting--}
+ });
+ // Next lookup at least 6.5 s later (Odesli allows ~10 requests per minute).
+ odesliChain=job.catch(()=>{}).then(()=>new Promise(r=>setTimeout(r,6500)));
+ return job;
+}
+async function albumLinks(artist,album){
+ const key="albumlink|"+normMusic(artist)+"|"+normMusic(album);
+ const mem=albumLinkMem.get(key);if(mem&&mem.until>Date.now())return mem.v;
+ let v=d1Enabled?await d1GetCacheValue(key).catch(()=>null):null;
+ const fresh=v&&(v.spotify||Date.now()-Number(v.at||0)<24*3600e3);
+ if(!fresh){
+  const hit=await findDeezerAlbum(artist,album,{sameArtist:true}).catch(()=>null);
+  const deezer=hit?.id?`https://www.deezer.com/album/${hit.id}`:(v?.deezer||null);
+  let spotify=v?.spotify||null;
+  if(deezer&&!spotify){const sp=await odesliSpotify(deezer);if(sp===undefined){v={deezer,spotify:null,at:0};albumLinkMem.set(key,{v,until:Date.now()+60e3});return v}spotify=sp}
+  v={deezer,spotify,at:Date.now()};
+  if(d1Enabled&&(deezer||spotify))d1SetCacheValue(key,v).catch(()=>{});
+ }
+ albumLinkMem.set(key,{v,until:Date.now()+6*3600e3});if(albumLinkMem.size>3000)albumLinkMem.delete(albumLinkMem.keys().next().value);
+ return v;
+}
+app.get("/api/music/album-links",async(req,res)=>{try{const artist=String(req.query.artist||"").trim().slice(0,120),album=String(req.query.album||"").trim().slice(0,160);if(!artist||!album)return res.status(400).json({error:"artist et album requis"});const v=await albumLinks(artist,album);res.json({deezer:v?.deezer||null,spotify:v?.spotify||null})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/music/album-tracks",async(req,res)=>{
  try{
   const artist=String(req.query.artist||"").trim(),album=String(req.query.album||"").trim();
@@ -220,14 +274,7 @@ app.get("/api/music/album-tracks",async(req,res)=>{
   const key="tracks|"+normMusic(artist)+"|"+normMusic(album);
   const cached=deezerPreviewCache.get(key);
   if(cached && cached.expires>Date.now()) return res.json(cached.data);
-  const ac=new AbortController(); const timer=setTimeout(()=>ac.abort(),8000);
-  const q=encodeURIComponent(`${artist} ${album}`);
-  const r=await fetch(`https://api.deezer.com/search/album?q=${q}&limit=25`,{signal:ac.signal,headers:{Accept:"application/json"}});
-  if(!r.ok)throw new Error(`Deezer HTTP ${r.status}`);
-  const d=await r.json();
-  const rows=Array.isArray(d?.data)?d.data:[]; const na=normMusic(artist),nb=normMusic(album);
-  const ranked=rows.map(a=>{const aa=normMusic(a?.artist?.name),tt=normMusic(a?.title);let score=0;if(aa===na)score+=8;else if(aa.includes(na)||na.includes(aa))score+=4;if(tt===nb)score+=10;else if(tt.includes(nb)||nb.includes(tt))score+=5;return {a,score};}).sort((a,b)=>b.score-a.score);
-  const hit=ranked.find(x=>x.a?.id&&x.score>=14)?.a || ranked.find(x=>x.a?.id&&x.score>=9)?.a;
+  const hit=await findDeezerAlbum(artist,album);
   if(!hit?.id){const data={ok:false,error:"Album introuvable"};deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});return res.json(data);}
   const tr=new AbortController(); const timer2=setTimeout(()=>tr.abort(),8000);
   const rr=await fetch(`https://api.deezer.com/album/${hit.id}/tracks?limit=100`,{signal:tr.signal,headers:{Accept:"application/json"}});
