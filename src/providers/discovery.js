@@ -500,7 +500,10 @@ const METAL_DISCOVERY_SOURCES=[
 
 function eventHasMetal(row){
  const hay=norm(`${row?.title||''} ${row?.details||''}`);
- const terms=['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock','doom','stoner','djent','grind','heavy metal','crossover','industrial metal','groove metal','technical death metal','punk hardcore','post-metal','mathcore','metallic hardcore','electronicore','folk metal','power metal','speed metal','sludge','gothic metal','symphonic metal'];
+ const terms=['metal','metalcore','deathcore','hardcore','death metal','black metal','thrash metal','nu metal','progressive metal','alternative metal','post-hardcore','hard rock','doom','stoner','djent','grind','heavy metal','crossover','industrial metal','groove metal','technical death metal','punk hardcore','post-metal','mathcore','metallic hardcore','electronicore','folk metal','power metal','speed metal','sludge','gothic metal','symphonic metal',
+  // Punk / Oi! / grunge / rock shows are listed on the metal agendas too (and are
+  // styles of the app): keep them (e.g. Syndrome 81, Oi! punk).
+  'punk','oi!',' oi ','street punk','crust','grunge','rock','screamo','emo'];
  return terms.some(t=>hay.includes(t));
 }
 
@@ -944,8 +947,13 @@ const SDM_REGIONS=[
 ].map(([slug,lat,lon])=>({slug,name:slug.replace(/-/g,' '),lat,lon,url:`https://www.sueurdemetal.com/timeline/${slug}`}));
 function sdmCity(c){return String(c||'').toLowerCase().replace(/(^|[\s\-'’])([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase()).replace(/(?<=.)\b(En|De|Du|Des|La|Le|Les|Sur|Sous|Et|Aux|Lès)\b(?=[\s\-])/g,w=>w.toLowerCase()).trim()}
 function parseSueurDeMetalText(text,region){
-  const lines=String(text||'').split(/\r?\n/).map(l=>stripHtml(l).replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/\[([^\]]*)\]\(([^)]*)\)/g,(m,t,u)=>t?`${t}⟦${u}⟧`:' ').replace(/[*#>_`|]+/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
   const rows=[],seen=new Set();const MONTH=Object.keys(FR_MONTHS).join('|');
+  // The relay can put several parts of a card on one line ("20:30 FNAC
+  // MARSEILLE (13)", "22 OCTOBRE 2026 ![affiche]…", "TITLE [GENRE] - SUPPORT"):
+  // split them back into one part per line before reading.
+  const splitRe=new RegExp(`(\\b\\d{1,2}(?:er)?\\s+(?:${MONTH})\\s+20\\d{2}\\b|\\b\\d{1,2}[:h]\\d{2}\\b|\\b(?:FNAC|PARTENAIRE)\\b|[A-ZÀ-Ý][A-ZÀ-Ý'’\\-\\. ]{1,58}\\s*\\((?:\\d{2}|2A|2B)\\))`,'gi');
+  const lines=String(text||'').split(/\r?\n/).map(l=>stripHtml(l).replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/\[([^\]]*)\]\(([^)]*)\)/g,(m,t,u)=>t?`${t}⟦${u}⟧`:' ').replace(/[*#>_`|]+/g,' ').replace(/\s+/g,' ').trim())
+   .flatMap(l=>l.replace(/\[[^\]⟦⟧]*\]/g,m=>m.replace(/\s[-–]\s/g,' / ')).replace(splitRe,'\n$1\n').replace(/\s+[-–•]\s+(?=[A-ZÀ-Ý0-9+])/g,'\n- ').split('\n')).map(l=>l.trim()).filter(Boolean);
   const one=new RegExp(`^(?:(?:lun|mar|mer|jeu|ven|sam|dim)[a-z.]*\\s+)?(\\d{1,2})(?:er)?\\s+(${MONTH})\\s+(20\\d{2})$`,'i');
   let date=null,cur=null;
   const flush=()=>{if(cur&&date&&cur.title&&cur.city){const title=[cur.title,...cur.support].join(' + ');const key=`${date}|${norm(cur.title)}|${norm(cur.city)}`;if(!seen.has(key)){seen.add(key);rows.push({id:`sdm-${date}-${norm(cur.title)}-${norm(cur.city)}`.slice(0,190),title,artist:cur.title,date,time:cur.time||'',venue:'',city:cur.city,dept:cur.dept||'',country:'France',url:cur.url||region.url,provider:'Sueur de Metal',metalDetected:true,isFestival:/festival|fest\b/i.test(title),details:`${cur.genre||''} · Source : Sueur de Metal`.replace(/^ · /,'')})}}cur=null};
@@ -956,7 +964,7 @@ function parseSueurDeMetalText(text,region){
     if(!m&&/^\d{1,2}$/.test(l)&&i+2<lines.length&&FR_MONTHS[lines[i+1].toLowerCase()]&&/^20\d{2}$/.test(lines[i+2])){m=[null,l,lines[i+1],lines[i+2]];i+=2}
     if(m){flush();const mo=FR_MONTHS[String(m[2]).toLowerCase()];date=`${m[3]}-${String(mo).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;continue}
     if(!date)continue;
-    const url=(l.match(/⟦(https?:\/\/[^⟧]*sueurdemetal[^⟧]*)⟧/i)||[])[1];l=l.replace(/⟦[^⟧]*⟧/g,'').trim();if(!l)continue;
+    const url=(l.match(/⟦(https?:\/\/[^⟧]*sueurdemetal[^⟧]*(?:concert|event)[^⟧]*)⟧/i)||[])[1];l=l.replace(/⟦[^⟧]*⟧/g,'').trim();if(!l)continue;
     const city=l.match(/^([A-Za-zÀ-ÿ'’\-\. ]{2,60})\s*\((\d{2}|2A|2B|\d{3})\)$/i);
     if(city){if(cur){cur.city=sdmCity(city[1]);cur.dept=city[2];flush()}continue}
     if(/^\d{1,2}[:h]\d{2}$/.test(l)){if(cur)cur.time=l.replace('h',':');continue}
