@@ -475,7 +475,10 @@ const METAL_DISCOVERY_SOURCES=[
   {slug:'toulouse',name:'Toulouse / Midi-Pyrénées',lat:43.6047,lon:1.4442},
   {slug:'marseille',name:'Marseille / PACA',lat:43.2965,lon:5.3698},
   {slug:'montpellier',name:'Montpellier / Languedoc-Roussillon',lat:43.6108,lon:3.8767},
-  {slug:'strasbourg',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
+  // "strasbourg" is not a Concerts-Metal region (it returned south-west shows):
+  // the Grand Est regional pages are lorraine.* and alsace.*.
+  {slug:'lorraine',name:'Nancy / Metz / Lorraine',lat:48.6921,lon:6.1844},
+  {slug:'alsace',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
   {slug:'grenoble',name:'Grenoble / Alpes',lat:45.1885,lon:5.7245}
 ];
 
