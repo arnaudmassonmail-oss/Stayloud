@@ -1,7 +1,7 @@
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor} from "./d1.js";
+import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
@@ -191,7 +191,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.80",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.81",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -392,6 +392,24 @@ app.post("/api/friends",requireAuth,async(req,res)=>{try{const name=String(req.b
 app.post("/api/friends/:id/accept",requireAuth,async(req,res)=>{try{const ok=await d1AcceptFriend(req.user.id,Number(req.params.id));if(!ok)return res.status(404).json({error:"Demande introuvable"});res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.delete("/api/friends/:id",requireAuth,async(req,res)=>{try{await d1RemoveFriend(req.user.id,Number(req.params.id));res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/friends/agenda",requireAuth,async(req,res)=>{try{const rows=await d1FriendsConcerts(req.user.id);res.json({items:rows.map(r=>({key:r.ckey,status:r.status,user:{id:Number(r.user_id),username:r.username},data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{}}))})}catch(e){res.status(502).json({error:e.message})}});
+// ---- Aide › Contact : messages to the administrator, read and answered in the app ----
+// Administrators: usernames in ADMIN_USERS (comma separated) on Render, or by
+// default the very first account created (the owner).
+let firstUserId=null;
+async function isAdmin(user){
+ const list=String(process.env.ADMIN_USERS||"").split(",").map(x=>x.trim().toLowerCase()).filter(Boolean);
+ if(list.length)return list.includes(String(user?.username||"").toLowerCase());
+ if(firstUserId==null)firstUserId=await d1FirstUserId().catch(()=>0);
+ return Number(user?.id)===Number(firstUserId);
+}
+async function requireAdmin(req,res,next){try{if(!(await isAdmin(req.user)))return res.status(403).json({error:"Réservé à l’administrateur"});next()}catch(e){res.status(502).json({error:e.message})}}
+app.get("/api/support/status",requireAuth,async(req,res)=>{try{const admin=await isAdmin(req.user);res.json({isAdmin:admin,...await d1SupportCounts(req.user.id,admin)})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/support",requireAuth,async(req,res)=>{try{const message=String(req.body?.message||"").trim(),subject=String(req.body?.subject||"").trim();if(message.length<3)return res.status(400).json({error:"Écris ton message"});if(await d1CountRecentSupport(req.user.id,new Date(Date.now()-3600e3).toISOString())>=5)return res.status(429).json({error:"Trop de messages en peu de temps, réessaie dans une heure"});await d1AddSupportMessage(req.user.id,subject,message);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/support/mine",requireAuth,async(req,res)=>{try{const rows=await d1MySupportMessages(req.user.id);await d1MarkRepliesSeen(req.user.id);res.json({items:rows})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/support/admin",requireAuth,requireAdmin,async(req,res)=>{try{res.json({items:await d1AllSupportMessages()})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/support/:id/read",requireAuth,requireAdmin,async(req,res)=>{try{await d1MarkSupportRead(req.params.id);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/support/:id/reply",requireAuth,requireAdmin,async(req,res)=>{try{const reply=String(req.body?.reply||"").trim();if(!reply)return res.status(400).json({error:"Réponse vide"});await d1ReplySupport(req.params.id,reply);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.delete("/api/support/:id",requireAuth,requireAdmin,async(req,res)=>{try{await d1DeleteSupport(req.params.id);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 // "Quoi de neuf" popup at app start: pending friend requests + concerts
 // friends marked since the popup was last closed (first time: last 7 days).
 // Only concerts are shared with friends; followed groups stay private.

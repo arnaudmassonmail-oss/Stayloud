@@ -137,7 +137,9 @@ export async function ensureD1Schema(){
       // When the user last closed the "Quoi de neuf chez tes amis" popup.
       `CREATE TABLE IF NOT EXISTS user_seen(user_id INTEGER PRIMARY KEY,friends_seen_at TEXT)`,
       // A band a user recommends to a friend ("Partager à un ami").
-      `CREATE TABLE IF NOT EXISTS band_shares(id INTEGER PRIMARY KEY AUTOINCREMENT,from_id INTEGER NOT NULL,to_id INTEGER NOT NULL,artist_json TEXT NOT NULL,message TEXT,created_at TEXT)`
+      `CREATE TABLE IF NOT EXISTS band_shares(id INTEGER PRIMARY KEY AUTOINCREMENT,from_id INTEGER NOT NULL,to_id INTEGER NOT NULL,artist_json TEXT NOT NULL,message TEXT,created_at TEXT)`,
+      // Help › Contact: messages to the administrator, answered in the app.
+      `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -428,4 +430,49 @@ export async function d1SetCacheValue(key,value){
   if(!d1ConfigStatus().configured)return;
   await ensureD1Schema();
   await query("INSERT INTO geo_cache(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",[String(key),JSON.stringify(value),now()]);
+}
+
+// ---- Help › Contact (support messages) ----
+export async function d1FirstUserId(){
+  await ensureD1Schema();
+  return Number((await query("SELECT MIN(id) AS id FROM users")).rows[0]?.id||0);
+}
+export async function d1AddSupportMessage(userId,subject,message){
+  await ensureD1Schema();
+  await query("INSERT INTO support_messages(user_id,subject,message,created_at) VALUES(?,?,?,?)",[Number(userId),String(subject||"").slice(0,120),String(message).slice(0,3000),now()]);
+}
+export async function d1CountRecentSupport(userId,sinceIso){
+  await ensureD1Schema();
+  return Number((await query("SELECT COUNT(*) AS n FROM support_messages WHERE user_id=? AND created_at>?",[Number(userId),String(sinceIso)])).rows[0]?.n||0);
+}
+export async function d1MySupportMessages(userId){
+  await ensureD1Schema();
+  return (await query("SELECT id,subject,message,created_at,reply,replied_at,reply_seen_at FROM support_messages WHERE user_id=? ORDER BY id DESC LIMIT 50",[Number(userId)])).rows;
+}
+export async function d1MarkRepliesSeen(userId){
+  await ensureD1Schema();
+  await query("UPDATE support_messages SET reply_seen_at=? WHERE user_id=? AND reply IS NOT NULL AND reply_seen_at IS NULL",[now(),Number(userId)]);
+}
+export async function d1AllSupportMessages(){
+  await ensureD1Schema();
+  return (await query("SELECT m.id,m.user_id,u.username,u.email,m.subject,m.message,m.created_at,m.read_at,m.reply,m.replied_at FROM support_messages m LEFT JOIN users u ON u.id=m.user_id ORDER BY m.id DESC LIMIT 200")).rows;
+}
+export async function d1SupportCounts(userId,isAdmin){
+  await ensureD1Schema();
+  const mine=Number((await query("SELECT COUNT(*) AS n FROM support_messages WHERE user_id=? AND reply IS NOT NULL AND reply_seen_at IS NULL",[Number(userId)])).rows[0]?.n||0);
+  const admin=isAdmin?Number((await query("SELECT COUNT(*) AS n FROM support_messages WHERE read_at IS NULL")).rows[0]?.n||0):0;
+  return {myUnreadReplies:mine,adminUnread:admin};
+}
+export async function d1MarkSupportRead(id){
+  await ensureD1Schema();
+  await query("UPDATE support_messages SET read_at=COALESCE(read_at,?) WHERE id=?",[now(),Number(id)]);
+}
+export async function d1ReplySupport(id,reply){
+  await ensureD1Schema();
+  const t=now();
+  await query("UPDATE support_messages SET reply=?,replied_at=?,reply_seen_at=NULL,read_at=COALESCE(read_at,?) WHERE id=?",[String(reply).slice(0,3000),t,t,Number(id)]);
+}
+export async function d1DeleteSupport(id){
+  await ensureD1Schema();
+  await query("DELETE FROM support_messages WHERE id=?",[Number(id)]);
 }
