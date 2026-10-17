@@ -512,6 +512,9 @@ async function cachedSourceRows(key,fetcher){
 async function firstWithRows(attempts,errs=null){
   try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){if(errs)errs.push(`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`);throw e}}))}catch{return null}
 }
+// Direct page fetches present themselves like a regular browser (Songkick answers
+// HTTP 406 to unknown clients).
+const BROWSER_HEADERS={Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'};
 const JINA_HEADERS=()=>process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{};
 async function fetchDiscoveryProxy(url,timeout=18000){
   const proxy=`https://r.jina.ai/${url}`;
@@ -609,7 +612,7 @@ async function fetchMetalRegionalSourceLive(source,errs=null){
  // than a normal browser, so the clean proxy and a direct fetch race.
  const r=await firstWithRows([
   async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseConcertsMetalHtml(text,url);if(!rows.length)rows=parseConcertsMetalText(text,url);return {source,rows,error:null,transport:'jina'}},
-  async()=>{const html=await fetchText(url,{headers:{Accept:'text/html'}},15000);return {source,rows:parseConcertsMetalHtml(html,url),error:null,transport:'direct'}}
+  async()=>{const html=await fetchText(url,{headers:BROWSER_HEADERS},15000);return {source,rows:parseConcertsMetalHtml(html,url),error:null,transport:'direct'}}
  ],errs);
  return r||{source,rows:[],error:new Error('no rows')};
 }
@@ -705,7 +708,7 @@ async function fetchBandsintownCityLive(city,lat=null,lon=null,errs=null){
   const url=`https://www.bandsintown.com/fr/c/${slug}-france/all-dates/genre/metal${suffix}`;
   const r=await firstWithRows([
     async()=>({rows:parseBandsintownMetalText(await fetchDiscoveryProxy(url,15000),city,url),url,transport:'jina'}),
-    async()=>({rows:parseBandsintownMetalText(await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},15000),city,url),url,transport:'direct'})
+    async()=>({rows:parseBandsintownMetalText(await fetchText(url,{headers:BROWSER_HEADERS},15000),city,url),url,transport:'direct'})
   ],errs);
   return r||{rows:[],url};
 }
@@ -875,7 +878,7 @@ async function fetchSongkickMetroLive(metro,year,errs=null){
   const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/${year}/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/${year}/genre/metal`];
   const r=await firstWithRows(urls.flatMap(url=>[
     async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);return {metro,rows,transport:'jina'}},
-    async()=>{const html=await fetchText(url,{headers:{Accept:'text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},12000);return {metro,rows:parseSongkickMetalHtml(html,metro),transport:'direct'}}
+    async()=>{const html=await fetchText(url,{headers:BROWSER_HEADERS},12000);return {metro,rows:parseSongkickMetalHtml(html,metro),transport:'direct'}}
   ]),errs);
   return r||{metro,rows:[]};
 }
