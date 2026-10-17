@@ -946,6 +946,8 @@ const SDM_REGIONS=[
   ['Provence-Alpes-Cote-d-Azur',43.2965,5.3698],['Rhone-Alpes',45.7640,4.8357]
 ].map(([slug,lat,lon])=>({slug,name:slug.replace(/-/g,' '),lat,lon,url:`https://www.sueurdemetal.com/timeline/${slug}`}));
 function sdmCity(c){return String(c||'').toLowerCase().replace(/(^|[\s\-'’])([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase()).replace(/(?<=.)\b(En|De|Du|Des|La|Le|Les|Sur|Sous|Et|Aux|Lès)\b(?=[\s\-])/g,w=>w.toLowerCase()).trim()}
+// Band names: all-capitals or all-lower-case → "Title Case"; mixed case kept.
+function sdmName(n){n=String(n||'').trim();return (n===n.toUpperCase()||n===n.toLowerCase())?sdmCity(n).replace(/\b(Ii|Iii|Iv|Vi|Xx)\b/g,x=>x.toUpperCase()):n}
 function parseSueurDeMetalText(text,region){
   const rows=[],seen=new Set();const MONTH=Object.keys(FR_MONTHS).join('|');
   // The relay can put several parts of a card on one line ("20:30 FNAC
@@ -970,10 +972,11 @@ function parseSueurDeMetalText(text,region){
     if(/^\d{1,2}[:h]\d{2}$/.test(l)){if(cur)cur.time=l.replace('h',':');continue}
     if(/^(fnac|partenaire|billetterie|ticket|complet|annul|report)/i.test(l))continue;
     const sup=l.match(/^[-–•]\s*(.+)$/);
-    if(sup){if(cur&&!/guest/i.test(sup[1]))cur.support.push(sdmCity(sup[1].replace(/\s*\[[^\]]*\]\s*$/,'').trim()));continue}
+    if(sup){if(cur&&!/guest/i.test(sup[1]))cur.support.push(sdmName(sup[1].replace(/\s*\[[^\]]*\]\s*$/,'').trim()));continue}
     // Headliner line: "GORGON [BLACK METAL]".
     const hd=l.match(/^(.{1,80}?)\s*(?:\[([^\]]{2,60})\])?$/);
-    if(hd&&(!cur||cur.city)&&/[A-Za-zÀ-ÿ]/.test(hd[1])&&hd[1]===hd[1].toUpperCase()){flush();cur={title:sdmCity(hd[1].trim()).replace(/\b(Ii|Iii|Iv)\b/g,x=>x.toUpperCase()),genre:hd[2]||'',support:[],url}}
+    // (the site may send names in lower case and only display them in capitals)
+    if(hd&&(!cur||cur.city)&&/[A-Za-zÀ-ÿ]/.test(hd[1])){flush();cur={title:sdmName(hd[1].trim()),genre:hd[2]||'',support:[],url}}
     else if(hd&&cur&&!cur.title){cur.title=hd[1]}
   }
   flush();return rows;
@@ -1030,15 +1033,27 @@ function venueTokens(v){return new Set(norm(v).replace(/[^a-z0-9]+/g,' ').split(
 function sameVenue(a,b){const A=venueTokens(a),B=venueTokens(b);if(!A.size||!B.size)return false;let n=0;for(const w of A)if(B.has(w))n++;return n/Math.min(A.size,B.size)>=0.8}
 function headliner(t){return norm(String(t||'').split(/\s\+\s|,|\s\/\s|\s-\s/)[0]).replace(/[^a-z0-9]+/g,' ').trim()}
 function sourceRank(x){const p=String(x?.provider||'').toLowerCase();return /concerts-metal/.test(p)?3:/bandsintown/.test(p)?3:/songkick/.test(p)?1:2}
-function sourceFamily(x){const p=String(x?.provider||'').toLowerCase();return /songkick/.test(p)?'sk':/bandsintown/.test(p)?'bi':/concerts-metal/.test(p)?'cm':p}
+function sourceFamily(x){const p=String(x?.provider||'').toLowerCase();return /songkick/.test(p)?'sk':/bandsintown/.test(p)?'bi':/concerts-metal/.test(p)?'cm':/sueur/.test(p)?'sdm':p}
+function placeKey(c){return norm(cleanPlaceName(c)).replace(/[^a-z0-9]+/g,' ').trim()}
+function billBands(t){return String(t||'').split(/\s\+\s|,|\s\/\s|\s-\s|\set\s/i).map(b=>norm(b).replace(/[^a-z0-9]+/g,' ').trim()).filter(b=>b.length>2)}
+function bandsOverlap(a,b){const A=billBands(a),B=billBands(b);return A.some(x=>B.some(y=>x===y||` ${x} `.startsWith(` ${y} `)||` ${y} `.startsWith(` ${x} `)))}
 function dedupeAcrossSources(rows){
   const out=[];
   for(const x of rows){
     const h=headliner(x.title),t=Date.parse(String(x.date).slice(0,10));
-    const i=out.findIndex(y=>sourceFamily(y)!==sourceFamily(x)&&headliner(y.title)===h&&h&&Math.abs(Date.parse(String(y.date).slice(0,10))-t)<=10*864e5&&sameVenue(y.venue,x.venue));
+    // Same show from two sources: same headliner (one name may carry extra words,
+    // "Syndrome 81 Oi!" / "syndrome 81"), close dates, and the same venue — or,
+    // when a source gives no venue (Sueur de Metal), the same date and city.
+    const i=out.findIndex(y=>{if(sourceFamily(y)===sourceFamily(x)||!h)return false;const dy=Date.parse(String(y.date).slice(0,10));
+      const hy=headliner(y.title),sameHead=hy===h||(hy&&(` ${h} `.startsWith(` ${hy} `)||` ${hy} `.startsWith(` ${h} `)));
+      if(sameHead&&sameVenue(y.venue,x.venue))return Math.abs(dy-t)<=10*864e5;
+      // Same day, same place (venue, or city when one source has no venue) and
+      // at least one band in common (bills are not always listed in the same order).
+      const samePlace=sameVenue(y.venue,x.venue)||((!x.venue||!y.venue)&&placeKey(x.city)===placeKey(y.city));
+      return dy===t&&samePlace&&(sameHead||bandsOverlap(x.title,y.title))});
     if(i<0){out.push(x);continue}
     const y=out[i];const keep=sourceRank(x)>sourceRank(y)?x:y;const other=keep===x?y:x;
-    out[i]={...keep,title:String(keep.title||'').length>=String(other.title||'').length?keep.title:other.title};
+    out[i]={...keep,venue:keep.venue||other.venue,time:keep.time||other.time,title:String(keep.title||'').length>=String(other.title||'').length?keep.title:other.title};
   }
   return out;
 }
