@@ -947,7 +947,7 @@ const SDM_REGIONS=[
 ].map(([slug,lat,lon])=>({slug,name:slug.replace(/-/g,' '),lat,lon,url:`https://www.sueurdemetal.com/timeline/${slug}`}));
 function sdmCity(c){return String(c||'').toLowerCase().replace(/(^|[\s\-'’])([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase()).replace(/(?<=.)\b(En|De|Du|Des|La|Le|Les|Sur|Sous|Et|Aux|Lès)\b(?=[\s\-])/g,w=>w.toLowerCase()).trim()}
 // Band names: all-capitals or all-lower-case → "Title Case"; mixed case kept.
-function sdmName(n){n=String(n||'').trim();return (n===n.toUpperCase()||n===n.toLowerCase())?sdmCity(n).replace(/\b(Ii|Iii|Iv|Vi|Xx)\b/g,x=>x.toUpperCase()):n}
+function sdmName(n){n=String(n||'').trim();n=(n===n.toUpperCase()||n===n.toLowerCase())?sdmCity(n).replace(/\b(Ii|Iii|Iv|Vi|Xx)\b/g,x=>x.toUpperCase()):n;return n.charAt(0).toUpperCase()+n.slice(1)}
 function parseSueurDeMetalText(text,region){
   const rows=[],seen=new Set();const MONTH=Object.keys(FR_MONTHS).join('|');
   // The relay can put several parts of a card on one line ("20:30 FNAC
@@ -1036,7 +1036,11 @@ function sourceRank(x){const p=String(x?.provider||'').toLowerCase();return /con
 function sourceFamily(x){const p=String(x?.provider||'').toLowerCase();return /songkick/.test(p)?'sk':/bandsintown/.test(p)?'bi':/concerts-metal/.test(p)?'cm':/sueur/.test(p)?'sdm':p}
 function placeKey(c){return norm(cleanPlaceName(c)).replace(/[^a-z0-9]+/g,' ').trim()}
 function billBands(t){return String(t||'').split(/\s\+\s|,|\s\/\s|\s-\s|\set\s/i).map(b=>norm(b).replace(/[^a-z0-9]+/g,' ').trim()).filter(b=>b.length>2)}
-function bandsOverlap(a,b){const A=billBands(a),B=billBands(b);return A.some(x=>B.some(y=>x===y||` ${x} `.startsWith(` ${y} `)||` ${y} `.startsWith(` ${x} `)))}
+function editDist(a,b){if(Math.abs(a.length-b.length)>2)return 9;const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+// Same band name, allowing extra words ("Michael Schenker" / "… Group") and
+// small typos ("Scheneker" / "Schenker").
+function sameBand(x,y){return x===y||` ${x} `.startsWith(` ${y} `)||` ${y} `.startsWith(` ${x} `)||(Math.min(x.length,y.length)>=8&&editDist(x,y)<=2)}
+function bandsOverlap(a,b){const A=billBands(a),B=billBands(b);return A.some(x=>B.some(y=>sameBand(x,y)))}
 function dedupeAcrossSources(rows){
   const out=[];
   for(const x of rows){
@@ -1049,12 +1053,19 @@ function dedupeAcrossSources(rows){
       if(sameHead&&sameVenue(y.venue,x.venue))return Math.abs(dy-t)<=10*864e5;
       // Same day, same place (venue, or city when one source has no venue) and
       // at least one band in common (bills are not always listed in the same order).
-      const samePlace=sameVenue(y.venue,x.venue)||((!x.venue||!y.venue)&&placeKey(x.city)===placeKey(y.city));
-      return dy===t&&samePlace&&(sameHead||bandsOverlap(x.title,y.title))});
+      const samePlace=sameVenue(y.venue,x.venue)||((!x.venue||!y.venue)&&placeKey(x.city)===placeKey(y.city))||(placeKey(x.city)&&placeKey(x.city)===placeKey(y.city)&&bandsOverlap(x.title,y.title));
+      // Songkick dates can be shifted onto a neighbouring show: within 10 days,
+      // the other source's date wins (Songkick has the lowest rank).
+      const sk=sourceFamily(x)==='sk'||sourceFamily(y)==='sk';
+      return (dy===t||(sk&&Math.abs(dy-t)<=10*864e5))&&samePlace&&(sameHead||bandsOverlap(x.title,y.title))});
     if(i<0){out.push(x);continue}
     const y=out[i];const keep=sourceRank(x)>sourceRank(y)?x:y;const other=keep===x?y:x;
-    out[i]={...keep,venue:keep.venue||other.venue,time:keep.time||other.time,title:String(keep.title||'').length>=String(other.title||'').length?keep.title:other.title};
+    out[i]={...keep,venue:keep.venue||other.venue,time:keep.time||other.time,title:billBands(other.title).length>billBands(keep.title).length?other.title:keep.title};
   }
+  // Songkick's agenda pages cannot be read reliably (dates shifted onto the
+  // next show): when another source covers the search, its own shows are not
+  // shown; Songkick stays as a fallback for places no other source covers.
+  if(out.some(x=>sourceFamily(x)!=='sk'))return out.filter(x=>sourceFamily(x)!=='sk');
   return out;
 }
 function discoverConcertsMetalScan(lat,lon,radiusKm,targetCityOverride=''){
