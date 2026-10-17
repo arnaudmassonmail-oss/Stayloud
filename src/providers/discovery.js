@@ -475,10 +475,10 @@ const METAL_DISCOVERY_SOURCES=[
   {slug:'toulouse',name:'Toulouse / Midi-Pyrénées',lat:43.6047,lon:1.4442},
   {slug:'marseille',name:'Marseille / PACA',lat:43.2965,lon:5.3698},
   {slug:'montpellier',name:'Montpellier / Languedoc-Roussillon',lat:43.6108,lon:3.8767},
-  // "strasbourg" is not a Concerts-Metal region (it returned south-west shows):
-  // the Grand Est regional pages are lorraine.* and alsace.*.
+  // "strasbourg" is not a Concerts-Metal region (it returned south-west shows).
+  // Grand Est: lorraine.concerts-metal.com and the Alsace regional page.
   {slug:'lorraine',name:'Nancy / Metz / Lorraine',lat:48.6921,lon:6.1844},
-  {slug:'alsace',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
+  {slug:'alsace',url:'https://en.concerts-metal.com/FR-A__Alsace',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
   {slug:'grenoble',name:'Grenoble / Alpes',lat:45.1885,lon:5.7245}
 ];
 
@@ -608,9 +608,11 @@ async function discoverManualCityConcerts(city){
   return {city:requested,items,sources};
 }
 
+// Regional page: a subdomain (nantes.concerts-metal.com) or an explicit URL.
+function metalSourceUrl(source){return source.url||`https://${source.slug}.concerts-metal.com/`}
 function fetchMetalRegionalSource(source,errs=null){return cachedSourceRows('cm:'+source.slug,()=>fetchMetalRegionalSourceLive(source,errs)).then(r=>({...r,source}))}
 async function fetchMetalRegionalSourceLive(source,errs=null){
- const url=`https://${source.slug}.concerts-metal.com/`;
+ const url=metalSourceUrl(source);
  // Render/free hosts can receive a different response from the public site
  // than a normal browser, so the clean proxy and a direct fetch race.
  const r=await firstWithRows([
@@ -997,7 +999,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
       if(!row?.date)continue;
       if(new Date(String(row.date).slice(0,10))<new Date(new Date().toISOString().slice(0,10)))continue;
       if(!eventHasMetal(row))continue;
-      all.push({...row,sourceRegion:rr.source.name,sourceUrl:`https://${rr.source.slug}.concerts-metal.com/`});
+      all.push({...row,sourceRegion:rr.source.name,sourceUrl:metalSourceUrl(rr.source)});
     }}
   }catch{}
 
