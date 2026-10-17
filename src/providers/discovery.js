@@ -803,17 +803,34 @@ function parseSongkickMetalHtml(html,metro){
   }
   return rows;
 }
+// Show title above a venue line: the linked show name, not a support act listed
+// between them ("Tribulation et Soen" / "Vulkan" / venue).
+function skTitleAbove(lines,j){for(let k=j-1;k>=Math.max(0,j-3);k--){const m=String(lines[k]||'').match(/^[-*•]?\s*\[([^\]]+)\]\([^)]*\/concerts\//i);if(m)return m[1].trim()}return j-1>=0?String(lines[j-1]).replace(/^[-*•]\s*/,'').replace(/^\[[^]]+\]\([^)]*\)$/,'').trim():''}
 function parseSongkickMetalText(text,metro){
   const src=String(text||''); const rows=[]; const seen=new Set();
   const lines=src.split(/\r?\n/).map(x=>stripHtml(x).replace(/\s+/g,' ').trim()).filter(Boolean);
-  const add=(date,title,venue,city)=>{const row=songkickRow(metro,date,title,venue,city);if(!row)return;const key=`${row.date}|${norm(row.title)}|${norm(row.venue)}|${norm(row.city)}`;if(seen.has(key))return;seen.add(key);rows.push(row)};
+  const unlink=v=>String(v||'').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1').replace(/\]\([^)]*\)/g,'').replace(/^\[/,'').trim();
+  const add=(date,title,venue,city)=>{const row=songkickRow(metro,date,unlink(title),unlink(venue),unlink(city));if(!row)return;const key=`${row.date}|${norm(row.title)}|${norm(row.venue)}|${norm(row.city)}`;if(seen.has(key))return;seen.add(key);rows.push(row)};
   // Layout detection: date headings first (date, then its shows) or each show
   // followed by its date. Reading one layout with the other's rule shifts
   // every show onto a neighbouring date.
   const rawLines=src.split(/\r?\n/);
+  // The first lines are not enough (a "popular concerts" block can put a show
+  // link before the first date heading): vote on every show. Date headings
+  // first = a date appears between the previous show and this one.
+  const isEv=l=>/^[-*]?\s*\[[^\]]+\]\([^)]+\/concerts\//i.test(l);
+  const evIdx=[];for(let i=0;i<rawLines.length;i++)if(isEv(String(rawLines[i]||'')))evIdx.push(i);
+  let above=0,below=0;
+  for(let k=0;k<evIdx.length;k++){
+    const from=k?evIdx[k-1]+1:0,to=k<evIdx.length-1?evIdx[k+1]:lines.length;
+    let a=false,b=false;
+    for(let j=from;j<evIdx[k];j++)if(parseSongkickDate(lines[j]||'')){a=true;break}
+    for(let j=evIdx[k]+1;j<to;j++)if(parseSongkickDate(lines[j]||'')){b=true;break}
+    if(a&&!b)above++;else if(b&&!a)below++;
+  }
   const firstDateIdx=lines.findIndex(l=>parseSongkickDate(l));
-  const firstEventIdx=rawLines.findIndex(l=>/^[-*]?\s*\[[^\]]+\]\([^)]+\/concerts\//i.test(l));
-  const dateFirst=firstDateIdx>=0&&firstEventIdx>=0&&firstDateIdx<firstEventIdx;
+  const firstEventIdx=evIdx.length?evIdx[0]:-1;
+  const dateFirst=above||below?above>=below:(firstDateIdx>=0&&firstEventIdx>=0&&firstDateIdx<firstEventIdx);
   // Layout "title / venue, city, France / date".
   if(!dateFirst)for(let i=0;i<lines.length;i++){
     const date=parseSongkickDate(lines[i]); if(!date)continue;
@@ -821,9 +838,9 @@ function parseSongkickMetalText(text,metro){
     for(let j=i-1;j>=Math.max(0,i-3);j--){
       const line=lines[j].replace(/^[-*•]\s*/,'').trim();
       const vm=line.match(/^(?:\[)?(.+?)(?:\])?\s*,\s*([^,]+?)\s*,\s*France$/i);
-      if(vm){venue=vm[1].replace(/^\[[^]]+\]\([^)]*\)$/,'').trim();city=vm[2].trim();if(j-1>=0)title=lines[j-1].replace(/^[-*•]\s*/,'').replace(/^\[[^]]+\]\([^)]*\)$/,'').trim();break;}
+      if(vm){venue=vm[1].replace(/^\[[^]]+\]\([^)]*\)$/,'').trim();city=vm[2].trim();title=skTitleAbove(lines,j);break;}
       const vm2=line.match(/^(.+?)\s*,\s*([^,]+?)\s*,\s*France$/i);
-      if(vm2){venue=vm2[1].trim();city=vm2[2].trim();if(j-1>=0)title=lines[j-1].replace(/^[-*•]\s*/,'').trim();break;}
+      if(vm2){venue=vm2[1].trim();city=vm2[2].trim();title=skTitleAbove(lines,j);break;}
     }
     if(title&&venue&&city)add(date,title,venue,city);
   }
@@ -838,7 +855,7 @@ function parseSongkickMetalText(text,metro){
     for(let j=i+1;j<Math.min(lines.length,i+8);j++){
       const d=dateFirst?null:parseSongkickDate(lines[j]);if(d)date=d;
       if(dateFirst&&parseSongkickDate(lines[j]))break;
-      const vm=lines[j].match(/^[-*]?\s*(?:\[([^\]]+)\]\([^)]*\/venues\/[^)]*\)|([^,]+))\s*,\s*([^,]+)\s*,\s*France$/i);
+      const vm=lines[j].match(/^[-*]?\s*(?:\[([^\]]+)\]\([^)]*\/venues\/[^)]*\)|(.+?))\s*,\s*([^,]+)\s*,\s*France$/i);
       if(vm){venue=(vm[1]||vm[2]||'').trim();city=(vm[3]||'').trim();}
       if(date&&venue&&city)break;
     }
@@ -850,7 +867,7 @@ function parseSongkickMetalText(text,metro){
 // Songkick agendas are per calendar year: the current one, plus next year
 // from July on (the app shows the next 6 months).
 function songkickYears(){const d=new Date(),y=d.getFullYear();return d.getMonth()>=6?[y,y+1]:[y]}
-function fetchSongkickMetro(metro,errs=null){const years=songkickYears();return cachedSourceRows(`sk:${metro.slug}:${years.join('-')}`,async()=>{
+function fetchSongkickMetro(metro,errs=null){const years=songkickYears();return cachedSourceRows(`sk2:${metro.slug}:${years.join('-')}`,async()=>{
   const parts=await Promise.all(years.map(y=>fetchSongkickMetroLive(metro,y,errs)));
   return {metro,rows:parts.flatMap(r=>r.rows)};
 }).then(r=>({...r,metro}))}
