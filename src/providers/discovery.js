@@ -479,6 +479,22 @@ const METAL_DISCOVERY_SOURCES=[
   // Grand Est: lorraine.concerts-metal.com and the Alsace regional page.
   {slug:'lorraine',name:'Nancy / Metz / Lorraine',lat:48.6921,lon:6.1844},
   {slug:'alsace',url:'https://en.concerts-metal.com/FR-A__Alsace',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
+  // Other regions use the site's region letters (old French region codes):
+  // FR-A Alsace, FR-C Auvergne, FR-D Bourgogne, FR-G Champagne-Ardenne,
+  // FR-S Picardie, FR-T Poitou-Charentes (links checked by the owner), and by
+  // the same code list FR-F Centre, FR-H Corse, FR-I Franche-Comté,
+  // FR-L Limousin, FR-P Basse-Normandie, FR-Q Haute-Normandie.
+  {slug:'auvergne',url:'https://en.concerts-metal.com/FR-C__Auvergne',name:'Clermont-Ferrand / Auvergne',lat:45.7772,lon:3.0870},
+  {slug:'bourgogne',url:'https://en.concerts-metal.com/FR-D__Bourgogne',name:'Dijon / Bourgogne',lat:47.3220,lon:5.0415},
+  {slug:'champagne',url:'https://en.concerts-metal.com/next_FR-G_p1.html',name:'Reims / Champagne-Ardenne',lat:49.2583,lon:4.0317},
+  {slug:'picardie',url:'https://en.concerts-metal.com/next_FR-S_p1.html',name:'Amiens / Picardie',lat:49.8941,lon:2.2958},
+  {slug:'poitou',url:'https://en.concerts-metal.com/next_FR-T_p1.html',name:'Poitiers / Poitou-Charentes',lat:46.5802,lon:0.3404},
+  {slug:'centre',url:'https://en.concerts-metal.com/next_FR-F_p1.html',name:'Tours / Orléans / Centre',lat:47.5861,lon:1.3359},
+  {slug:'corse',url:'https://en.concerts-metal.com/next_FR-H_p1.html',name:'Corse',lat:42.0396,lon:9.0129},
+  {slug:'franche-comte',url:'https://en.concerts-metal.com/next_FR-I_p1.html',name:'Besançon / Franche-Comté',lat:47.2378,lon:6.0241},
+  {slug:'limousin',url:'https://en.concerts-metal.com/next_FR-L_p1.html',name:'Limoges / Limousin',lat:45.8336,lon:1.2611},
+  {slug:'basse-normandie',url:'https://en.concerts-metal.com/next_FR-P_p1.html',name:'Caen / Basse-Normandie',lat:49.1829,lon:-0.3707},
+  {slug:'haute-normandie',url:'https://en.concerts-metal.com/next_FR-Q_p1.html',name:'Rouen / Haute-Normandie',lat:49.4432,lon:1.0993},
   {slug:'grenoble',name:'Grenoble / Alpes',lat:45.1885,lon:5.7245}
 ];
 
