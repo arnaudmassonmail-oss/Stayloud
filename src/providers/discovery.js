@@ -252,7 +252,7 @@ const DISCOVER_FALLBACK={
   'Post-Hardcore':[['Holding Absence','Post-Hardcore'],['Static Dress','Post-Hardcore'],['Thornhill','Post-Hardcore']],
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
-export {discoverManualCityConcerts,splitBandsFromGenres,dedupeAcrossSources,parseSongkickMetalText};
+export {discoverManualCityConcerts,splitBandsFromGenres,dedupeAcrossSources,parseSongkickMetalText,parseSueurDeMetalText};
 // Concerts of the user's own bands (from "Mes groupes") that fall inside the
 // searched radius are added to the city / near-me lists. When the same show is
 // already listed (same date and venue), the band is added to its title instead
@@ -475,7 +475,26 @@ const METAL_DISCOVERY_SOURCES=[
   {slug:'toulouse',name:'Toulouse / Midi-Pyrénées',lat:43.6047,lon:1.4442},
   {slug:'marseille',name:'Marseille / PACA',lat:43.2965,lon:5.3698},
   {slug:'montpellier',name:'Montpellier / Languedoc-Roussillon',lat:43.6108,lon:3.8767},
-  {slug:'strasbourg',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
+  // "strasbourg" is not a Concerts-Metal region (it returned south-west shows).
+  // Grand Est: lorraine.concerts-metal.com and the Alsace regional page.
+  {slug:'lorraine',name:'Nancy / Metz / Lorraine',lat:48.6921,lon:6.1844},
+  {slug:'alsace',url:'https://en.concerts-metal.com/FR-A__Alsace',name:'Strasbourg / Alsace',lat:48.5734,lon:7.7521},
+  // Other regions use the site's region letters (old French region codes):
+  // FR-A Alsace, FR-C Auvergne, FR-D Bourgogne, FR-G Champagne-Ardenne,
+  // FR-S Picardie, FR-T Poitou-Charentes (links checked by the owner), and by
+  // the same code list FR-F Centre, FR-H Corse, FR-I Franche-Comté,
+  // FR-L Limousin, FR-P Basse-Normandie, FR-Q Haute-Normandie.
+  {slug:'auvergne',url:'https://en.concerts-metal.com/FR-C__Auvergne',name:'Clermont-Ferrand / Auvergne',lat:45.7772,lon:3.0870},
+  {slug:'bourgogne',url:'https://en.concerts-metal.com/FR-D__Bourgogne',name:'Dijon / Bourgogne',lat:47.3220,lon:5.0415},
+  {slug:'champagne',url:'https://en.concerts-metal.com/next_FR-G_p1.html',name:'Reims / Champagne-Ardenne',lat:49.2583,lon:4.0317},
+  {slug:'picardie',url:'https://en.concerts-metal.com/next_FR-S_p1.html',name:'Amiens / Picardie',lat:49.8941,lon:2.2958},
+  {slug:'poitou',url:'https://en.concerts-metal.com/next_FR-T_p1.html',name:'Poitiers / Poitou-Charentes',lat:46.5802,lon:0.3404},
+  {slug:'centre',url:'https://en.concerts-metal.com/next_FR-F_p1.html',name:'Tours / Orléans / Centre',lat:47.5861,lon:1.3359},
+  {slug:'corse',url:'https://en.concerts-metal.com/next_FR-H_p1.html',name:'Corse',lat:42.0396,lon:9.0129},
+  {slug:'franche-comte',url:'https://en.concerts-metal.com/next_FR-I_p1.html',name:'Besançon / Franche-Comté',lat:47.2378,lon:6.0241},
+  {slug:'limousin',url:'https://en.concerts-metal.com/next_FR-L_p1.html',name:'Limoges / Limousin',lat:45.8336,lon:1.2611},
+  {slug:'basse-normandie',url:'https://en.concerts-metal.com/next_FR-P_p1.html',name:'Caen / Basse-Normandie',lat:49.1829,lon:-0.3707},
+  {slug:'haute-normandie',url:'https://en.concerts-metal.com/next_FR-Q_p1.html',name:'Rouen / Haute-Normandie',lat:49.4432,lon:1.0993},
   {slug:'grenoble',name:'Grenoble / Alpes',lat:45.1885,lon:5.7245}
 ];
 
@@ -605,9 +624,11 @@ async function discoverManualCityConcerts(city){
   return {city:requested,items,sources};
 }
 
+// Regional page: a subdomain (nantes.concerts-metal.com) or an explicit URL.
+function metalSourceUrl(source){return source.url||`https://${source.slug}.concerts-metal.com/`}
 function fetchMetalRegionalSource(source,errs=null){return cachedSourceRows('cm:'+source.slug,()=>fetchMetalRegionalSourceLive(source,errs)).then(r=>({...r,source}))}
 async function fetchMetalRegionalSourceLive(source,errs=null){
- const url=`https://${source.slug}.concerts-metal.com/`;
+ const url=metalSourceUrl(source);
  // Render/free hosts can receive a different response from the public site
  // than a normal browser, so the clean proxy and a direct fetch race.
  const r=await firstWithRows([
@@ -908,6 +929,69 @@ async function discoverSongkickMetal(lat,lon,radiusKm,diag={}){
   return [...unique.values()].sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
 }
 
+
+// ---- Sueur de Metal (sueurdemetal.com/timeline/<Région>) ----
+// Each concert card: date block ("24 OCTOBRE 2026", sometimes on 3 lines),
+// headliner + "[GENRE]", support acts on lines starting with "- ", the time,
+// then the city with its département: "FRÉJUS (83)". No venue on the card.
+const SDM_REGIONS=[
+  ['Alsace',48.5734,7.7521],['Aquitaine',44.8378,-0.5792],['Auvergne',45.7772,3.0870],['Basse-Normandie',49.1829,-0.3707],
+  ['Bourgogne',47.3220,5.0415],['Bretagne',48.1173,-1.6778],['Centre',47.5861,1.3359],['Champagne-Ardenne',49.2583,4.0317],
+  ['Corse',42.0396,9.0129],['Franche-Comte',47.2378,6.0241],['Haute-Normandie',49.4432,1.0993],['Ile-de-France',48.8566,2.3522],
+  ['Languedoc-Roussillon',43.6108,3.8767],['Limousin',45.8336,1.2611],['Lorraine',48.6921,6.1844],['Midi-Pyrenees',43.6047,1.4442],
+  ['Nord-Pas-de-Calais',50.6292,3.0573],['Pays-de-la-Loire',47.2184,-1.5536],['Picardie',49.8941,2.2958],['Poitou-Charentes',46.5802,0.3404],
+  ['Provence-Alpes-Cote-d-Azur',43.2965,5.3698],['Rhone-Alpes',45.7640,4.8357]
+].map(([slug,lat,lon])=>({slug,name:slug.replace(/-/g,' '),lat,lon,url:`https://www.sueurdemetal.com/timeline/${slug}`}));
+function sdmCity(c){return String(c||'').toLowerCase().replace(/(^|[\s\-'’])([a-zà-ÿ])/g,(m,a,b)=>a+b.toUpperCase()).replace(/(?<=.)\b(En|De|Du|Des|La|Le|Les|Sur|Sous|Et|Aux|Lès)\b(?=[\s\-])/g,w=>w.toLowerCase()).trim()}
+function parseSueurDeMetalText(text,region){
+  const lines=String(text||'').split(/\r?\n/).map(l=>stripHtml(l).replace(/!\[[^\]]*\]\([^)]*\)/g,' ').replace(/\[([^\]]*)\]\(([^)]*)\)/g,(m,t,u)=>t?`${t}⟦${u}⟧`:' ').replace(/[*#>_`|]+/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+  const rows=[],seen=new Set();const MONTH=Object.keys(FR_MONTHS).join('|');
+  const one=new RegExp(`^(?:(?:lun|mar|mer|jeu|ven|sam|dim)[a-z.]*\\s+)?(\\d{1,2})(?:er)?\\s+(${MONTH})\\s+(20\\d{2})$`,'i');
+  let date=null,cur=null;
+  const flush=()=>{if(cur&&date&&cur.title&&cur.city){const title=[cur.title,...cur.support].join(' + ');const key=`${date}|${norm(cur.title)}|${norm(cur.city)}`;if(!seen.has(key)){seen.add(key);rows.push({id:`sdm-${date}-${norm(cur.title)}-${norm(cur.city)}`.slice(0,190),title,artist:cur.title,date,time:cur.time||'',venue:'',city:cur.city,dept:cur.dept||'',country:'France',url:cur.url||region.url,provider:'Sueur de Metal',metalDetected:true,isFestival:/festival|fest\b/i.test(title),details:`${cur.genre||''} · Source : Sueur de Metal`.replace(/^ · /,'')})}}cur=null};
+  for(let i=0;i<lines.length;i++){
+    let l=lines[i];
+    // Date: one line, or day / month / year on three lines.
+    let m=l.replace(/⟦[^⟧]*⟧/g,'').match(one);
+    if(!m&&/^\d{1,2}$/.test(l)&&i+2<lines.length&&FR_MONTHS[lines[i+1].toLowerCase()]&&/^20\d{2}$/.test(lines[i+2])){m=[null,l,lines[i+1],lines[i+2]];i+=2}
+    if(m){flush();const mo=FR_MONTHS[String(m[2]).toLowerCase()];date=`${m[3]}-${String(mo).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;continue}
+    if(!date)continue;
+    const url=(l.match(/⟦(https?:\/\/[^⟧]*sueurdemetal[^⟧]*)⟧/i)||[])[1];l=l.replace(/⟦[^⟧]*⟧/g,'').trim();if(!l)continue;
+    const city=l.match(/^([A-Za-zÀ-ÿ'’\-\. ]{2,60})\s*\((\d{2}|2A|2B|\d{3})\)$/i);
+    if(city){if(cur){cur.city=sdmCity(city[1]);cur.dept=city[2];flush()}continue}
+    if(/^\d{1,2}[:h]\d{2}$/.test(l)){if(cur)cur.time=l.replace('h',':');continue}
+    if(/^(fnac|partenaire|billetterie|ticket|complet|annul|report)/i.test(l))continue;
+    const sup=l.match(/^[-–•]\s*(.+)$/);
+    if(sup){if(cur&&!/guest/i.test(sup[1]))cur.support.push(sdmCity(sup[1].replace(/\s*\[[^\]]*\]\s*$/,'').trim()));continue}
+    // Headliner line: "GORGON [BLACK METAL]".
+    const hd=l.match(/^(.{1,80}?)\s*(?:\[([^\]]{2,60})\])?$/);
+    if(hd&&(!cur||cur.city)&&/[A-Za-zÀ-ÿ]/.test(hd[1])&&hd[1]===hd[1].toUpperCase()){flush();cur={title:sdmCity(hd[1].trim()).replace(/\b(Ii|Iii|Iv)\b/g,x=>x.toUpperCase()),genre:hd[2]||'',support:[],url}}
+    else if(hd&&cur&&!cur.title){cur.title=hd[1]}
+  }
+  flush();return rows;
+}
+async function fetchSueurDeMetalLive(region,errs=null){
+  const r=await firstWithRows([
+    async()=>({region,rows:parseSueurDeMetalText(await fetchDiscoveryProxy(region.url,15000),region),transport:'jina'}),
+    async()=>({region,rows:parseSueurDeMetalText(String(await fetchText(region.url,{headers:BROWSER_HEADERS},15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'direct'})
+  ],errs);
+  return r||{region,rows:[]};
+}
+function fetchSueurDeMetal(region,errs=null){return cachedSourceRows('sdm:'+region.slug,()=>fetchSueurDeMetalLive(region,errs)).then(r=>({...r,region}))}
+async function discoverSueurDeMetal(lat,lon,radiusKm,diag={}){
+  const selected=SDM_REGIONS.map(r=>({...r,distance:distanceKm(lat,lon,r.lat,r.lon)})).sort((a,b)=>a.distance-b.distance).filter((r,i)=>i===0||r.distance<=Math.max(radiusKm+150,200)).slice(0,2);
+  const errs=[];const results=await Promise.all(selected.map(r=>fetchSueurDeMetal(r,errs)));
+  diag.raw=results.reduce((n,r)=>n+r.rows.length,0);diag.errors=errs;
+  const today=new Date().toISOString().slice(0,10);const all=results.flatMap(r=>r.rows).filter(x=>x.date>=today);
+  const cityCoords=new Map();
+  for(const c of [...new Set(all.map(x=>norm(x.city)).filter(Boolean))]){
+    const direct=REGIONAL_CITY_COORDS[Object.keys(REGIONAL_CITY_COORDS).find(k=>norm(k)===c)];
+    if(direct)cityCoords.set(c,{lat:direct[0],lon:direct[1]});else{const g=await geocodeCity(c,'France');if(g)cityCoords.set(c,g)}
+  }
+  const located=[];for(const row of all){const p=cityCoords.get(norm(row.city));if(p)located.push({...row,_place:{coordinates:{latitude:p.lat,longitude:p.lon}}})}
+  return withDistance(located,lat,lon,radiusKm);
+}
+
 // Concerts and festivals come from the same scan; the browser asks for both at
 // once, so share one in-flight run and keep its result for a few minutes.
 const scanCache=new Map(); const SCAN_TTL=20*60*1000;
@@ -969,10 +1053,11 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const all=[];
   // The three sources are independent: query them in parallel.
   // 1) Bandsintown city Metal agenda: broad coverage and a public city/genre page.
-  const biDiag={raw:0,errors:[]},skDiag={raw:0,errors:[]},cmErrs=[];let cmRaw=0,cmRegions=[];
+  const biDiag={raw:0,errors:[]},skDiag={raw:0,errors:[]},sdmDiag={raw:0,errors:[]},cmErrs=[];let cmRaw=0,cmRegions=[];
   const bandsintownJob=effectiveCity?discoverBandsintownMetal(effectiveCity,lat,lon,radiusKm,biDiag).catch(e=>{biDiag.errors.push(fetchErrorLabel(e));return []}):Promise.resolve([]);
   // 2) Songkick city/metro Metal agenda: second independent nationwide source.
   const songkickJob=discoverSongkickMetal(lat,lon,radiusKm,skDiag).catch(e=>{skDiag.errors.push(fetchErrorLabel(e));return []});
+  const sdmJob=discoverSueurDeMetal(lat,lon,radiusKm,sdmDiag).catch(e=>{sdmDiag.errors.push(fetchErrorLabel(e));return []});
 
   // 3) Specialist Concerts-Metal regional feed: keep it because it is especially
   // rich for local French metal shows. Force the region containing the target city.
@@ -994,20 +1079,21 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
       if(!row?.date)continue;
       if(new Date(String(row.date).slice(0,10))<new Date(new Date().toISOString().slice(0,10)))continue;
       if(!eventHasMetal(row))continue;
-      all.push({...row,sourceRegion:rr.source.name,sourceUrl:`https://${rr.source.slug}.concerts-metal.com/`});
+      all.push({...row,sourceRegion:rr.source.name,sourceUrl:metalSourceUrl(rr.source)});
     }}
   }catch{}
 
-  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob;
+  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob,sdmRows=await sdmJob;
   // Rows each source returned before the distance filter (shown when nothing is found).
   // Raw rows per source (before the distance filter) and why a source failed.
   const uniq=a=>[...new Set(a)].slice(0,3);
   const sources={
     bandsintown:{raw:biDiag.raw,kept:biRows.length,located:biDiag.located??null,errors:biDiag.raw?[]:uniq(biDiag.errors)},
     songkick:{raw:skDiag.raw,kept:skRows.length,errors:skDiag.raw?[]:uniq(skDiag.errors)},
+    sueurDeMetal:{raw:sdmDiag.raw,kept:sdmRows.length,errors:sdmDiag.raw?[]:uniq(sdmDiag.errors)},
     concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs),regions:cmRegions}
   };
-  all.push(...biRows,...skRows);
+  all.push(...biRows,...skRows,...sdmRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const placeDiag={};
   const filtered=await withDistance(dated,lat,lon,radiusKm,placeDiag);
