@@ -138,6 +138,8 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS user_seen(user_id INTEGER PRIMARY KEY,friends_seen_at TEXT)`,
       // A band a user recommends to a friend ("Partager à un ami").
       `CREATE TABLE IF NOT EXISTS band_shares(id INTEGER PRIMARY KEY AUTOINCREMENT,from_id INTEGER NOT NULL,to_id INTEGER NOT NULL,artist_json TEXT NOT NULL,message TEXT,created_at TEXT)`,
+      // Shares a recipient removed from his history (the share itself stays for the sender).
+      `CREATE TABLE IF NOT EXISTS share_hidden(user_id INTEGER NOT NULL,share_id INTEGER NOT NULL,hidden_at TEXT,PRIMARY KEY(user_id,share_id))`,
       // Help › Contact: messages to the administrator, answered in the app.
       `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`
     ];
@@ -417,7 +419,7 @@ export async function d1ShareBand(fromId,toIds,artist,message){
 }
 export async function d1SharesFor(userId,since){
   await ensureD1Schema();
-  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.created_at>? ORDER BY s.created_at DESC LIMIT 30",[Number(userId),String(since)])).rows;
+  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.created_at>? AND s.id NOT IN (SELECT share_id FROM share_hidden WHERE user_id=?) ORDER BY s.created_at DESC LIMIT 30",[Number(userId),String(since),Number(userId)])).rows;
 }
 // Small key/value cache (stored in geo_cache) for album streaming links.
 export async function d1GetCacheValue(key){
@@ -475,4 +477,13 @@ export async function d1ReplySupport(id,reply){
 export async function d1DeleteSupport(id){
   await ensureD1Schema();
   await query("DELETE FROM support_messages WHERE id=?",[Number(id)]);
+}
+// History of shares received ("Partages reçus"), newest first.
+export async function d1SharesHistory(userId){
+  await ensureD1Schema();
+  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.id NOT IN (SELECT share_id FROM share_hidden WHERE user_id=?) ORDER BY s.created_at DESC LIMIT 200",[Number(userId),Number(userId)])).rows;
+}
+export async function d1HideShare(userId,shareId){
+  await ensureD1Schema();
+  await query("INSERT OR IGNORE INTO share_hidden(user_id,share_id,hidden_at) VALUES(?,?,?)",[Number(userId),Number(shareId),now()]);
 }
