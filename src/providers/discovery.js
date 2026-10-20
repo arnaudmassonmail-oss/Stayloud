@@ -273,6 +273,25 @@ export async function mergeFollowedConcerts(items,followed,lat,lon,radiusKm){
   }
   return list.sort((a,b)=>String(a.date||'').slice(0,10).localeCompare(String(b.date||'').slice(0,10))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
 }
+// Concerts members reported ("Signaler un concert") and the admin approved:
+// added to the lists inside the radius (no radius when lat/lon are not
+// numbers: city-only list), unless the same show is already listed.
+export function mergeCommunityConcerts(items,rows,lat,lon,radiusKm){
+  const list=[...(items||[])];if(!rows?.length)return list;
+  const venueKey=v=>norm(cleanPlaceName(v)).replace(/^(le|la|les|l)\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
+  const geo=Number.isFinite(lat)&&Number.isFinite(lon);
+  for(const c of rows){
+    const day=String(c.date).slice(0,10);let dist=null;
+    if(geo){if(!Number.isFinite(Number(c.lat))||!Number.isFinite(Number(c.lon)))continue;dist=distanceKm(lat,lon,Number(c.lat),Number(c.lon));if(dist>radiusKm)continue}
+    const bands=String(c.bands||'').split(/\s*[,+\/]\s*|\s+-\s+/).map(x=>x.trim()).filter(Boolean);
+    const title=String(c.title||'').trim()||bands.join(' + ');
+    const dup=list.some(x=>String(x.date||'').slice(0,10)===day&&((c.venue&&x.venue&&venueKey(x.venue)===venueKey(c.venue))||bands.some(b=>norm(x.title).includes(norm(b)))||norm(x.title)===norm(title)));
+    if(dup)continue;
+    const fullTitle=bands.length&&!bands.every(b=>norm(title).includes(norm(b)))?`${title} : ${bands.join(' + ')}`:title;
+    list.push({id:`community-${c.id}`,title:fullTitle,artist:bands[0]||'',date:day,time:c.time||null,venue:c.venue||'',city:c.city||'',country:'France',url:c.url||'',provider:'Signalé par un membre',community:true,...(dist!=null?{distanceKm:Math.round(dist*10)/10}:{})});
+  }
+  return list.sort((a,b)=>String(a.date||'').slice(0,10).localeCompare(String(b.date||'').slice(0,10))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
+}
 // A tag counts only when it is one of the artist's main tags on MusicBrainz:
 // anyone can add a tag, so "post-hardcore" with 1 vote on Nirvana must not
 // make Nirvana a post-hardcore band.

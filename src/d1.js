@@ -141,7 +141,9 @@ export async function ensureD1Schema(){
       // Shares a recipient removed from his history (the share itself stays for the sender).
       `CREATE TABLE IF NOT EXISTS share_hidden(user_id INTEGER NOT NULL,share_id INTEGER NOT NULL,hidden_at TEXT,PRIMARY KEY(user_id,share_id))`,
       // Help › Contact: messages to the administrator, answered in the app.
-      `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`
+      `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`,
+      // "Signaler un concert": shows members add, visible once the admin approves.
+      `CREATE TABLE IF NOT EXISTS community_concerts(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,title TEXT NOT NULL,bands TEXT,date TEXT NOT NULL,time TEXT,venue TEXT,city TEXT NOT NULL,lat REAL,lon REAL,url TEXT,note TEXT,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT,reviewed_at TEXT)`
     ];
     schemaPromise=(async()=>{
       for(const sql of statements) await query(sql);
@@ -486,4 +488,38 @@ export async function d1SharesHistory(userId){
 export async function d1HideShare(userId,shareId){
   await ensureD1Schema();
   await query("INSERT OR IGNORE INTO share_hidden(user_id,share_id,hidden_at) VALUES(?,?,?)",[Number(userId),Number(shareId),now()]);
+}
+// ---- "Signaler un concert" (community concerts, approved by the admin) ----
+const CC_COLS="c.id,c.user_id,u.username,c.title,c.bands,c.date,c.time,c.venue,c.city,c.lat,c.lon,c.url,c.note,c.status,c.created_at,c.reviewed_at";
+export async function d1AddCommunityConcert(userId,c){
+  await ensureD1Schema();
+  await query("INSERT INTO community_concerts(user_id,title,bands,date,time,venue,city,lat,lon,url,note,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'pending',?)",[Number(userId),c.title,c.bands,c.date,c.time,c.venue,c.city,c.lat,c.lon,c.url,c.note,now()]);
+}
+export async function d1CountRecentCommunity(userId,sinceIso){
+  await ensureD1Schema();
+  return Number((await query("SELECT COUNT(*) AS n FROM community_concerts WHERE user_id=? AND created_at>?",[Number(userId),String(sinceIso)])).rows[0]?.n||0);
+}
+export async function d1MyCommunityConcerts(userId){
+  await ensureD1Schema();
+  return (await query(`SELECT ${CC_COLS} FROM community_concerts c LEFT JOIN users u ON u.id=c.user_id WHERE c.user_id=? ORDER BY c.id DESC LIMIT 50`,[Number(userId)])).rows;
+}
+export async function d1AllCommunityConcerts(){
+  await ensureD1Schema();
+  return (await query(`SELECT ${CC_COLS} FROM community_concerts c LEFT JOIN users u ON u.id=c.user_id ORDER BY (c.status='pending') DESC,c.id DESC LIMIT 200`)).rows;
+}
+export async function d1ApprovedCommunityConcerts(fromDay){
+  await ensureD1Schema();
+  return (await query(`SELECT ${CC_COLS} FROM community_concerts c LEFT JOIN users u ON u.id=c.user_id WHERE c.status='approved' AND c.date>=? ORDER BY c.date LIMIT 500`,[String(fromDay)])).rows;
+}
+export async function d1CountPendingCommunity(){
+  await ensureD1Schema();
+  return Number((await query("SELECT COUNT(*) AS n FROM community_concerts WHERE status='pending'")).rows[0]?.n||0);
+}
+export async function d1SetCommunityStatus(id,status){
+  await ensureD1Schema();
+  await query("UPDATE community_concerts SET status=?,reviewed_at=? WHERE id=?",[String(status),now(),Number(id)]);
+}
+export async function d1DeleteCommunityConcert(id){
+  await ensureD1Schema();
+  await query("DELETE FROM community_concerts WHERE id=?",[Number(id)]);
 }
