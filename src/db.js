@@ -194,6 +194,8 @@ export function upsertLocalUserMirror(user,credentials={}){
  }
  return publicUser(id);
 }
+// Account deletion: the local copy of the user (groups, news and events cascade).
+export function deleteLocalUser(id){db.prepare("DELETE FROM artists WHERE user_id=?").run(Number(id));db.prepare("DELETE FROM users WHERE id=?").run(Number(id))}
 export function localUsers(){return db.prepare("SELECT id,username,email,password_hash,password_salt,created_at,updated_at FROM users ORDER BY id").all()}
 export function localArtistsForUser(userId){return db.prepare("SELECT * FROM artists WHERE user_id=? ORDER BY id").all(Number(userId))}
 

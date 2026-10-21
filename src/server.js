@@ -1,10 +1,10 @@
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
+import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
-import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
+import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
 import {d1GetBandCache,d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
 import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
@@ -152,6 +152,20 @@ app.post('/api/auth/logout',async(req,res)=>{
  try{sessionCache.delete(parseCookies(req).stayloud_session);if(d1Enabled)await d1DeleteSession(parseCookies(req).stayloud_session);}catch(e){console.error('Logout:',e?.message||e)}
  clearSessionCookie(res); res.status(204).end();
 });
+// "Supprimer mon compte" (required by the App Store and Google Play): the
+// password is asked again, then every row of the user is erased.
+app.post('/api/auth/delete-account',requireAuth,async(req,res)=>{
+ try{
+  const u=await d1AuthenticateUser(req.user.username,String(req.body?.password||''));
+  if(!u||Number(u.id)!==Number(req.user.id))return res.status(403).json({error:'Mot de passe incorrect'});
+  const id=Number(req.user.id);
+  await d1DeleteAccount(id);
+  try{deleteLocalUser(id)}catch(e){console.error('Local account delete:',e?.message||e)}
+  for(const [k,v] of sessionCache)if(Number(v?.user?.id)===id)sessionCache.delete(k);
+  restoredUsers.delete(id);communityCache=null;
+  clearSessionCookie(res);res.json({ok:true});
+ }catch(e){res.status(502).json({error:e.message||'Suppression impossible'})}
+});
 app.get('/api/auth/me',async(req,res)=>{
  try{
   if(!d1Enabled)return res.status(401).json({error:'Non connecté'});
@@ -192,7 +206,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.92",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.93",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -395,7 +409,16 @@ app.put("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.body
 app.delete("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.query.key||req.body?.key||"").trim();if(!key)return res.status(400).json({error:"Concert manquant"});if(d1Enabled)await d1DeleteUserConcert(req.user.id,key);else localAgenda.get(req.user.id)?.delete(key);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 // ---- Friends: see which concerts friends marked "J'y vais" / "Intéressé" ----
 app.get("/api/friends",requireAuth,async(req,res)=>{try{const me=req.user.id,out={friends:[],incoming:[],outgoing:[]};for(const r of await d1ListFriendships(me)){const u={id:Number(r.other_id),username:r.other_name};if(r.status==="accepted")out.friends.push(u);else if(Number(r.addressee_id)===me)out.incoming.push(u);else out.outgoing.push(u)}const by=(a,b)=>a.username.localeCompare(b.username,"fr",{sensitivity:"base"});out.friends.sort(by);out.incoming.sort(by);out.outgoing.sort(by);res.json(out)}catch(e){res.status(502).json({error:e.message})}});
-app.post("/api/friends",requireAuth,async(req,res)=>{try{const name=String(req.body?.username||"").trim();if(!name)return res.status(400).json({error:"Nom d’utilisateur manquant"});const other=await d1FindUserByUsername(name);if(!other)return res.status(404).json({error:`Aucun compte STAYLOUD « ${name.slice(0,40)} »`});if(other.id===req.user.id)return res.status(400).json({error:"C’est ton propre compte 🙂"});const status=await d1RequestFriend(req.user.id,other.id);res.json({ok:true,status,user:{id:other.id,username:other.username}})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/friends",requireAuth,async(req,res)=>{try{const name=String(req.body?.username||"").trim();if(!name)return res.status(400).json({error:"Nom d’utilisateur manquant"});const other=await d1FindUserByUsername(name);if(!other)return res.status(404).json({error:`Aucun compte STAYLOUD « ${name.slice(0,40)} »`});if(other.id===req.user.id)return res.status(400).json({error:"C’est ton propre compte 🙂"});if(await d1BlockedBetween(req.user.id,other.id))return res.status(403).json({error:"Impossible d’ajouter ce compte"});const status=await d1RequestFriend(req.user.id,other.id);res.json({ok:true,status,user:{id:other.id,username:other.username}})}catch(e){res.status(502).json({error:e.message})}});
+// Block / report (App Store & Google Play rules for content made by members).
+app.get("/api/blocks",requireAuth,async(req,res)=>{try{res.json({items:(await d1ListBlocks(req.user.id)).map(r=>({id:Number(r.id),username:r.username}))})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/blocks/:id",requireAuth,async(req,res)=>{try{const other=Number(req.params.id);if(!other||other===req.user.id)return res.status(400).json({error:"Compte invalide"});await d1BlockUser(req.user.id,other);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.delete("/api/blocks/:id",requireAuth,async(req,res)=>{try{await d1UnblockUser(req.user.id,Number(req.params.id));res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/reports",requireAuth,async(req,res)=>{try{const b=req.body||{},t=(k,n)=>String(b[k]??"").replace(/\s+/g," ").trim().slice(0,n);
+ const reason=t("reason",60)||"Autre",details=t("details",1000),content=t("content",600),kind=t("kind",20)||"utilisateur",target=t("targetName",40);
+ if(await d1CountRecentSupport(req.user.id,new Date(Date.now()-3600e3).toISOString())>=5)return res.status(429).json({error:"Trop de messages en peu de temps, réessaie dans une heure"});
+ const msg=[`Signalement : ${kind}${target?` de « ${target} »`:""}${b.targetId?` (compte n°${Number(b.targetId)||"?"})`:""}`,`Motif : ${reason}`,content?`Contenu : ${content}`:"",details?`Précisions : ${details}`:""].filter(Boolean).join("\n");
+ await d1AddSupportMessage(req.user.id,"Signalement",msg);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/friends/:id/accept",requireAuth,async(req,res)=>{try{const ok=await d1AcceptFriend(req.user.id,Number(req.params.id));if(!ok)return res.status(404).json({error:"Demande introuvable"});res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.delete("/api/friends/:id",requireAuth,async(req,res)=>{try{await d1RemoveFriend(req.user.id,Number(req.params.id));res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/friends/agenda",requireAuth,async(req,res)=>{try{const rows=await d1FriendsConcerts(req.user.id);res.json({items:rows.map(r=>({key:r.ckey,status:r.status,user:{id:Number(r.user_id),username:r.username},data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{}}))})}catch(e){res.status(502).json({error:e.message})}});
