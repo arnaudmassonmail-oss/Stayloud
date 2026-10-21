@@ -684,6 +684,12 @@ async function enrichImageDates(rows){
 // TheAudioDB (several photos per band, checked to be a rock/metal act) and
 // the band's Wikipedia page. Fast (a few API calls in parallel) and reliable.
 const reliablePhotoCache=new Map();
+// Photos found by web image search (Bing, DuckDuckGo, Brave, fan photos on
+// Bandsintown event pages, metal sites) belong to their photographers: the
+// app stores refuse apps that show them. Off unless PHOTO_WIDE_SEARCH=1; the
+// photo picker then offers Bandsintown/Deezer/TheAudioDB/Wikipédia photos and
+// freely licensed Wikimedia Commons pictures.
+const WIDE_PHOTOS=process.env.PHOTO_WIDE_SEARCH==="1";
 async function reliableBandPhotos(name,mbid=''){
  const wanted=String(name||'').trim();if(!wanted)return [];
  const key=`${normArtistName(wanted)}|${mbid}`;const hit=reliablePhotoCache.get(key);if(hit&&Date.now()-hit.at<6*3600e3)return hit.rows;
@@ -741,6 +747,7 @@ async function discoverArtistPhotosWide(wanted,ctx,max,page,excluded,options,rel
   `site:blabbermouth.net "${wanted}" photo`
  ];
  const pool=[];
+ if(WIDE_PHOTOS){
  // Bandsintown is the first photo source when the selected artist has a canonical
  // Bandsintown identity. We use the public artist/event pages so the existing
  // concert/API logic remains untouched.
@@ -751,6 +758,7 @@ async function discoverArtistPhotosWide(wanted,ctx,max,page,excluded,options,rel
  const first=1;
  for(const q of queries){try{pool.push(...await imageSearch(q,40,first))}catch{}}
  if(pool.length<max*5){for(const q of queries.slice(0,8)){try{pool.push(...await imageSearch(q,40,41))}catch{}}}
+ }
  if(pool.length<max*8){try{
   for(const q of [`"${wanted}" metal band`,`"${wanted}" metal group`]){
    const u=`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(q)}&gsrnamespace=6&gsrsort=relevance&gsrlimit=30&prop=imageinfo&iiprop=url|mime|extmetadata|size|timestamp&iiurlwidth=1000&format=json&origin=*`;

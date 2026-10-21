@@ -142,6 +142,8 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS share_hidden(user_id INTEGER NOT NULL,share_id INTEGER NOT NULL,hidden_at TEXT,PRIMARY KEY(user_id,share_id))`,
       // Help › Contact: messages to the administrator, answered in the app.
       `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`,
+      // Users someone blocked: no friend requests, shares or friend content between them.
+      `CREATE TABLE IF NOT EXISTS user_blocks(user_id INTEGER NOT NULL,blocked_id INTEGER NOT NULL,created_at TEXT,PRIMARY KEY(user_id,blocked_id))`,
       // Shared answers of outside services (MusicBrainz, Deezer…), see apicache.js.
       `CREATE TABLE IF NOT EXISTS api_cache(key TEXT PRIMARY KEY,value TEXT NOT NULL,at INTEGER NOT NULL)`,
       // "Signaler un concert": shows members add, visible once the admin approves.
@@ -423,7 +425,7 @@ export async function d1ShareBand(fromId,toIds,artist,message){
 }
 export async function d1SharesFor(userId,since){
   await ensureD1Schema();
-  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.created_at>? AND s.id NOT IN (SELECT share_id FROM share_hidden WHERE user_id=?) ORDER BY s.created_at DESC LIMIT 30",[Number(userId),String(since),Number(userId)])).rows;
+  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.created_at>? AND s.id NOT IN (SELECT share_id FROM share_hidden WHERE user_id=?) AND s.from_id NOT IN (SELECT blocked_id FROM user_blocks WHERE user_id=?) ORDER BY s.created_at DESC LIMIT 30",[Number(userId),String(since),Number(userId),Number(userId)])).rows;
 }
 // Small key/value cache (stored in geo_cache) for album streaming links.
 export async function d1GetCacheValue(key){
@@ -485,7 +487,7 @@ export async function d1DeleteSupport(id){
 // History of shares received ("Partages reçus"), newest first.
 export async function d1SharesHistory(userId){
   await ensureD1Schema();
-  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.id NOT IN (SELECT share_id FROM share_hidden WHERE user_id=?) ORDER BY s.created_at DESC LIMIT 200",[Number(userId),Number(userId)])).rows;
+  return (await query("SELECT s.id,s.from_id,u.username,s.artist_json,s.message,s.created_at FROM band_shares s JOIN users u ON u.id=s.from_id WHERE s.to_id=? AND s.id NOT IN (SELECT share_id FROM share_hidden WHERE user_id=?) AND s.from_id NOT IN (SELECT blocked_id FROM user_blocks WHERE user_id=?) ORDER BY s.created_at DESC LIMIT 200",[Number(userId),Number(userId),Number(userId)])).rows;
 }
 export async function d1HideShare(userId,shareId){
   await ensureD1Schema();
@@ -541,4 +543,46 @@ export async function d1ApiCachePrune(olderThan){
   if(!d1ConfigStatus().configured)return;
   await ensureD1Schema();
   await query("DELETE FROM api_cache WHERE at<?",[Number(olderThan)]);
+}
+// ---- Block a user (App Store / Play rules for user content) ----
+export async function d1BlockUser(userId,otherId){
+  await ensureD1Schema();
+  const a=Number(userId),b=Number(otherId);
+  await query("INSERT OR IGNORE INTO user_blocks(user_id,blocked_id,created_at) VALUES(?,?,?)",[a,b,now()]);
+  await query("DELETE FROM friendships WHERE (requester_id=? AND addressee_id=?) OR (requester_id=? AND addressee_id=?)",[a,b,b,a]);
+}
+export async function d1UnblockUser(userId,otherId){
+  await ensureD1Schema();
+  await query("DELETE FROM user_blocks WHERE user_id=? AND blocked_id=?",[Number(userId),Number(otherId)]);
+}
+export async function d1ListBlocks(userId){
+  await ensureD1Schema();
+  return (await query("SELECT b.blocked_id AS id,u.username,b.created_at FROM user_blocks b JOIN users u ON u.id=b.blocked_id WHERE b.user_id=? ORDER BY u.username",[Number(userId)])).rows;
+}
+// True when either user blocked the other.
+export async function d1BlockedBetween(a,b){
+  await ensureD1Schema();
+  return Number((await query("SELECT COUNT(*) AS n FROM user_blocks WHERE (user_id=? AND blocked_id=?) OR (user_id=? AND blocked_id=?)",[Number(a),Number(b),Number(b),Number(a)])).rows[0]?.n||0)>0;
+}
+// ---- "Supprimer mon compte": every row of the user, in every table ----
+export async function d1DeleteAccount(userId){
+  await ensureD1Schema();
+  const id=Number(userId);
+  const steps=[
+    ["DELETE FROM share_hidden WHERE user_id=? OR share_id IN (SELECT id FROM band_shares WHERE from_id=? OR to_id=?)",[id,id,id]],
+    ["DELETE FROM band_shares WHERE from_id=? OR to_id=?",[id,id]],
+    ["DELETE FROM friendships WHERE requester_id=? OR addressee_id=?",[id,id]],
+    ["DELETE FROM user_blocks WHERE user_id=? OR blocked_id=?",[id,id]],
+    ["DELETE FROM user_concerts WHERE user_id=?",[id]],
+    ["DELETE FROM user_seen WHERE user_id=?",[id]],
+    ["DELETE FROM support_messages WHERE user_id=?",[id]],
+    // Approved concerts stay listed for everyone, without their author.
+    ["UPDATE community_concerts SET user_id=0 WHERE user_id=? AND status='approved'",[id]],
+    ["DELETE FROM community_concerts WHERE user_id=?",[id]],
+    ["DELETE FROM groups WHERE user_id=?",[id]],
+    ["DELETE FROM password_resets WHERE user_id=?",[id]],
+    ["DELETE FROM sessions WHERE user_id=?",[id]],
+    ["DELETE FROM users WHERE id=?",[id]]
+  ];
+  for(const [sql,params] of steps)await query(sql,params);
 }
