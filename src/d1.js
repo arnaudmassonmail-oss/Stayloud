@@ -142,6 +142,8 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS share_hidden(user_id INTEGER NOT NULL,share_id INTEGER NOT NULL,hidden_at TEXT,PRIMARY KEY(user_id,share_id))`,
       // Help › Contact: messages to the administrator, answered in the app.
       `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`,
+      // Shared answers of outside services (MusicBrainz, Deezer…), see apicache.js.
+      `CREATE TABLE IF NOT EXISTS api_cache(key TEXT PRIMARY KEY,value TEXT NOT NULL,at INTEGER NOT NULL)`,
       // "Signaler un concert": shows members add, visible once the admin approves.
       `CREATE TABLE IF NOT EXISTS community_concerts(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,title TEXT NOT NULL,bands TEXT,date TEXT NOT NULL,time TEXT,venue TEXT,city TEXT NOT NULL,lat REAL,lon REAL,url TEXT,note TEXT,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT,reviewed_at TEXT)`
     ];
@@ -522,4 +524,21 @@ export async function d1SetCommunityStatus(id,status){
 export async function d1DeleteCommunityConcert(id){
   await ensureD1Schema();
   await query("DELETE FROM community_concerts WHERE id=?",[Number(id)]);
+}
+// ---- Shared cache of outside services' answers (apicache.js) ----
+export async function d1ApiCacheGet(key){
+  if(!d1ConfigStatus().configured)return null;
+  await ensureD1Schema();
+  const r=(await query("SELECT value,at FROM api_cache WHERE key=?",[String(key)])).rows[0];
+  if(!r)return null;try{return {value:JSON.parse(r.value),at:Number(r.at)||0}}catch{return null}
+}
+export async function d1ApiCachePut(key,value,at){
+  if(!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query("INSERT INTO api_cache(key,value,at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,at=excluded.at",[String(key),JSON.stringify(value),Number(at)]);
+}
+export async function d1ApiCachePrune(olderThan){
+  if(!d1ConfigStatus().configured)return;
+  await ensureD1Schema();
+  await query("DELETE FROM api_cache WHERE at<?",[Number(olderThan)]);
 }
