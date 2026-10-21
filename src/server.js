@@ -9,6 +9,7 @@ import {d1GetBandCache,d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1Au
 import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
+import {cachedJson} from "./apicache.js";
 import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts} from "./providers/discovery.js";
 
 const app=express();app.use(compression());app.use(express.json({limit:"10mb"}));
@@ -191,7 +192,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.91",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.92",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -220,7 +221,13 @@ function normMusic(s){return String(s||"").normalize("NFD").replace(/[\u0300-\u0
 // never cached as a miss.
 let deezerGate=Promise.resolve();
 function deezerSlot(){const p=deezerGate.then(()=>new Promise(r=>setTimeout(r,180)));deezerGate=p.catch(()=>{});return p}
-async function deezerJson(url,tries=2){
+// Album / artist searches carry no expiring preview links: their answers are
+// shared by every user for 3 days (6 h when Deezer found nothing), see apicache.js.
+function deezerJson(url,tries=2){
+ if(!/api\.deezer\.com\/(search\/(album|artist)\?|artist\/\d+\/albums)/.test(url))return deezerJsonLive(url,tries);
+ return cachedJson('dz:'+url,d=>Array.isArray(d?.data)&&d.data.length?3*864e5:6*3600e3,()=>deezerJsonLive(url,tries));
+}
+async function deezerJsonLive(url,tries=2){
  for(let i=0;i<tries;i++){
   await deezerSlot();
   const ac=new AbortController(),timer=setTimeout(()=>ac.abort(),8000);

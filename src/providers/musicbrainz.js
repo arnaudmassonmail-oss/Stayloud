@@ -2,12 +2,17 @@ import {fetchJson,fetchText,sleep,eventKey,countryGuess} from "../utils.js";
 import {providerRun,updateArtist} from "../db.js";
 import {d1GetBandCache,d1PutBandEvents} from "../d1.js";
 import {resolveBandsintown} from "./concert-web.js";
+import {cachedJson} from "../apicache.js";
 const BASE="https://musicbrainz.org/ws/2";let last=0;
 // MusicBrainz allows ~1 request/second. Calls go through one queue so that
 // concurrent jobs (news, concerts, profiles) do not trigger "503 slow down".
 let mbQueue=Promise.resolve();
 function mbSlot(){const p=mbQueue.then(async()=>{const wait=Math.max(0,1050-(Date.now()-last));if(wait)await sleep(wait);last=Date.now()});mbQueue=p.catch(()=>{});return p}
-async function mb(url,{tries=4,timeout=20000}={}){
+// Answers are shared by every user (see apicache.js): band identities and
+// searches change rarely, album lists and events are re-read every 6 h.
+function mbTtl(url){const u=String(url);if(/\/(release-group|event)\?artist=/.test(u))return 6*3600e3;if(/\/event\/\?query=/.test(u))return 12*3600e3;if(/\/artist\/\?query=/.test(u))return 2*864e5;return 7*864e5}
+export function mb(url,opts={}){return cachedJson('mb:'+url,mbTtl(url),()=>mbLive(url,opts))}
+async function mbLive(url,{tries=4,timeout=20000}={}){
  let err;for(let i=0;i<tries;i++){await mbSlot();try{return await fetchJson(url,{headers:{Accept:"application/json","User-Agent":"STAYLOUD-Music-Radar/3.0 (stayloud-radar.online)"}},timeout)}catch(e){err=e;if(i<tries-1)await sleep(1500*2**i)}}throw err;
 }
 const ARTIST_ALIASES={

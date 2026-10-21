@@ -2,6 +2,7 @@ import {fetchJson,fetchText,sleep,eventKey} from "../utils.js";
 import {XMLParser} from "fast-xml-parser";
 import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
 import {d1LoadGeoCache,d1PutGeoBatch,d1GetBandCache,d1PutBandEvents} from "../d1.js";
+import {mb} from "./musicbrainz.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -18,16 +19,7 @@ function scheduleGeoFlush(){if(geoFlushTimer)return;geoFlushTimer=setTimeout(asy
 export async function warmGeoCache(){try{const rows=await d1LoadGeoCache();let n=0;for(const r of rows){if(!geoMem.has(r.key)){try{const v=JSON.parse(r.value);if(v!=null){geoMem.set(r.key,v);try{geoCacheSet(r.key,v)}catch{}n++}}catch{}}}return n}catch(e){console.error('Geo cache warm:',e?.message||e);return 0}}
 let geoLast=0;
 const MB_BASE="https://musicbrainz.org/ws/2";
-let mbLast=0;
-async function mb(url){
-  const wait=Math.max(0,1100-(Date.now()-mbLast));if(wait)await sleep(wait);mbLast=Date.now();
-  let err;
-  for(let i=0;i<4;i++){
-    try{return await fetchJson(url,{headers:{Accept:"application/json","User-Agent":"STAYLOUD-Music-Radar/3.0 (local app)"}},20000)}
-    catch(e){err=e;await sleep(1400*Math.pow(2,i))}
-  }
-  throw err;
-}
+// MusicBrainz goes through the shared queue + cache of musicbrainz.js.
 
 const STYLE_TAGS={"Metalcore":["metalcore"],"Deathcore":["deathcore"],"Hardcore":["hardcore"],"Nu Metal":["nu metal","nu-metal"],"Death Metal":["death metal","death-metal"],"Black Metal":["black metal","black-metal"],"Thrash Metal":["thrash metal","thrash-metal"],"Alternative":["alternative metal","alternative-metal","alternative rock"],"Post-Hardcore":["post-hardcore"],"Progressif":["progressive metal","progressive rock"],"Punk":["punk","punk rock","pop punk","skate punk","street punk"],"Grunge":["grunge","post-grunge"],"Rock":["rock","hard rock","alternative rock","stoner rock","rock and roll"],"Hard Rock":["hard rock"],"Metal":["metal"]};
 const FESTIVAL_METAL_TAGS=["metal","metalcore","deathcore","hardcore","death metal","black metal","thrash metal","nu metal","progressive metal","alternative metal","post-hardcore","hard rock","doom","stoner","djent","grind","heavy metal","crossover","industrial metal","groove metal","technical death metal","punk hardcore"];
