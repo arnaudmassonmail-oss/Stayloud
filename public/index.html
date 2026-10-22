@@ -411,6 +411,14 @@ body.sl-sheet-open{overflow:hidden}
 .style-groups.sl-hscroll>.style-empty{padding:4px 0}
 @media(min-width:701px){.style-groups.sl-hscroll>.style-group{flex-basis:210px;width:210px}.style-groups.sl-hscroll>.style-group .style-group-img{height:150px!important}}
 .sl-swipe-hint{font-size:11px;color:#6f7882;text-align:right;padding:0 14px 10px}
+/* Computer (mouse, wide screen): rows go back to a grid that wraps; horizontal swiping is for phones only. */
+@media(min-width:701px){
+.sl-hscroll.sl-hscroll{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))!important;overflow:visible;flex-wrap:wrap}
+.style-groups.sl-hscroll>.style-group,.sl-clip-row>.group-card{flex:none;width:auto;min-width:0}
+.sl-album-row.sl-hscroll{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))!important}
+.sl-album-row>.sl-album-card{flex:none;width:auto;max-width:none}
+.sl-swipe-hint{display:none}
+}
 .sl-album-row{margin:0 -4px;padding:0 4px 4px}
 .sl-album-row>.sl-album-card{flex:0 0 168px;width:168px;min-width:0;max-width:168px;display:flex;flex-direction:column;gap:8px;margin:0;padding:10px;overflow:hidden}.sl-album-card>.album-cover{display:block;flex:0 0 auto}.sl-album-card .sl-album-info{min-width:0;width:100%}
 .sl-album-card .album-cover{width:100%!important;max-width:none!important;height:auto!important;aspect-ratio:1/1;border-radius:8px;object-fit:cover}
