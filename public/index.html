@@ -378,6 +378,7 @@ body.sl-sheet-open{overflow:hidden}
 .sl-clip-row>.group-card{flex:0 0 180px;width:180px;min-width:0}
 @media(min-width:701px){.sl-clip-row>.group-card{flex-basis:210px;width:210px}}
 @media(hover:none){.sl-clip-row>.group-card:hover{transform:none}}
+.sl-clip-row>.group-card{transition:none;-webkit-user-drag:none;-webkit-touch-callout:none}
 #clipsStyleBar{display:flex;gap:8px;flex-wrap:wrap}
 .sl-clip-band{display:flex;flex-direction:column;gap:12px;max-width:560px}
 .sl-clip-hero{display:block;border:1px solid #232a32;border-radius:16px;overflow:hidden;background:#0a0d11;text-decoration:none;color:#fff}
@@ -654,14 +655,22 @@ function clips(){const rows=clipData();if($('clipsMini'))$('clipsMini').innerHTM
  let band=A.find(a=>a.id===Number(uiPrefGet('clipBand',''))&&(!cur||styleOf(a)===cur));if(!band&&uiPrefGet('clipBand',''))uiPrefSet('clipBand','');
  const bar=$('clipsStyleBar');if(bar)bar.innerHTML=A.length?pickerBtnHTML('clipStyleBtn',cur||'Tous les styles','openClipStylePicker()')+pickerBtnHTML('clipBandBtn',band?band.name:'Tous les groupes','openClipBandPicker()'):'';
  $('clipStyleBtn')?.classList.toggle('is-set',!!cur);$('clipBandBtn')?.classList.toggle('is-set',!!band);
- const grid=$('clipsGrid');
- if(!rows.length){grid.innerHTML='<div class="empty">Ajoute des groupes dans Styles/Groupes pour afficher leurs clips.</div>';return}
- if(band){grid.innerHTML=clipBandHTML(band);return}
- // keep each row's horizontal position across re-renders
- const pos={};grid.querySelectorAll('.sl-clip-style').forEach(d=>{const r=d.querySelector('.sl-hscroll');if(r&&r.scrollLeft)pos[d.dataset.style]=r.scrollLeft});
+ if(!rows.length){setClipsHTML('<div class="empty">Ajoute des groupes dans Styles/Groupes pour afficher leurs clips.</div>');return}
+ if(band){setClipsHTML(clipBandHTML(band));return}
  const names=cur?[cur]:clipStyleNames();
- grid.innerHTML=names.map(n=>{const g=rows.filter(x=>styleOf(x.artist)===n).sort((x,y)=>String(x.artist.name).localeCompare(String(y.artist.name),'fr',{sensitivity:'base'}));return g.length?`<div class="sl-clip-style" data-style="${esc(n)}"><h3>${esc(n)} <small>${g.length}</small></h3><div class="groups-grid sl-hscroll sl-clip-row">${g.map(clipCardHTML).join('')}</div>${g.length>2?'<div class="sl-swipe-hint">Fais glisser →</div>':''}</div>`:''}).join('');
- grid.querySelectorAll('.sl-clip-style').forEach(d=>{const r=d.querySelector('.sl-hscroll');if(r&&pos[d.dataset.style])r.scrollLeft=pos[d.dataset.style]})}
+ setClipsHTML(names.map(n=>{const g=rows.filter(x=>styleOf(x.artist)===n).sort((x,y)=>String(x.artist.name).localeCompare(String(y.artist.name),'fr',{sensitivity:'base'}));return g.length?`<div class="sl-clip-style" data-style="${esc(n)}"><h3>${esc(n)} <small>${g.length}</small></h3><div class="groups-grid sl-hscroll sl-clip-row">${g.map(clipCardHTML).join('')}</div>${g.length>2?'<div class="sl-swipe-hint">Fais glisser →</div>':''}</div>`:''}).join(''))}
+// Same as the style rows: the clips list is rebuilt only when it changed, never
+// while a finger is on it (a rebuild mid-swipe stopped the horizontal scroll),
+// and each row keeps its horizontal position.
+let clipsHTML='',clipsPending=null,clipsTouch=false;
+function setClipsHTML(html){const el=$('clipsGrid');if(!el)return;
+ if(clipsTouch){clipsPending=html;return}clipsPending=null;
+ if(html===clipsHTML&&el.innerHTML)return;clipsHTML=html;
+ const pos={};el.querySelectorAll('.sl-clip-style').forEach(d=>{const r=d.querySelector('.sl-hscroll');if(r&&r.scrollLeft)pos[d.dataset.style]=r.scrollLeft});
+ el.innerHTML=html;
+ el.querySelectorAll('.sl-clip-style').forEach(d=>{const r=d.querySelector('.sl-hscroll');if(r&&pos[d.dataset.style])r.scrollLeft=pos[d.dataset.style]});
+ if(!el.dataset.touchWired){el.dataset.touchWired='1';let t=null;const end=()=>{clearTimeout(t);t=setTimeout(()=>{clipsTouch=false;if(clipsPending!=null)setClipsHTML(clipsPending)},700)};
+  el.addEventListener('touchstart',()=>{clearTimeout(t);clipsTouch=true},{passive:true});el.addEventListener('touchend',end,{passive:true});el.addEventListener('touchcancel',end,{passive:true})}}
 function knownStyle(name){return styles.some(s=>s[0].toLowerCase()===String(name||'').toLowerCase())}
 // Older entries may carry "Hard Rock": shown with Rock.
 function styleOf(a){let s=String(a.style||'').trim();if(/^hard rock$/i.test(s))s='Rock';return s&&knownStyle(s)?(styles.find(x=>x[0].toLowerCase()===s.toLowerCase())?.[0]||s):'À classer'}
