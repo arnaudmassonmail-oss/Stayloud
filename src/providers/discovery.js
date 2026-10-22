@@ -297,8 +297,10 @@ const discoverCache=new Map();const DISCOVER_TTL=6*60*60*1000;
 export async function discoverArtists(style='all',limit=18,page=0){
   const followed=followedNames();
   // "France": French bands of any metal style (MusicBrainz country FR).
-  const french=style==='France';
-  const tags=style==='all'?ALL_METAL_TAGS:french?[...ALL_METAL_TAGS,'heavy metal','doom metal','post-metal','sludge metal','djent','industrial metal','groove metal','symphonic metal','power metal','progressive metal']:(STYLE_TAGS[style]||['metal']);
+  // "France:Metalcore" = French bands of one style (Découvrir › Groupes français).
+  const frSub=/^France:/.test(style)&&STYLE_TAGS[style.slice(7)]?style.slice(7):'';
+  const french=style==='France'||Boolean(frSub);
+  const tags=frSub?STYLE_TAGS[frSub]:style==='all'?ALL_METAL_TAGS:french?[...ALL_METAL_TAGS,'heavy metal','doom metal','post-metal','sludge metal','djent','industrial metal','groove metal','symphonic metal','power metal','progressive metal']:(STYLE_TAGS[style]||['metal']);
   const q=`type:group AND ${french?'country:FR AND ':''}(${tags.map(t=>`tag:"${t}"`).join(' OR ')})`;
   const want=(Number(page)+1)*limit;
   try{
@@ -313,10 +315,10 @@ export async function discoverArtists(style='all',limit=18,page=0){
       const list=d.artists||[];c.offset+=100;if(list.length<100||c.offset>=Number(d.count||0))c.done=true;
       for(const raw of list){
         const main=mainTags(raw);
-        const broad=style==='all'||style==='Metal'||french;if(!main.some(t=>tags.includes(t)||(broad&&/\bmetal\b/.test(t))))continue;
+        const broad=style==='all'||style==='Metal'||(french&&!frSub);if(!main.some(t=>tags.includes(t)||(broad&&/\bmetal\b/.test(t))))continue;
         // Rock is the wide family: only bands whose first tag is rock (Nirvana stays in Grunge).
-        if(style==='Rock'&&!tags.includes(main[0]))continue;
-        const a=cleanArtist(raw);a.style=(style==='all'||french)?(inferStyle(main)||'Metal'):style;if(!a.style)continue;
+        if((style==='Rock'||frSub==='Rock')&&!tags.includes(main[0]))continue;
+        const a=cleanArtist(raw);a.style=frSub||((style==='all'||french)?(inferStyle(main)||'Metal'):style);if(!a.style)continue;
         const k=norm(a.name);if(c.seen.has(k))continue;c.seen.add(k);c.rows.push(a);
       }
     }
@@ -327,7 +329,8 @@ export async function discoverArtists(style='all',limit=18,page=0){
   }catch(e){
     if(page>0)return {items:[],hasMore:false};
     const seen=new Set(),out=[];
-    for(const [name,st] of (DISCOVER_FALLBACK[style]||DISCOVER_FALLBACK.all)){
+    const fb=frSub?DISCOVER_FALLBACK.France.filter(([,st])=>st===frSub):(DISCOVER_FALLBACK[style]||DISCOVER_FALLBACK.all);
+    for(const [name,st] of fb){
       const k=norm(name);if(seen.has(k)||followed.has(k))continue;seen.add(k);out.push({id:`fallback-${k.replace(/[^a-z0-9]+/g,'-')}`,name,sortname:name,score:0,disambiguation:'Suggestion métal',style:st,mbid:''});if(out.length>=limit)break;
     }
     if(out.length)return {items:out,hasMore:false,fallback:true};
