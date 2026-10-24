@@ -10,6 +10,7 @@ import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discover
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
+import {radioStations,radioByIds,radioNowPlaying,radioClick,RADIO_STYLES} from "./providers/radio.js";
 import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts} from "./providers/discovery.js";
 
 const app=express();app.use(compression());app.use(express.json({limit:"10mb"}));
@@ -206,7 +207,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.18.99",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.19.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -477,6 +478,11 @@ app.post("/api/shares",requireAuth,async(req,res)=>{try{const me=req.user.id,a=r
  const pick=k=>String(a[k]??"").trim().slice(0,400);const photo=pick("photoUrl");
  await d1ShareBand(me,to,{name,mbid:pick("mbid"),style:pick("style"),country:pick("country"),photoUrl:/^https?:\/\//.test(photo)?photo:""},req.body?.message);res.json({ok:true,sent:to.length})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/friends/news/seen",requireAuth,async(req,res)=>{try{await d1SetFriendsSeen(req.user.id,new Date().toISOString());res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+// Clips & Radio › Radio: metal web radios (Radio Browser) and the title on air.
+app.get("/api/radio/stations",async(req,res)=>{try{const style=String(req.query.style||"all");if(style!=="all"&&!RADIO_STYLES[style])return res.status(400).json({error:"Style inconnu"});res.json({styles:Object.keys(RADIO_STYLES),...await radioStations(style)})}catch(e){res.status(502).json({error:"Radios indisponibles pour le moment"})}});
+app.get("/api/radio/byids",async(req,res)=>{try{const ids=String(req.query.ids||"").split(",").map(x=>x.trim()).filter(Boolean);res.json({stations:await radioByIds(ids)})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/radio/nowplaying",async(req,res)=>{try{res.json(await radioNowPlaying(String(req.query.id||"")))}catch{res.json({title:null})}});
+app.post("/api/radio/click",(req,res)=>{radioClick(String(req.query.id||""));res.json({ok:true})});
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const out=await discoverManualCityConcerts(q);try{out.items=mergeCommunityConcerts(out.items,(await approvedCommunity()).filter(c=>normCity(c.city)===normCity(q)),NaN,NaN,0)}catch{}res.json(out);}catch(e){res.status(502).json({error:e.message})}});
