@@ -52,3 +52,7 @@ test("calendar: one concert as .ics, agenda feed by secret link",async()=>{
   const renewed=await (await fetch(B+"/api/calendar/feed/renew",{method:"POST",headers:{cookie:a}})).json();assert.notEqual(renewed.url,f.url);
   assert.equal((await fetch(f.url)).status,404,"old link stops working");assert.equal((await fetch(renewed.url)).status,200);
   assert.equal((await fetch(B+"/api/calendar/feed")).status,401)});
+test("releases: list for the followed bands (none here), login required",async()=>{
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  const r=await fetch(B+"/api/releases",{headers:{cookie:a}});assert.equal(r.status,200);assert.deepEqual((await r.json()).items,[]);
+  assert.equal((await fetch(B+"/api/releases")).status,401)});
