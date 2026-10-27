@@ -226,7 +226,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.22.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.23.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -528,6 +528,12 @@ app.get("/api/alerts",requireAuth,async(req,res)=>{try{
  let near=concerts;const lat=Number(req.query.lat),lon=Number(req.query.lon),r=Math.min(Math.max(Number(req.query.radius)||50,5),200);
  if(Number.isFinite(lat)&&Number.isFinite(lon)&&concerts.length){const ok=new Map((await rowsNear(concerts.map(c=>({...c})),lat,lon,r)).map(c=>[c.key,c.distanceKm]));near=concerts.filter(c=>ok.has(c.key)).map(c=>({...c,distanceKm:ok.get(c.key)}))}
  res.json({albums,concerts:near,computing:!st.done,area:Number.isFinite(lat)?"near":"france"})}catch(e){res.status(502).json({error:e.message})}});
+// Actus › Sorties: announced and recent albums / EPs of the user's bands
+// (same MusicBrainz data as the alerts, computed in the background).
+app.get("/api/releases",requireAuth,async(req,res)=>{try{const uid=req.user.id,artists=localArtistsForUser(uid);
+ const st=userAlbums(uid,artists);if(!st.done)await Promise.race([st.promise,new Promise(r=>setTimeout(r,2500))]);
+ const items=[...st.map.values()].flat();const seen=new Set();const uniq=items.filter(x=>!seen.has(x.key)&&seen.add(x.key));
+ res.json({items:uniq,computing:!st.done,bands:artists.filter(a=>a.mbid).length})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/alerts/seen",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(String).filter(k=>/^[ac]:/.test(k)&&k.length<200).slice(0,300);if(keys.length)await d1MarkAlertsSeen(req.user.id,keys);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 // "Ajouter à mon calendrier": one concert as an .ics file (opens the phone's
 // calendar), and the user's agenda as a feed phones subscribe to (secret link).
