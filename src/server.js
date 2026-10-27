@@ -1,19 +1,20 @@
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
+import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
 import {d1GetBandCache,d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
-import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
+import {artistReleaseGroups,resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
 import {setAlertSink,sourcesHealth} from "./health.js";
+import {recentAlbums,pickNew} from "./alerts.js";
 import {radioStations,radioByIds,radioNowPlaying,radioClick,RADIO_STYLES} from "./providers/radio.js";
-import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts} from "./providers/discovery.js";
+import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts,rowsNear} from "./providers/discovery.js";
 
 const app=express();app.set("trust proxy",1);app.use(compression());app.use(express.json({limit:"10mb"}));
 const dir=path.dirname(fileURLToPath(import.meta.url));app.use(express.static(path.join(dir,"../public"),{etag:false,lastModified:false,setHeaders:(res,filePath)=>{if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store");else if(/\.(png|jpe?g|webp|svg|ico)$/i.test(filePath))res.setHeader("Cache-Control","public, max-age=604800");}}));
@@ -223,7 +224,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.20.1",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.21.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -503,6 +504,29 @@ app.get("/api/radio/stations",async(req,res)=>{try{const style=String(req.query.
 app.get("/api/radio/byids",async(req,res)=>{try{const ids=String(req.query.ids||"").split(",").map(x=>x.trim()).filter(Boolean);res.json({stations:await radioByIds(ids)})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/radio/nowplaying",async(req,res)=>{try{res.json(await radioNowPlaying(String(req.query.id||"")))}catch{res.json({title:null})}});
 app.post("/api/radio/click",(req,res)=>{radioClick(String(req.query.id||""));res.json({ok:true})});
+// "Nouvel album" / "Nouveau concert" alerts (badges on Actus and Concerts).
+// Albums come from MusicBrainz in the background (shared 6 h cache, 1 request
+// per second): the first answer may still be computing.
+const albumJobs=new Map();
+function userAlbums(uid,artists){
+ let st=albumJobs.get(uid);const sig=artists.map(a=>a.id+":"+(a.mbid||"")).join(",");
+ if(!st||st.sig!==sig||Date.now()-st.at>6*3600e3){
+  const prev=st;st={sig,at:Date.now(),map:prev?.map||new Map(),done:false};albumJobs.set(uid,st);const job=st;
+  job.promise=(async()=>{for(const a of artists){if(!a.mbid)continue;try{job.map.set(a.id,recentAlbums(a,await artistReleaseGroups(a.mbid)))}catch{}}job.done=true})().catch(()=>{job.done=true});
+ }
+ return st;
+}
+app.get("/api/alerts",requireAuth,async(req,res)=>{try{
+ const uid=req.user.id,artists=localArtistsForUser(uid);
+ const st=userAlbums(uid,artists);if(!st.done)await Promise.race([st.promise,new Promise(r=>setTimeout(r,2500))]);
+ const events=eventList({userId:uid});const seen=await d1AlertSeenKeys(uid);
+ const {albums,concerts,toMark}=pickNew({artists,albumsByArtist:st.map,events,seen});
+ if(toMark.length)await d1MarkAlertsSeen(uid,toMark);
+ // Concerts: around the place the user last searched (else all of France).
+ let near=concerts;const lat=Number(req.query.lat),lon=Number(req.query.lon),r=Math.min(Math.max(Number(req.query.radius)||50,5),200);
+ if(Number.isFinite(lat)&&Number.isFinite(lon)&&concerts.length){const ok=new Map((await rowsNear(concerts.map(c=>({...c})),lat,lon,r)).map(c=>[c.key,c.distanceKm]));near=concerts.filter(c=>ok.has(c.key)).map(c=>({...c,distanceKm:ok.get(c.key)}))}
+ res.json({albums,concerts:near,computing:!st.done,area:Number.isFinite(lat)?"near":"france"})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/alerts/seen",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(String).filter(k=>/^[ac]:/.test(k)&&k.length<200).slice(0,300);if(keys.length)await d1MarkAlertsSeen(req.user.id,keys);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const out=await discoverManualCityConcerts(q);try{out.items=mergeCommunityConcerts(out.items,(await approvedCommunity()).filter(c=>normCity(c.city)===normCity(q)),NaN,NaN,0)}catch{}res.json(out);}catch(e){res.status(502).json({error:e.message})}});

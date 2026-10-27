@@ -269,6 +269,8 @@ export async function mergeFollowedConcerts(items,followed,lat,lon,radiusKm){
 // Concerts members reported ("Signaler un concert") and the admin approved:
 // added to the lists inside the radius (no radius when lat/lon are not
 // numbers: city-only list), unless the same show is already listed.
+// Rows (with a city) within radiusKm of lat/lon, with their distance (alerts).
+export function rowsNear(rows,lat,lon,radiusKm){return withDistance(rows,lat,lon,radiusKm)}
 export function mergeCommunityConcerts(items,rows,lat,lon,radiusKm){
   const list=[...(items||[])];if(!rows?.length)return list;
   const venueKey=v=>norm(cleanPlaceName(v)).replace(/^(le|la|les|l)\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
