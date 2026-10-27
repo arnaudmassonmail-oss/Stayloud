@@ -1172,6 +1172,7 @@ function openTickets(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const band=ti
  // Fnac Spectacles has a fixed page per artist (/artist/<name>/) listing its dates.
  const slug=normUi(band.replace(/['’]/g,'')).replace(/ /g,'-');
  if(slug)items.push({value:'https://www.fnacspectacles.com/artist/'+slug+'/',label:'Fnac Spectacles',icon:'🎫',sub:'Dates de « '+band+' » en vente sur Fnac'});
+ items.push({value:'https://dice.fm/search?query='+encodeURIComponent(band),label:'DICE',icon:'🎫',sub:'Dates de « '+band+' » en vente sur DICE'});
  items.push({value:'https://www.google.com/search?q='+encodeURIComponent([band,city,day,'billets'].filter(Boolean).join(' ')),label:'Rechercher les billets',icon:'🔍',sub:[band,city,day].filter(Boolean).join(' · ')});
  openChoiceSheet({title:'Billets · '+String(x.title||band).slice(0,50),items,current:'',onPick:openExternal})}
 // A real link click opens the page reliably, also from the app installed on iPhone.
