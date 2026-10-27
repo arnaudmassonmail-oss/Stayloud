@@ -20,7 +20,7 @@ npm install
 npm start          # http://localhost:8787
 ```
 
-Variables utiles (sur Render) : `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN` (base D1), `RESEND_API_KEY` (e-mails), `TICKETMASTER_API_KEY` (🎫 Billets : concerts en vente sur Ticketmaster, clé gratuite sur developer.ticketmaster.com), `APP_PUBLIC_URL`, `ADMIN_USERS` (administrateurs), `JINA_API_KEY` (lecture des agendas), `PHOTO_WIDE_SEARCH=1` (recherche de photos sur le web, désactivée par défaut).
+Variables utiles (sur Render) : `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN` (base D1), `RESEND_API_KEY` (e-mails), `TICKETMASTER_API_KEY` (🎫 Billets : concerts en vente sur Ticketmaster, clé gratuite sur developer.ticketmaster.com), `SETLISTFM_API_KEY` (setlists des concerts passés, clé gratuite sur setlist.fm/settings/api), `APP_PUBLIC_URL`, `ADMIN_USERS` (administrateurs), `JINA_API_KEY` (lecture des agendas), `PHOTO_WIDE_SEARCH=1` (recherche de photos sur le web, désactivée par défaut).
 
 ## Tests
 

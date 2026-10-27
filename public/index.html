@@ -469,7 +469,7 @@ body.sl-radio-on .wrap{padding-bottom:150px}
 .sl-rel-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;background:none;border:0;color:#fff;text-align:left;padding:10px 0;cursor:pointer;font:inherit;min-height:0}
 .sl-rel-cal{flex:0 0 40px;width:40px;height:40px;border-radius:50%;border:1px solid #2c343d;background:#0d1116;font-size:17px;cursor:pointer;padding:0;min-height:0}
 .sl-rel-cd{color:#ff5a64;font-weight:700}
-.sl-ticket svg{width:17px;height:17px}.sl-ticket.busy{opacity:.5;animation:slTixPulse 1s ease-in-out infinite}@keyframes slTixPulse{50%{opacity:.25}}.sl-news-pill.sl-ticket{border:0}.sl-news-pill.sl-ticket:not(.on){background:#1a2027;color:#e8ebee;box-shadow:none;border:1px solid #2c343d}
+.sl-ticket svg{width:17px;height:17px}.sl-ag-tabs{margin:2px 0 6px}.sl-past-add{margin:10px 0 2px}.sl-ev-year{display:block;font-size:10px;color:#8a929b;margin-top:2px}.sl-setlist svg{width:16px;height:16px}.sl-past-yes{border:1px solid #1f7a3d;background:#0f2a18;color:#cfe9d6;border-radius:999px;padding:6px 9px;font:700 11px Inter,Arial,sans-serif;white-space:nowrap;cursor:pointer}.sl-ev-past:has(.sl-past-yes){grid-template-columns:44px 52px minmax(0,1fr) auto}.sl-setl{padding:0 4px 8px}.sl-setl-meta{color:#9aa3ad;font-size:13px;margin:2px 0 8px}.sl-setl-bands{margin:4px 0 10px}.sl-setl-count{color:#fff;font:800 13px Inter,Arial,sans-serif;margin:6px 0}.sl-setl-h{color:var(--red2,#ff2733);font:800 12px Inter,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;margin:14px 0 4px}.sl-setl-list{margin:0;padding-left:26px;color:#8a929b}.sl-setl-list li{padding:6px 0;border-bottom:1px solid #1a1f25}.sl-setl-list li a{color:#e8ebee;text-decoration:none;font-weight:600}.sl-setl-list li small{display:block;color:#8a929b;font-size:11px}.sl-setl-list li.tape{list-style:none;opacity:.6}.sl-setl-src{display:block;margin:14px 0 4px;color:#ff5a64;font-size:12px;text-decoration:none}.sl-past-form{margin:4px 0 10px}.sl-past-more{display:block;margin:10px auto}.sl-ticket.busy{opacity:.5;animation:slTixPulse 1s ease-in-out infinite}@keyframes slTixPulse{50%{opacity:.25}}.sl-news-pill.sl-ticket{border:0}.sl-news-pill.sl-ticket:not(.on){background:#1a2027;color:#e8ebee;box-shadow:none;border:1px solid #2c343d}
 /* ---- v7.21 alerts: new album / new concert ---- */
 .sl-alert{border:1px solid #5a1a1f;background:linear-gradient(180deg,#1a0b0d,#0a0d11);border-radius:14px;padding:10px 10px 6px;margin:8px 0 14px}
 .sl-alert-h{display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px}.sl-alert-h b{font:900 14px Inter,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase}
@@ -1154,7 +1154,7 @@ const MARK_ICON={going:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 function markBtnHTML(x){const k=agendaKey(x);if(!k||k.startsWith('|'))return '';EVREG[k]=x;const st=AG[k]?.status||'none';return `<button type="button" class="sl-mark ${st}" data-k="${esc(k)}" onclick="event.stopPropagation();openMarkSheet(this.dataset.k)" aria-label="${st==='going'?'J’y vais':st==='interested'?'Intéressé':'Ajouter à mon agenda'}">${MARK_ICON[st]}</button>`}
 async function loadAgenda(){try{const d=await api('/api/agenda');AG={};for(const r of d.items||[])AG[r.key]={status:r.status,data:r.data};syncMarks();if(concertMode==='agenda')renderAgenda()}catch{}}
 function openMarkSheet(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const cur=AG[k]?.status||'';const items=[{value:'going',label:'J’y vais',icon:'✓',sub:'Ajouté à ton agenda'},{value:'interested',label:'Intéressé',icon:'★',sub:'À garder en tête'}];if(cur)items.push({value:'remove',label:'Retirer de mon agenda',icon:'✕'});
- if(x.date)items.push({value:'cal',label:'Ajouter à mon calendrier',icon:'📅',sub:'iPhone, Android, Outlook…'},{value:'gcal',label:'Google Agenda',icon:'G',sub:'Ouvre Google Agenda'});
+ if(x.date&&String(x.date).slice(0,10)>=new Date().toISOString().slice(0,10))items.push({value:'cal',label:'Ajouter à mon calendrier',icon:'📅',sub:'iPhone, Android, Outlook…'},{value:'gcal',label:'Google Agenda',icon:'G',sub:'Ouvre Google Agenda'});
  openChoiceSheet({title:String(x.artist||x.title||'Concert').slice(0,60),items,current:cur,onPick:v=>v==='cal'?addToCalendar(x):v==='gcal'?window.open(googleCalUrl(x),'_blank','noopener'):setMark(k,v)})}
 // ---- 🎫 Billets: a ticketing link when the concert has one, otherwise a
 // small menu (concert page, Fnac Spectacles, Ticketmaster, web search) ----
@@ -1204,19 +1204,72 @@ async function openCalendarSync(renew){let d;try{d=await api('/api/calendar/feed
  m.querySelector('[data-a=copy]').onclick=async()=>{try{await navigator.clipboard.writeText(d.url);slToast('Lien copié')}catch{prompt('Copie ce lien :',d.url)}};
  m.querySelector('[data-a=renew]').onclick=()=>{if(confirm('Changer le lien ? Il faudra te réabonner dans ton calendrier.')){close();openCalendarSync(true)}}}
 async function setMark(k,v){const x=EVREG[k]||AG[k]?.data;if(!x)return;const prev=AG[k];
- const data={title:x.title||'',artist:x.artist||'',date:x.date||'',time:x.time||'',venue:x.venue||'',city:x.city||'',country:x.country||'',url:x.url||'',provider:x.provider||''};
+ const data={title:x.title||'',artist:x.artist||'',date:x.date||'',time:x.time||'',venue:x.venue||'',city:x.city||'',country:x.country||'',url:x.url||'',provider:x.provider||'',...(x.setlistId?{setlistId:x.setlistId}:{})};
  if(v==='remove')delete AG[k];else AG[k]={status:v,data};syncMarks();if(concertMode==='agenda')renderAgenda();
  try{if(v==='remove')await api('/api/agenda?key='+encodeURIComponent(k),{method:'DELETE'});else await api('/api/agenda',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k,status:v,data})});
-  slToast(v==='remove'?'Retiré de ton agenda':v==='going'?'« J’y vais » — ajouté à ton agenda':'« Intéressé » — ajouté à ton agenda')}
+  const past=String(data.date).slice(0,10)<new Date().toISOString().slice(0,10);
+  slToast(v==='remove'?'Retiré de ton agenda':v==='going'&&past?'Ajouté à tes concerts passés':v==='going'?'« J’y vais » — ajouté à ton agenda':'« Intéressé » — ajouté à ton agenda')}
  catch(e){if(prev)AG[k]=prev;else delete AG[k];syncMarks();if(concertMode==='agenda')renderAgenda();slToast('Impossible d’enregistrer : '+e.message)}}
-function syncMarks(){document.querySelectorAll('.sl-mark').forEach(b=>{const st=AG[b.dataset.k]?.status||'none';b.className='sl-mark '+st;b.innerHTML=MARK_ICON[st]});const n=Object.keys(AG).length;const t=document.querySelector('#live .sl-seg [data-mode=agenda] span');if(t)t.textContent=n?`Agenda (${n})`:'Agenda'}
+function syncMarks(){document.querySelectorAll('.sl-mark').forEach(b=>{const st=AG[b.dataset.k]?.status||'none';b.className='sl-mark '+st;b.innerHTML=MARK_ICON[st]});const today=new Date().toISOString().slice(0,10),n=Object.values(AG).filter(v=>String(v.data?.date||'').slice(0,10)>=today).length;const t=document.querySelector('#live .sl-seg [data-mode=agenda] span');if(t)t.textContent=n?`Agenda (${n})`:'Agenda'}
+let agendaView=loadConcertPrefs().agendaView==='past'?'past':'next';
+function setAgendaView(v){agendaView=v;saveConcertPrefs({agendaView:v});renderAgenda()}
 function renderAgenda(){const el=$('agendaList');if(!el)return;const today=new Date().toISOString().slice(0,10);
+ const nPast=Object.values(AG).filter(v=>String(v.data?.date||'').slice(0,10)<today).length;
+ const tabs=`<div class="sl-chips sl-ag-tabs"><button type="button" class="sl-chip ${agendaView==='next'?'on':''}" onclick="setAgendaView('next')">À venir</button><button type="button" class="sl-chip ${agendaView==='past'?'on':''}" onclick="setAgendaView('past')">Mes concerts passés${nPast?` · ${nPast}`:''}</button></div>`;
+ if(agendaView==='past'){el.innerHTML=tabs+pastAgendaHTML(today);return}
  const rows=Object.entries(AG).map(([k,v])=>({k,...v})).filter(r=>String(r.data?.date||'').slice(0,10)>=today).sort((a,b)=>String(a.data.date).localeCompare(String(b.data.date)));
  const block=(st,label)=>{const r=rows.filter(x=>x.status===st);return r.length?`<div class="sl-h2"><span>${label}</span><small class="sl-ag-count">${r.length}</small></div><div class="panel sl-list">${r.map(x=>concertCardHTML(x.data)).join('')}</div>`:''};
  const fr=Object.entries(FAG).filter(([k,v])=>!AG[k]&&String(v.data?.date||'').slice(0,10)>=today).sort((a,b)=>String(a[1].data.date).localeCompare(String(b[1].data.date)));
  const friendsBlock=fr.length?`<div class="sl-h2"><span>Mes amis y vont</span><small class="sl-ag-count">${fr.length}</small></div><div class="panel sl-list">${fr.map(([,v])=>concertCardHTML(v.data)).join('')}</div>`:'';
- el.innerHTML=(rows.length?block('going','J’y vais')+block('interested','Intéressé'):'<div class="panel sl-list"><div class="discover-empty">Aucun concert dans ton agenda pour le moment.<br><small>Touche ☆ sur un concert (Mes groupes, Autour de moi ou la fiche d’un groupe) pour le marquer « J’y vais » ou « Intéressé ».</small></div></div>')+friendsBlock;
+ el.innerHTML=tabs+(rows.length?block('going','J’y vais')+block('interested','Intéressé'):'<div class="panel sl-list"><div class="discover-empty">Aucun concert dans ton agenda pour le moment.<br><small>Touche ☆ sur un concert (Mes groupes, Autour de moi ou la fiche d’un groupe) pour le marquer « J’y vais » ou « Intéressé ».</small></div></div>')+friendsBlock;
  if(window.lucide)try{lucide.createIcons()}catch{}}
+// ---- Mes concerts passés + setlists (setlist.fm) ----
+function pastAgendaHTML(today){
+ const rows=Object.entries(AG).map(([k,v])=>({k,...v})).filter(r=>String(r.data?.date||'').slice(0,10)<today).sort((a,b)=>String(b.data.date).localeCompare(String(a.data.date)));
+ const went=rows.filter(r=>r.status==='going'),maybe=rows.filter(r=>r.status!=='going');
+ const add=`<button type="button" class="sl-loc sl-past-add" onclick="openAddPastSheet()"><span>＋</span><span>Ajouter un concert où je suis allé</span></button>`;
+ const byYear=list=>{let y='',h='';for(const r of list){const ry=String(r.data.date).slice(0,4);if(ry!==y){if(h)h+='</div>';y=ry;h+=`<div class="sl-h2"><span>${esc(ry)}</span></div><div class="panel sl-list">`}h+=pastCardHTML(r.k,r.data,false)}return h?h+'</div>':''};
+ const maybeBlock=maybe.length?`<div class="sl-h2"><span>Tu y étais ?</span><small class="sl-ag-count">${maybe.length}</small></div><div class="panel sl-list">${maybe.map(r=>pastCardHTML(r.k,r.data,true)).join('')}</div>`:'';
+ return add+(went.length?byYear(went):`<div class="panel sl-list"><div class="discover-empty">Pas encore de concert passé.<br><small>Les concerts marqués « J’y vais » arrivent ici une fois passés, avec leur setlist. Tu peux aussi ajouter un ancien concert avec le bouton ci-dessus.</small></div></div>`)+maybeBlock}
+const SETLIST_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h11M3 12h11M3 18h7"/><path d="M18 17V5l3 2"/><circle cx="16" cy="17" r="2"/></svg>';
+function pastCardHTML(k,x,ask){EVREG[k]=x;const d=new Date(String(x.date).slice(0,10)+'T12:00:00');const ok=!isNaN(d);
+ const own=followedInText(`${x.title||''} ${x.artist||''}`),band=x.artist||own?.name||String(x.title||'').split(/\s[+\/–-]\s|,\s/)[0];
+ const thumb=own?`<div class="sl-ev-img" ${photoStyle(imgForArtist(own))}></div>`:`<div class="sl-ev-img sl-ev-ph">${esc(String(band||'?').trim().charAt(0).toUpperCase())}</div>`;
+ const place=[x.venue,x.city].map(v=>String(v||'').trim()).filter(Boolean).map(esc).join(' · ');
+ const acts=ask?`<button type="button" class="sl-past-yes" data-k="${esc(k)}" onclick="event.stopPropagation();setMark(this.dataset.k,'going')">J’y étais</button>`
+  :`<button type="button" class="sl-news-pill sl-setlist" data-k="${esc(k)}" onclick="event.stopPropagation();openSetlist(this.dataset.k)" aria-label="Setlist">${SETLIST_ICON}</button>${markBtnHTML(x)}`;
+ return `<article class="sl-ev sl-ev-past"><div class="sl-ev-date"><b>${ok?String(d.getDate()).padStart(2,'0'):'—'}</b><small>${ok?esc(d.toLocaleDateString('fr-FR',{month:'short'}).replace('.','').toUpperCase()):''}</small><small class="sl-ev-year">${ok?d.getFullYear():''}</small></div>${thumb}<div class="sl-ev-info"><div class="sl-ev-band">${esc(band)}</div><div class="sl-ev-title">${esc(x.title||band)}</div><div class="sl-ev-place">${place}</div></div><div class="sl-ev-acts">${acts}</div></article>`}
+// Bands of a concert ("Resolve + SPLEEN + Silent Planet"): the followed one first.
+function concertBands(x){const first=ticketBand(x);const all=[first,...String(x.title||'').split(/\s[+\/–]\s|,\s|\s&\s/).map(t=>t.replace(/\(.*?\)|1[eè]re partie\s*:?/gi,'').trim())].filter(Boolean);const seen=new Set();return all.filter(b=>{const n=normUi(b);if(!n||n.length<2||seen.has(n))return false;seen.add(n);return true}).slice(0,5)}
+const SETL={};
+async function openSetlist(k,band){const x=EVREG[k]||AG[k]?.data;if(!x)return;const bands=concertBands(x);band=band||bands[0]||x.title||'';
+ const d=new Date(String(x.date).slice(0,10)+'T12:00:00'),day=isNaN(d)?'':d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'});
+ const chips=bands.length>1?`<div class="sl-chips sl-setl-bands">${bands.map(b=>`<button type="button" class="sl-chip ${normUi(b)===normUi(band)?'on':''}" data-b="${esc(b)}">${esc(b)}</button>`).join('')}</div>`:'';
+ const {m}=slMiniSheet('setlistSheet','Setlist · '+band,`<div class="sl-setl"><div class="sl-setl-meta">${esc([day,[x.venue,x.city].filter(Boolean).join(', ')].filter(Boolean).join(' · '))}</div>${chips}<div class="sl-setl-body"><div class="sl-pick-empty">⏳ Recherche de la setlist…</div></div></div>`);
+ m.querySelectorAll('.sl-setl-bands .sl-chip').forEach(b=>b.onclick=()=>openSetlist(k,b.dataset.b));
+ const useId=x.setlistId&&normUi(band)===normUi(x.artist||'');
+ const q=new URLSearchParams({artist:band,date:String(x.date).slice(0,10),city:x.city||''});if(useId)q.set('id',x.setlistId);const key=q.toString();
+ let r=SETL[key];if(!r){try{r=await api('/api/setlist?'+q);if(r?.configured!==false)SETL[key]=r}catch(e){r={error:e.message}}}
+ const body=m.querySelector('.sl-setl-body');if(!body||!document.body.contains(m))return;body.innerHTML=setlistHTML(r,band,x)}
+function setlistHTML(r,band,x){
+ if(r?.configured===false)return '<div class="sl-pick-empty">Les setlists ne sont pas encore activées sur le serveur.</div>';
+ if(r?.error)return `<div class="sl-pick-empty">${esc(r.error)}</div>`;
+ const s=r?.setlist;const fmSearch='https://www.setlist.fm/search?query='+encodeURIComponent(band);
+ if(!s||!s.songCount)return `<div class="sl-pick-empty">${s?'Le concert est sur setlist.fm, mais sa setlist n’a pas encore été remplie.':'Pas de setlist trouvée pour ce concert sur setlist.fm.'}<br><small>Les setlists sont ajoutées par les fans : elle peut arriver quelques jours après le concert.</small></div><a class="sl-setl-src" href="${esc(s?.url||fmSearch)}" target="_blank" rel="noopener">${s?'Compléter':'Chercher'} sur setlist.fm ↗</a>`;
+ let n=0;const sets=s.sets.map(st=>`${st.name?`<div class="sl-setl-h">${esc(st.name)}</div>`:''}<ol class="sl-setl-list">${st.songs.map(song=>{if(!song.tape)n++;const extra=[song.cover?'reprise de '+song.cover:'',song.info].filter(Boolean).join(' · ');
+  return `<li ${song.tape?'class="tape"':`value="${n}"`}><a href="https://www.deezer.com/search/${encodeURIComponent((song.cover||band)+' '+song.name)}" target="_blank" rel="noopener">${esc(song.name)}</a>${extra?`<small>${esc(extra)}</small>`:''}</li>`}).join('')}</ol>`).join('');
+ return `${s.tour?`<div class="sl-setl-meta">Tournée : ${esc(s.tour)}</div>`:''}<div class="sl-setl-count">${s.songCount} morceau${s.songCount>1?'x':''}</div>${sets}<a class="sl-setl-src" href="${esc(s.url)}" target="_blank" rel="noopener">Setlist : setlist.fm ↗</a>`}
+// Add a past concert: pick it from the band's setlists on setlist.fm.
+function openAddPastSheet(){const {m}=slMiniSheet('addPastSheet','Ajouter un concert passé',`<form class="sl-sheet-search sl-past-form" autocomplete="off"><input type="search" placeholder="Nom du groupe (ex. Gojira)" aria-label="Nom du groupe" enterkeyhint="search"></form><div class="sl-past-res"><div class="sl-pick-empty">Tape le nom du groupe : ses concerts passés connus de setlist.fm s’affichent, touche celui où tu étais.</div></div>`);
+ const input=m.querySelector('input'),res=m.querySelector('.sl-past-res');let band='',page=1,items=[];
+ const draw=(more)=>{res.innerHTML=items.length?items.map((it,i)=>{const d=new Date(it.date+'T12:00:00');const k=agendaKey({date:it.date,venue:it.venue,city:it.city,artist:it.artist});const have=AG[k]?.status==='going';
+   return `<button type="button" class="sl-pick ${have?'on':''}" data-i="${i}"><span class="sl-pick-all">${have?'✓':'🎸'}</span><span class="sl-pick-txt"><strong>${esc(d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}))}</strong><small>${esc([it.artist,it.venue,it.city,it.country!=='France'?it.country:''].filter(Boolean).join(' · '))}${it.songCount?` · ${it.songCount} titres`:''}</small></span></button>`}).join('')+(more?'<button type="button" class="sl-chip sl-past-more">Plus ancien…</button>':''):'<div class="sl-pick-empty">Aucun concert trouvé pour ce groupe sur setlist.fm.</div>';
+  res.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const it=items[Number(b.dataset.i)];const data={title:it.artist,artist:it.artist,date:it.date,time:'',venue:it.venue,city:it.city,country:it.country,url:it.url,provider:'setlist.fm',setlistId:it.id};const k=agendaKey(data);EVREG[k]=data;setMark(k,'going');b.classList.add('on');b.querySelector('.sl-pick-all').textContent='✓'});
+  res.querySelector('.sl-past-more')?.addEventListener('click',()=>load(page+1))};
+ const load=async(p)=>{page=p;if(p===1){items=[];res.innerHTML='<div class="sl-pick-empty">⏳ Recherche sur setlist.fm…</div>'}
+  try{const r=await api('/api/setlists/search?'+new URLSearchParams({artist:band,p:String(p)}));if(r.configured===false){res.innerHTML='<div class="sl-pick-empty">Les setlists ne sont pas encore activées sur le serveur.</div>';return}
+   items=items.concat(r.items||[]);draw((r.page||p)*(r.perPage||20)<(r.total||0))}catch(e){res.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div>`}};
+ m.querySelector('form').addEventListener('submit',e=>{e.preventDefault();band=input.value.trim();if(band){input.blur();load(1)}});setTimeout(()=>input.focus(),250)}
 // ---- Amis: friends see each other's "J'y vais" / "Intéressé" concerts ----
 let FAG={},FR={friends:[],incoming:[],outgoing:[],blocked:[]};
 const FR_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';

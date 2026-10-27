@@ -23,3 +23,6 @@ test("concert cards have the ticket button, ticketing sites are recognised",()=>
 test("ticket sheet links the Fnac artist page and opens links with a real link click",()=>{
   assert.doesNotMatch(html,/duckduckgo\.com|ticketmaster\.fr\/fr\/resultat/);
   assert.match(html,/fnacspectacles\.com\/artist\/'\+slug\+'\//);assert.match(html,/dice\.fm\/search\?query='\+encodeURIComponent\(band\)/);assert.match(html,/onPick:openExternal/)});
+test("agenda has the past concerts view with setlists",()=>{
+  for(const f of ["function pastAgendaHTML","function openSetlist","function openAddPastSheet","/api/setlist?","/api/setlists/search?"])assert.ok(html.includes(f),f);
+});
