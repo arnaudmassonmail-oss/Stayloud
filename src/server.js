@@ -1,7 +1,8 @@
+import crypto from "node:crypto";
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
+import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1CalendarToken,d1UserByCalendarToken,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
@@ -13,6 +14,7 @@ import {cachedJson} from "./apicache.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
 import {setAlertSink,sourcesHealth} from "./health.js";
 import {recentAlbums,pickNew} from "./alerts.js";
+import {vevent,calendar,validConcert} from "./ics.js";
 import {radioStations,radioByIds,radioNowPlaying,radioClick,RADIO_STYLES} from "./providers/radio.js";
 import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts,rowsNear} from "./providers/discovery.js";
 
@@ -224,7 +226,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.21.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.22.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -527,6 +529,20 @@ app.get("/api/alerts",requireAuth,async(req,res)=>{try{
  if(Number.isFinite(lat)&&Number.isFinite(lon)&&concerts.length){const ok=new Map((await rowsNear(concerts.map(c=>({...c})),lat,lon,r)).map(c=>[c.key,c.distanceKm]));near=concerts.filter(c=>ok.has(c.key)).map(c=>({...c,distanceKm:ok.get(c.key)}))}
  res.json({albums,concerts:near,computing:!st.done,area:Number.isFinite(lat)?"near":"france"})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/alerts/seen",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(String).filter(k=>/^[ac]:/.test(k)&&k.length<200).slice(0,300);if(keys.length)await d1MarkAlertsSeen(req.user.id,keys);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+// "Ajouter à mon calendrier": one concert as an .ics file (opens the phone's
+// calendar), and the user's agenda as a feed phones subscribe to (secret link).
+const pubBase=req=>String(process.env.APP_PUBLIC_URL||"").replace(/\/$/,"")||`${req.protocol}://${req.get("host")}`;
+app.get("/api/calendar/event.ics",(req,res)=>{const q=req.query,t=k=>String(q[k]||"").replace(/\s+/g," ").trim().slice(0,300);
+ const c={title:t("title"),artist:t("artist"),date:t("date").slice(0,10),time:t("time").slice(0,5),venue:t("venue"),city:t("city"),url:/^https?:\/\//i.test(t("url"))?t("url"):""};
+ if(!validConcert(c))return res.status(400).type("text/plain").send("Date manquante");
+ res.set("Content-Type","text/calendar; charset=utf-8");res.set("Content-Disposition",`inline; filename="concert-${c.date}.ics"`);res.send(calendar([vevent(c)],{name:"Concert"}))});
+app.get("/api/calendar/feed",requireAuth,async(req,res)=>{try{const token=await d1CalendarToken(req.user.id,false);const url=`${pubBase(req)}/cal/${token}.ics`;res.json({url,webcal:url.replace(/^https?:/,"webcal:")})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/calendar/feed/renew",requireAuth,async(req,res)=>{try{const token=await d1CalendarToken(req.user.id,true);const url=`${pubBase(req)}/cal/${token}.ics`;res.json({url,webcal:url.replace(/^https?:/,"webcal:")})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/cal/:token.ics",async(req,res)=>{try{const uid=/^[A-Za-z0-9_-]{20,64}$/.test(req.params.token)?await d1UserByCalendarToken(req.params.token):0;if(!uid)return res.status(404).type("text/plain").send("Agenda introuvable");
+ const from=new Date(Date.now()-30*864e5).toISOString().slice(0,10);
+ const evs=(await d1ListUserConcerts(uid)).map(r=>{let d={};try{d=typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{}}catch{}return {...r,d}}).filter(r=>(r.status==="going"||r.status==="interested")&&validConcert(r.d)&&String(r.d.date).slice(0,10)>=from)
+  .map(r=>vevent(r.d,{status:r.status,uid:"agenda-"+crypto.createHash("sha1").update(uid+"|"+r.ckey).digest("hex").slice(0,20)+"@stayloud-radar.online"}));
+ res.set("Content-Type","text/calendar; charset=utf-8");res.set("Cache-Control","private, max-age=900");res.send(calendar(evs,{name:"STAYLOUD – mes concerts"}))}catch(e){res.status(502).type("text/plain").send("Agenda indisponible")}});
 app.get("/api/providers/status",(_,res)=>res.json({providers:runStatus()}));
 app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:"position introuvable"});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const out=await discoverManualCityConcerts(q);try{out.items=mergeCommunityConcerts(out.items,(await approvedCommunity()).filter(c=>normCity(c.city)===normCity(q)),NaN,NaN,0)}catch{}res.json(out);}catch(e){res.status(502).json({error:e.message})}});
