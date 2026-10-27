@@ -12,6 +12,7 @@ import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichA
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
 import {findTickets,ticketmasterConfigured} from "./providers/tickets.js";
+import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
 import {setAlertSink,sourcesHealth} from "./health.js";
 import {recentAlbums,pickNew} from "./alerts.js";
@@ -227,7 +228,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.25.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.26.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -424,7 +425,7 @@ app.get("/api/live",requireAuth,(req,res)=>res.json({warming:isWarming(req.user.
 // Without D1 (local runs) they are kept in memory.
 const localAgenda=new Map();
 const AGENDA_STATUS=new Set(["going","interested"]);
-function agendaData(x){const o=x&&typeof x==="object"?x:{};const pick=k=>String(o[k]??"").slice(0,300);return {title:pick("title"),artist:pick("artist"),date:pick("date").slice(0,25),time:pick("time"),venue:pick("venue"),city:pick("city"),country:pick("country"),url:pick("url"),provider:pick("provider")}}
+function agendaData(x){const o=x&&typeof x==="object"?x:{};const pick=k=>String(o[k]??"").slice(0,300);return {title:pick("title"),artist:pick("artist"),date:pick("date").slice(0,25),time:pick("time"),venue:pick("venue"),city:pick("city"),country:pick("country"),url:pick("url"),provider:pick("provider"),setlistId:pick("setlistId").slice(0,20)}}
 app.get("/api/agenda",requireAuth,async(req,res)=>{try{const rows=d1Enabled?await d1ListUserConcerts(req.user.id):[...(localAgenda.get(req.user.id)||new Map()).values()];res.json({items:rows.map(r=>({key:r.ckey,status:r.status,data:typeof r.data==="string"?JSON.parse(r.data||"{}"):r.data||{},updatedAt:r.updated_at}))})}catch(e){res.status(502).json({error:e.message})}});
 app.put("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.body?.key||"").trim().slice(0,200),status=String(req.body?.status||"");if(!key||!AGENDA_STATUS.has(status))return res.status(400).json({error:"Concert ou statut invalide"});const data=agendaData(req.body?.data);if(d1Enabled)await d1SetUserConcert(req.user.id,key,status,data);else{if(!localAgenda.has(req.user.id))localAgenda.set(req.user.id,new Map());localAgenda.get(req.user.id).set(key,{ckey:key,status,data,updated_at:new Date().toISOString()})}res.json({ok:true,key,status})}catch(e){res.status(502).json({error:e.message})}});
 app.delete("/api/agenda",requireAuth,async(req,res)=>{try{const key=String(req.query.key||req.body?.key||"").trim();if(!key)return res.status(400).json({error:"Concert manquant"});if(d1Enabled)await d1DeleteUserConcert(req.user.id,key);else localAgenda.get(req.user.id)?.delete(key);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
@@ -540,6 +541,12 @@ app.get("/api/releases",requireAuth,async(req,res)=>{try{const uid=req.user.id,a
 const ticketsIp=makeLimiter({max:120,windowMs:15*60e3});
 app.get("/api/tickets",requireAuth,async(req,res)=>{try{const ip=req.ip||"";if(!ticketsIp.allowed(ip))return res.status(429).json({error:"Trop de recherches, réessaie dans quelques minutes."});ticketsIp.add(ip);
  const r=await findTickets({band:req.query.artist,date:req.query.date,city:req.query.city});res.json({...r,ticketmasterConfigured:ticketmasterConfigured()})}catch(e){res.status(502).json({error:e.message})}});
+// "Mes concerts passés": setlist of a concert, and a band's past concerts
+// (setlist.fm, cached; limited per address).
+const setlistIp=makeLimiter({max:90,windowMs:15*60e3});
+function setlistGuard(req,res){if(!setlistConfigured()){res.json({configured:false});return false}const ip=req.ip||"";if(!setlistIp.allowed(ip)){res.status(429).json({error:"Trop de recherches, réessaie dans quelques minutes."});return false}setlistIp.add(ip);return true}
+app.get("/api/setlist",requireAuth,async(req,res)=>{try{if(!setlistGuard(req,res))return;res.json({configured:true,setlist:await findSetlist({band:req.query.artist,date:req.query.date,city:req.query.city,id:req.query.id})})}catch(e){res.status(502).json({error:"setlist.fm ne répond pas pour le moment."})}});
+app.get("/api/setlists/search",requireAuth,async(req,res)=>{try{if(!setlistGuard(req,res))return;res.json({configured:true,...await searchSetlists({band:req.query.artist,page:req.query.p})})}catch(e){res.status(502).json({error:"setlist.fm ne répond pas pour le moment."})}});
 app.post("/api/alerts/seen",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(String).filter(k=>/^[ac]:/.test(k)&&k.length<200).slice(0,300);if(keys.length)await d1MarkAlertsSeen(req.user.id,keys);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 // "Ajouter à mon calendrier": one concert as an .ics file (opens the phone's
 // calendar), and the user's agenda as a feed phones subscribe to (secret link).
