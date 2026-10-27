@@ -21,11 +21,18 @@ export function pickVideos(data,band){
     .slice(0,12);
 }
 
-export async function bandVideos({band,kind="clips"}){
+// Lists prepared in the background (Clips page) may use only part of the
+// day's quota, so that bands opened by hand always get their videos.
+export const PREFETCH_PER_DAY=40;
+let budget={day:"",prefetch:0};
+export function prefetchAllowed(now=Date.now()){const day=new Date(now).toISOString().slice(0,10);if(budget.day!==day)budget={day,prefetch:0};return budget.prefetch<PREFETCH_PER_DAY}
+export class PrefetchSkipped extends Error{}
+export async function bandVideos({band,kind="clips",prefetch=false}){
   band=String(band||"").trim().slice(0,120);if(!VIDEO_KINDS[kind])kind="clips";
   const key=String(process.env.YOUTUBE_API_KEY||"").trim();
   if(!band||!key)return [];
   return cachedJson(`yt:${kind}:${norm(band)}`,v=>v?.length?7*DAY:DAY,async()=>{
+    if(prefetch){if(!prefetchAllowed())throw new PrefetchSkipped("quota de préchargement atteint");budget.prefetch++}
     const p=new URLSearchParams({part:"snippet",type:"video",videoEmbeddable:"true",maxResults:"25",q:`${band} ${VIDEO_KINDS[kind]}`,key});
     const data=await fetchJson(`https://www.googleapis.com/youtube/v3/search?${p}`,{headers:{Accept:"application/json"}},10000);
     return pickVideos(data,band);

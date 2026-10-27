@@ -29,3 +29,6 @@ test("agenda has the past concerts view with setlists",()=>{
 test("clips play inside the app (embedded player, band page section)",()=>{
   for(const f of ["function openVideo","youtube-nocookie.com/embed/","/api/videos?","profile-vids"])assert.ok(html.includes(f),f);
 });
+test("clips load faster: lists prepared in the background, connections opened early, player shows a waiting state",()=>{
+  for(const f of ["function prefetchVideos","prefetch','1'","function ytWarm","rel='preconnect'","sl-vid-wait"])assert.ok(html.includes(f),f);
+});
