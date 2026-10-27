@@ -1169,11 +1169,9 @@ function openTickets(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const band=ti
  const d=x.date?new Date(String(x.date).slice(0,10)+'T12:00:00'):null,day=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
  const items=[];
  if(/^https?:\/\//.test(String(x.url||'')))items.push({value:x.url,label:'Page du concert',icon:'↗',sub:(()=>{try{return new URL(x.url).hostname.replace(/^www\./,'')}catch{return ''}})()+' · billets et infos'});
- // Straight to the band's page on each ticket site: DuckDuckGo's "\" prefix
- // opens the first result of a search limited to that site.
- const onSite=site=>'https://duckduckgo.com/?q='+encodeURIComponent('\\site:'+site+' "'+band+'"');
- items.push({value:onSite('fnacspectacles.com'),label:'Fnac Spectacles',icon:'🎫',sub:'Page « '+band+' » sur Fnac Spectacles'});
- items.push({value:onSite('ticketmaster.fr'),label:'Ticketmaster',icon:'🎫',sub:'Page « '+band+' » sur Ticketmaster'});
+ // Fnac Spectacles has a fixed page per artist (/artist/<name>/) listing its dates.
+ const slug=normUi(band.replace(/['’]/g,'')).replace(/ /g,'-');
+ if(slug)items.push({value:'https://www.fnacspectacles.com/artist/'+slug+'/',label:'Fnac Spectacles',icon:'🎫',sub:'Dates de « '+band+' » en vente sur Fnac'});
  items.push({value:'https://www.google.com/search?q='+encodeURIComponent([band,city,day,'billets'].filter(Boolean).join(' ')),label:'Rechercher les billets',icon:'🔍',sub:[band,city,day].filter(Boolean).join(' · ')});
  openChoiceSheet({title:'Billets · '+String(x.title||band).slice(0,50),items,current:'',onPick:openExternal})}
 // A real link click opens the page reliably, also from the app installed on iPhone.
