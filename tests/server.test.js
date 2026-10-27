@@ -42,3 +42,13 @@ test("alerts: empty at first, only valid keys can be marked seen",async()=>{
   const r=await fetch(B+"/api/alerts",{headers:{cookie:a}});assert.equal(r.status,200);const d=await r.json();assert.deepEqual([d.albums,d.concerts],[[],[]]);
   assert.equal((await post("/api/alerts/seen",{keys:["a:x","nope","c:y"]},a)).status,200);
   assert.equal((await fetch(B+"/api/alerts")).status,401)});
+test("calendar: one concert as .ics, agenda feed by secret link",async()=>{
+  const ev=await fetch(B+"/api/calendar/event.ics?title=Gojira&date=2026-11-02&time=20:00&city=Nantes");assert.equal(ev.status,200);assert.match(ev.headers.get("content-type"),/text\/calendar/);assert.match(await ev.text(),/SUMMARY:Gojira/);
+  assert.equal((await fetch(B+"/api/calendar/event.ics?title=x")).status,400);
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  const put=await fetch(B+"/api/agenda",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({key:"2099-11-02|zenith",status:"going",data:{title:"Gojira + Mastodon",artist:"Gojira",date:"2099-11-02",venue:"Zénith",city:"Nantes"}})});assert.equal(put.status,200);
+  const f=await (await fetch(B+"/api/calendar/feed",{headers:{cookie:a}})).json();assert.match(f.webcal,/^webcal:\/\/.+\/cal\/[A-Za-z0-9_-]+\.ics$/);
+  const feed=await fetch(f.url);assert.equal(feed.status,200);const body=await feed.text();assert.match(body,/SUMMARY:Gojira \+ Mastodon/);assert.match(body,/X-WR-CALNAME:STAYLOUD/);
+  const renewed=await (await fetch(B+"/api/calendar/feed/renew",{method:"POST",headers:{cookie:a}})).json();assert.notEqual(renewed.url,f.url);
+  assert.equal((await fetch(f.url)).status,404,"old link stops working");assert.equal((await fetch(renewed.url)).status,200);
+  assert.equal((await fetch(B+"/api/calendar/feed")).status,401)});

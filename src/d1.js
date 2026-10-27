@@ -146,6 +146,8 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS user_blocks(user_id INTEGER NOT NULL,blocked_id INTEGER NOT NULL,created_at TEXT,PRIMARY KEY(user_id,blocked_id))`,
       // Alerts (new album / new concert) a user has already seen.
       `CREATE TABLE IF NOT EXISTS user_alert_seen(user_id INTEGER NOT NULL,akey TEXT NOT NULL,seen_at TEXT,PRIMARY KEY(user_id,akey))`,
+      // Secret link of a user's agenda feed (calendar subscription).
+      `CREATE TABLE IF NOT EXISTS calendar_tokens(user_id INTEGER PRIMARY KEY,token TEXT NOT NULL UNIQUE,created_at TEXT)`,
       // Shared answers of outside services (MusicBrainz, Deezer…), see apicache.js.
       `CREATE TABLE IF NOT EXISTS api_cache(key TEXT PRIMARY KEY,value TEXT NOT NULL,at INTEGER NOT NULL)`,
       // "Signaler un concert": shows members add, visible once the admin approves.
@@ -578,6 +580,7 @@ export async function d1DeleteAccount(userId){
     ["DELETE FROM user_concerts WHERE user_id=?",[id]],
     ["DELETE FROM user_seen WHERE user_id=?",[id]],
     ["DELETE FROM user_alert_seen WHERE user_id=?",[id]],
+    ["DELETE FROM calendar_tokens WHERE user_id=?",[id]],
     ["DELETE FROM support_messages WHERE user_id=?",[id]],
     // Approved concerts stay listed for everyone, without their author.
     ["UPDATE community_concerts SET user_id=0 WHERE user_id=? AND status='approved'",[id]],
@@ -598,4 +601,16 @@ export async function d1MarkAlertsSeen(userId,keys){
   await ensureD1Schema();const t=now(),list=[...new Set(keys)].filter(Boolean).map(k=>String(k).slice(0,200));
   for(let i=0;i<list.length;i+=30){const part=list.slice(i,i+30);
     await query(`INSERT OR IGNORE INTO user_alert_seen(user_id,akey,seen_at) VALUES ${part.map(()=>"(?,?,?)").join(",")}`,part.flatMap(k=>[Number(userId),k,t]));}
+}
+// ---- Agenda feed for phone calendars (secret link per user) ----
+export async function d1CalendarToken(userId,renew=false){
+  await ensureD1Schema();const id=Number(userId);
+  if(!renew){const r=(await query("SELECT token FROM calendar_tokens WHERE user_id=?",[id])).rows[0];if(r?.token)return r.token}
+  const token=crypto.randomBytes(24).toString("base64url");
+  await query("INSERT INTO calendar_tokens(user_id,token,created_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET token=excluded.token,created_at=excluded.created_at",[id,token,now()]);
+  return token;
+}
+export async function d1UserByCalendarToken(token){
+  await ensureD1Schema();
+  return Number((await query("SELECT user_id FROM calendar_tokens WHERE token=?",[String(token)])).rows[0]?.user_id||0);
 }
