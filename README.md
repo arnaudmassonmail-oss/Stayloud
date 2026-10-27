@@ -1,61 +1,31 @@
-# STAYLOUD v6.0 — recherche metal + photos datées
+# STAYLOUD — Radar Metal
 
-Cette version conserve le moteur concerts et les extraits musicaux de la version fournie. Les changements portent uniquement sur l’identification des groupes et la sélection des photos.
+Application web (installable sur téléphone) pour suivre ses groupes de metal : actualités, concerts près de chez soi, albums et extraits, clips, radio métal, amis.
 
-- Recherche groupe prioritairement sur The Metal Archives et Spirit of Metal, puis MusicBrainz/Bandsintown en complément.
-- Désambiguïsation renforcée : pays, localisation, style, source et identité sont conservés.
-- Les homonymes peuvent être enregistrés comme identités distinctes.
-- Photos : mélange live, studio, promotionnelles et pochettes pertinentes.
-- Date de publication/prise de vue recherchée quand elle est disponible et utilisée comme critère principal.
-- « 5 autres photos » exclut les photos déjà proposées et produit une nouvelle série.
+En ligne : https://stayloud-radar.online
 
-Le reste du projet est conservé tel quel.
-# STAYLOUD 5.3
+## Organisation
 
-Application locale de radar musical.
+- `public/index.html` : toute l'interface (une seule page), `public/sw.js` : mode hors ligne, `public/confidentialite.html` : politique de confidentialité.
+- `src/server.js` : serveur Express (API, comptes, amis, partages, concerts signalés, administration).
+- `src/d1.js` : base Cloudflare D1 (comptes et données des utilisateurs) ; `src/db.js` : copie locale SQLite.
+- `src/providers/` : sources de données (MusicBrainz, Deezer, concerts : Concerts-Metal, Sueur de Metal, Songkick, Bandsintown ; radio : Radio Browser).
+- `src/apicache.js` : cache partagé des réponses des services extérieurs ; `src/health.js` : surveillance des sources de concerts ; `src/ratelimit.js` : protection contre les essais de mots de passe.
+- `docs/notes/` : notes de chaque version.
 
-## Moteur des concerts
+## Lancer en local
 
-Le calendrier des groupes suivis utilise **uniquement** :
-
-- Bandsintown
-- InfoConcert
-
-Le moteur ne consulte plus les autres sources de concerts des anciennes versions.
-
-### Règles
-
-- Une date doit contenir une date, une ville et une salle.
-- La clé de fusion est `date + ville + salle`.
-- Les différences de casse, accents et ponctuation sont normalisées.
-- Si les deux sources décrivent le même concert, une seule fiche est affichée et les deux références sont conservées.
-- Si au moins une source répond avec des dates exploitables, le calendrier est synchronisé sur les résultats des deux sources disponibles.
-- Si les deux sources sont indisponibles, le dernier calendrier est conservé.
-- Au premier démarrage en 5.3, les anciens événements des moteurs précédents sont supprimés.
-
-## Installation
-
-```powershell
+```
 npm install
-npm start
+npm start          # http://localhost:8787
 ```
 
-Puis ouvrir `http://localhost:8787`.
+Variables utiles (sur Render) : `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_API_TOKEN` (base D1), `RESEND_API_KEY` (e-mails), `APP_PUBLIC_URL`, `ADMIN_USERS` (administrateurs), `JINA_API_KEY` (lecture des agendas), `PHOTO_WIDE_SEARCH=1` (recherche de photos sur le web, désactivée par défaut).
 
-## Test conseillé
+## Tests
 
-Ajouter/actualiser :
+```
+npm test
+```
 
-- Rise Of The Northstar
-- Emmure
-- Black Bomb A
-
-Le moteur doit montrer les dates provenant de Bandsintown et/ou InfoConcert, sans conserver les anciens faux positifs issus des versions précédentes.
-
-
-## 5.3 — corrections de collecte
-
-- Bandsintown reste la source principale pour le calendrier international.
-- La page publique Bandsintown n'affiche qu'un sous-ensemble des dates : le moteur avance désormais dans le calendrier avec `startDate` sur la même page Bandsintown jusqu'à épuisement des dates à venir.
-- InfoConcert est conservé comme seconde source et son parseur accepte une structure de page plus large afin de récupérer notamment les dates comme Quai M.
-- Aucune autre source de concerts n'est utilisée.
+Les tests n'utilisent pas Internet : la base D1 est simulée et les services extérieurs sont remplacés par de fausses réponses. Ils se lancent automatiquement sur GitHub à chaque pull request (`.github/workflows/tests.yml`).

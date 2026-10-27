@@ -1211,11 +1211,38 @@ async function helpGo(view){helpView=view;const box=$('helpBody'),title=$('helpT
    +row("helpGo('install')",'📲','Mettre STAYLOUD sur l’écran d’accueil',SL_STANDALONE?'✓ Déjà installé sur cet appareil':'Comme une vraie appli, sur iPhone et Android')
    +row("helpGo('write')",'✉︎','Nous écrire','Une question, un bug, une idée ? Envoie un message')
    +row("helpGo('mine')",'💬','Mes messages',HELP.myUnreadReplies?'Nouvelle réponse !':'Tes messages et nos réponses',HELP.myUnreadReplies||0)
-   +(HELP.isAdmin?grp('Administration')+row("helpGo('admin')",'🛠','Messages reçus','Messages et signalements des membres',HELP.adminUnread||0)+row("helpGo('adminConcerts')",'✅','Concerts signalés',HELP.communityPending?'À valider !':'Valider les concerts des membres',HELP.communityPending||0):'')
+   +(HELP.isAdmin?grp('Administration')+row("helpGo('admin')",'🛠','Messages reçus','Messages et signalements des membres',HELP.adminUnread||0)+row("helpGo('adminConcerts')",'✅','Concerts signalés',HELP.communityPending?'À valider !':'Valider les concerts des membres',HELP.communityPending||0)+row("helpGo('sources')",'📡','État des sources','Concerts-Metal, Sueur de Metal, Songkick, Bandsintown'):'')
    +grp('Compte')
    +row("window.open('/confidentialite.html','_blank','noopener')",'🔒','Confidentialité','Les données gardées par STAYLOUD et tes droits')
    +row("closeHelpSheet();logout()",'↩︎','Se déconnecter','')
    +row("helpGo('deleteAccount')",'🗑','Supprimer mon compte','Effacer ton compte et toutes tes données',0,'sl-acc-danger');return}
+ if(view==='sources'){title.textContent='État des sources';box.innerHTML=back+'<div class="sl-pick-empty">Chargement…</div>';
+  try{const d=await api('/api/admin/sources');const st={ok:['✓ Fonctionne','ok'],warning:['⚠︎ Échecs récents','wait'],down:['✕ En panne','no'],unknown:['… Pas encore utilisée','wait']};
+   box.innerHTML=back+'<p class="sl-help-note">Mis à jour à chaque recherche de concerts. En cas de panne de plus de 24 h, tu reçois un message dans <b>Messages reçus</b>.</p>'+(d.sources||[]).map(x=>{const s2=st[x.status]||st.unknown;return `<div class="sl-help-msg"><div class="sl-cc-title">${esc(x.name)}</div><div class="sl-cc-st ${s2[1]}">${s2[0]}</div><div class="sl-cc-when">Dernier succès : ${x.lastOk?esc(helpDate(new Date(x.lastOk).toISOString())):'jamais'}${x.pages?` · ${x.pages} page${x.pages>1?'s':''} suivie${x.pages>1?'s':''}`:''}</div>${x.failsSinceOk?`<div class="sl-cc-when">${x.failsSinceOk} échec${x.failsSinceOk>1?'s':''} d’affilée · ${esc(x.lastError||'')}</div>`:''}${(x.failing||[]).length?`<div class="sl-help-text sl-cc-note">Pages en échec : ${x.failing.map(f=>esc(f.page)).join(', ')}</div>`:''}</div>`}).join('')}catch(e){box.innerHTML=back+`<div class="sl-pick-empty">${esc(e.message)}</div>`}return}
+ if(view==='deleteAccount'){title.textContent='Supprimer mon compte';
+  box.innerHTML=back+`<form id="delAccForm" class="sl-help-form" autocomplete="off"><div class="sl-del-warn"><b>Cette action est définitive.</b> Seront effacés : ton compte <b>${esc(authUser?.username||'')}</b>, tes groupes suivis, ton agenda de concerts, tes amis, tes partages, tes messages et tes concerts signalés en attente.</div><label for="delAccPass">Confirme avec ton mot de passe</label><input id="delAccPass" type="password" autocomplete="current-password" required><button type="submit" class="sl-news-ok sl-del-btn" id="delAccBtn">Supprimer définitivement mon compte</button><p class="sl-help-note">Plus d’infos dans la <a href="/confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>.</p></form>`;
+  $('delAccForm').addEventListener('submit',async e=>{e.preventDefault();const pw=$('delAccPass').value;if(!pw)return slToast('Entre ton mot de passe');if(!confirm('Supprimer définitivement ton compte STAYLOUD et toutes tes données ?'))return;try{$('delAccPass').blur()}catch{}const btn=$('delAccBtn');btn.disabled=true;btn.textContent='Suppression…';
+   try{await api('/api/auth/delete-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});closeHelpSheet();try{localStorage.clear()}catch{}alert('Ton compte et toutes tes données ont été supprimés. Merci d’avoir utilisé STAYLOUD 🤘');location.reload()}
+   catch(err){btn.disabled=false;btn.textContent='Supprimer définitivement mon compte';slToast(err.message)}});return}
+ if(view==='report'){title.textContent='Signaler un concert';
+  const today=new Date().toISOString().slice(0,10);
+  box.innerHTML=back+`<form id="ccForm" class="sl-help-form sl-cc-form" autocomplete="off"><p class="sl-help-note sl-cc-intro">Un concert manque ? Remplis la fiche : il apparaîtra dans les concerts de tous les membres proches dès que l’administrateur l’aura validé.</p>
+   <label for="ccTitle">Nom du concert / de la soirée</label><input id="ccTitle" maxlength="160" placeholder="Ex. Soirée Bruit’Fier">
+   <label for="ccBands">Groupes</label><input id="ccBands" maxlength="400" placeholder="Ex. Wildfire, Mark Vador, Gabble King">
+   <div class="sl-cc-row"><div><label for="ccDate">Date *</label><input id="ccDate" type="date" min="${today}" required></div><div><label for="ccTime">Heure</label><input id="ccTime" type="time"></div></div>
+   <label for="ccCity">Ville *</label><input id="ccCity" maxlength="80" placeholder="Ex. La Bruffière" required>
+   <label for="ccVenue">Salle</label><input id="ccVenue" maxlength="120" placeholder="Ex. Salle Vincent Ansquer">
+   <label for="ccUrl">Lien (billetterie, page de l’événement)</label><input id="ccUrl" type="url" maxlength="500" placeholder="https://…" inputmode="url">
+   <label for="ccNote">Infos en plus (optionnel)</label><textarea id="ccNote" rows="2" maxlength="500" placeholder="Prix libre, style…"></textarea>
+   <button type="submit" class="sl-news-ok" id="ccSend">Envoyer pour validation</button></form><div class="sl-cc-mine-h">Mes concerts signalés</div><div id="ccMine"><div class="sl-pick-empty">Chargement…</div></div>`;
+  $('ccForm').addEventListener('submit',async e=>{e.preventDefault();const v=id=>String($(id).value||'').trim();const body={title:v('ccTitle'),bands:v('ccBands'),date:v('ccDate'),time:v('ccTime'),city:v('ccCity'),venue:v('ccVenue'),url:v('ccUrl'),note:v('ccNote')};
+   if(!body.title&&!body.bands)return slToast('Indique le nom du concert ou les groupes');if(!body.date)return slToast('Indique la date');if(!body.city)return slToast('Indique la ville');
+   try{document.activeElement?.blur?.()}catch{}const btn=$('ccSend');btn.disabled=true;btn.textContent='Envoi…';
+   try{await api('/api/community-concerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});slToast('Concert envoyé, merci ! Il sera visible après validation.');helpGo('report')}catch(err){btn.disabled=false;btn.textContent='Envoyer pour validation';slToast(err.message)}});
+  try{const d=await api('/api/community-concerts/mine');const el=$('ccMine');if(el)el.innerHTML=(d.items||[]).map(c=>ccItemHTML(c,false)).join('')||'<div class="sl-pick-empty">Aucun concert signalé pour le moment.</div>'}catch(e){const el=$('ccMine');if(el)el.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div>`}return}
+ if(view==='adminConcerts'){title.textContent='Concerts signalés';box.innerHTML=back+'<div class="sl-pick-empty">Chargement…</div>';
+  try{const d=await api('/api/community-concerts/admin');HELP.communityPending=(d.items||[]).filter(c=>c.status==='pending').length;
+   box.innerHTML=back+((d.items||[]).map(c=>ccItemHTML(c,true)).join('')||'<div class="sl-pick-empty">Aucun concert signalé.</div>')}catch(e){box.innerHTML=back+`<div class="sl-pick-empty">${esc(e.message)}</div>`}return}
  if(view==='install'){title.textContent='Écran d’accueil';
   const tab=helpInstallTab||(SL_IOS?'ios':'android');
   const step=(n,html)=>`<li><span class="sl-inst-n">${n}</span><span>${html}</span></li>`;

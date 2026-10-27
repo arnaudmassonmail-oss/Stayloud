@@ -10,10 +10,12 @@ import {resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discover
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
+import {makeLimiter,waitText} from "./ratelimit.js";
+import {setAlertSink,sourcesHealth} from "./health.js";
 import {radioStations,radioByIds,radioNowPlaying,radioClick,RADIO_STYLES} from "./providers/radio.js";
 import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts} from "./providers/discovery.js";
 
-const app=express();app.use(compression());app.use(express.json({limit:"10mb"}));
+const app=express();app.set("trust proxy",1);app.use(compression());app.use(express.json({limit:"10mb"}));
 const dir=path.dirname(fileURLToPath(import.meta.url));app.use(express.static(path.join(dir,"../public"),{etag:false,lastModified:false,setHeaders:(res,filePath)=>{if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store");else if(/\.(png|jpe?g|webp|svg|ico)$/i.test(filePath))res.setHeader("Cache-Control","public, max-age=604800");}}));
 
 // Explicit root route: allows a normal browser reload/F5 on the production URL.
@@ -128,9 +130,15 @@ function ensureUserRestored(userId){
 async function optionalUser(req){try{const user=await sessionUser(parseCookies(req).stayloud_session);if(user){upsertLocalUserMirror(user);await ensureUserRestored(user.id)}return user||null}catch{return null}}
 async function requireAuth(req,res,next){try{const user=await sessionUser(parseCookies(req).stayloud_session);if(!user)return res.status(401).json({error:'Connexion requise'});upsertLocalUserMirror(user);await ensureUserRestored(user.id);warmUserArtists(user.id);req.user=user;next()}catch(e){console.error('Auth:',e?.message||e);res.status(503).json({error:'Service de comptes indisponible'})}}
 function ownedArtist(req,id){return getArtist(Number(id),req.user.id)}
+// Password guessing / e-mail abuse protection (per IP and per account name).
+const loginFailsUser=makeLimiter({max:8,windowMs:15*60e3}),loginFailsIp=makeLimiter({max:30,windowMs:15*60e3});
+const registerIp=makeLimiter({max:5,windowMs:3600e3}),forgotIp=makeLimiter({max:5,windowMs:3600e3}),forgotEmail=makeLimiter({max:3,windowMs:3600e3}),deleteFails=makeLimiter({max:5,windowMs:15*60e3});
+const clientIp=req=>String(req.ip||req.socket?.remoteAddress||"?");
+function tooMany(res,sec,what){res.set("Retry-After",String(sec));return res.status(429).json({error:`Trop de ${what}. Réessaie dans ${waitText(sec)}.`})}
 app.post('/api/auth/register',async(req,res)=>{
  try{
   if(!d1Enabled)return res.status(503).json({error:'D1 n’est pas configuré sur le serveur'});
+  const ip=clientIp(req);if(!registerIp.allowed(ip))return tooMany(res,registerIp.retryAfter(ip),'créations de compte');registerIp.add(ip);
   const user=await d1CreateUser(req.body?.username,req.body?.email,req.body?.password);
   upsertLocalUserMirror(user);
   const session=await d1CreateSession(user.id);
@@ -143,8 +151,12 @@ app.post('/api/auth/register',async(req,res)=>{
 app.post('/api/auth/login',async(req,res)=>{
  try{
   if(!d1Enabled)return res.status(503).json({error:'D1 n’est pas configuré sur le serveur'});
+  const ip=clientIp(req),who=String(req.body?.username||'').trim().toLowerCase().slice(0,120);
+  if(!loginFailsUser.allowed(who))return tooMany(res,loginFailsUser.retryAfter(who),'essais de mot de passe pour ce compte');
+  if(!loginFailsIp.allowed(ip))return tooMany(res,loginFailsIp.retryAfter(ip),'essais de connexion');
   const user=await d1AuthenticateUser(req.body?.username,req.body?.password);
-  if(!user)return res.status(401).json({error:'Nom d’utilisateur ou mot de passe incorrect'});
+  if(!user){loginFailsUser.add(who);loginFailsIp.add(ip);return res.status(401).json({error:'Nom d’utilisateur ou mot de passe incorrect'})}
+  loginFailsUser.reset(who);
   upsertLocalUserMirror(user); restoredUsers.delete(Number(user.id)); await ensureUserRestored(user.id);
   const session=await d1CreateSession(user.id); setSessionCookie(res,session.token); res.json({user});
  }catch(e){res.status(503).json({error:e.message||'Connexion impossible'})}
@@ -157,8 +169,9 @@ app.post('/api/auth/logout',async(req,res)=>{
 // password is asked again, then every row of the user is erased.
 app.post('/api/auth/delete-account',requireAuth,async(req,res)=>{
  try{
+  const dk='u'+req.user.id;if(!deleteFails.allowed(dk))return tooMany(res,deleteFails.retryAfter(dk),'essais de mot de passe');
   const u=await d1AuthenticateUser(req.user.username,String(req.body?.password||''));
-  if(!u||Number(u.id)!==Number(req.user.id))return res.status(403).json({error:'Mot de passe incorrect'});
+  if(!u||Number(u.id)!==Number(req.user.id)){deleteFails.add(dk);return res.status(403).json({error:'Mot de passe incorrect'})}
   const id=Number(req.user.id);
   await d1DeleteAccount(id);
   try{deleteLocalUser(id)}catch(e){console.error('Local account delete:',e?.message||e)}
@@ -185,6 +198,9 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
  try{
   if(!/^\S+@\S+\.\S+$/.test(email))return res.json({ok:true,message:generic});
   if(!d1Enabled)return res.status(503).json({error:'La récupération par e-mail doit être configurée sur le serveur avec D1.'});
+  const ip=clientIp(req);if(!forgotIp.allowed(ip))return tooMany(res,forgotIp.retryAfter(ip),'demandes de récupération');forgotIp.add(ip);
+  // Same answer as a normal request: never reveal whether the address exists.
+  if(!forgotEmail.allowed(email))return res.json({ok:true,message:generic});forgotEmail.add(email);
   const user=await d1FindUserByEmail(email); if(!user)return res.json({ok:true,message:generic});
   const {token}=await d1CreatePasswordReset(user.id);
   const base=String(process.env.APP_PUBLIC_URL||'').replace(/\/$/,'');
@@ -207,7 +223,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.20.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.20.1",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -437,6 +453,10 @@ async function requireAdmin(req,res,next){try{if(!(await isAdmin(req.user)))retu
 app.get("/api/support/status",requireAuth,async(req,res)=>{try{const admin=await isAdmin(req.user);res.json({isAdmin:admin,...await d1SupportCounts(req.user.id,admin),communityPending:admin?await d1CountPendingCommunity().catch(()=>0):0})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/support",requireAuth,async(req,res)=>{try{const message=String(req.body?.message||"").trim(),subject=String(req.body?.subject||"").trim();if(message.length<3)return res.status(400).json({error:"Écris ton message"});if(await d1CountRecentSupport(req.user.id,new Date(Date.now()-3600e3).toISOString())>=5)return res.status(429).json({error:"Trop de messages en peu de temps, réessaie dans une heure"});await d1AddSupportMessage(req.user.id,subject,message);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/support/mine",requireAuth,async(req,res)=>{try{const rows=await d1MySupportMessages(req.user.id);await d1MarkRepliesSeen(req.user.id);res.json({items:rows})}catch(e){res.status(502).json({error:e.message})}});
+// Concert sources health (Mon compte › Administration › État des sources) and
+// alerts sent to the administrator's "Messages reçus".
+app.get("/api/admin/sources",requireAuth,requireAdmin,async(req,res)=>{try{res.json({sources:await sourcesHealth()})}catch(e){res.status(502).json({error:e.message})}});
+setAlertSink(async(subject,message)=>{if(!d1Enabled)return;const names=String(process.env.ADMIN_USERS||"").split(",").map(x=>x.trim()).filter(Boolean);let id=0;if(names.length){const u=await d1FindUserByUsername(names[0]).catch(()=>null);id=Number(u?.id)||0}if(!id)id=await d1FirstUserId();if(id)await d1AddSupportMessage(id,subject,message)});
 app.get("/api/support/admin",requireAuth,requireAdmin,async(req,res)=>{try{res.json({items:await d1AllSupportMessages()})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/support/:id/read",requireAuth,requireAdmin,async(req,res)=>{try{await d1MarkSupportRead(req.params.id);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/support/:id/reply",requireAuth,requireAdmin,async(req,res)=>{try{const reply=String(req.body?.reply||"").trim();if(!reply)return res.status(400).json({error:"Réponse vide"});await d1ReplySupport(req.params.id,reply);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
