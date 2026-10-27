@@ -11,6 +11,8 @@ function mbSlot(){const p=mbQueue.then(async()=>{const wait=Math.max(0,1050-(Dat
 // Answers are shared by every user (see apicache.js): band identities and
 // searches change rarely, album lists and events are re-read every 6 h.
 function mbTtl(url){const u=String(url);if(/\/(release-group|event)\?artist=/.test(u))return 6*3600e3;if(/\/event\/\?query=/.test(u))return 12*3600e3;if(/\/artist\/\?query=/.test(u))return 2*864e5;return 7*864e5}
+// Release groups (albums, EPs…) of an artist, shared cache of 6 h (see mbTtl).
+export function artistReleaseGroups(mbid){return mb(`${BASE}/release-group?artist=${encodeURIComponent(mbid)}&fmt=json&limit=100`).then(d=>d['release-groups']||[])}
 export function mb(url,opts={}){return cachedJson('mb:'+url,mbTtl(url),()=>mbLive(url,opts))}
 async function mbLive(url,{tries=4,timeout=20000}={}){
  let err;for(let i=0;i<tries;i++){await mbSlot();try{return await fetchJson(url,{headers:{Accept:"application/json","User-Agent":"STAYLOUD-Music-Radar/3.0 (stayloud-radar.online)"}},timeout)}catch(e){err=e;if(i<tries-1)await sleep(1500*2**i)}}throw err;

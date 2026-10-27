@@ -37,3 +37,8 @@ test("admin-only routes are protected",async()=>{
   const s=await fetch(B+"/api/admin/sources",{headers:{cookie:a}});assert.equal(s.status,200);assert.equal((await s.json()).sources.length,4);
   assert.equal((await fetch(B+"/api/admin/sources",{headers:{cookie:carl2}})).status,403,"members are refused");
   assert.equal((await fetch(B+"/api/admin/sources")).status,401,"visitors are refused")});
+test("alerts: empty at first, only valid keys can be marked seen",async()=>{
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  const r=await fetch(B+"/api/alerts",{headers:{cookie:a}});assert.equal(r.status,200);const d=await r.json();assert.deepEqual([d.albums,d.concerts],[[],[]]);
+  assert.equal((await post("/api/alerts/seen",{keys:["a:x","nope","c:y"]},a)).status,200);
+  assert.equal((await fetch(B+"/api/alerts")).status,401)});

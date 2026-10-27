@@ -144,6 +144,8 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS support_messages(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,subject TEXT,message TEXT NOT NULL,created_at TEXT,read_at TEXT,reply TEXT,replied_at TEXT,reply_seen_at TEXT)`,
       // Users someone blocked: no friend requests, shares or friend content between them.
       `CREATE TABLE IF NOT EXISTS user_blocks(user_id INTEGER NOT NULL,blocked_id INTEGER NOT NULL,created_at TEXT,PRIMARY KEY(user_id,blocked_id))`,
+      // Alerts (new album / new concert) a user has already seen.
+      `CREATE TABLE IF NOT EXISTS user_alert_seen(user_id INTEGER NOT NULL,akey TEXT NOT NULL,seen_at TEXT,PRIMARY KEY(user_id,akey))`,
       // Shared answers of outside services (MusicBrainz, Deezer…), see apicache.js.
       `CREATE TABLE IF NOT EXISTS api_cache(key TEXT PRIMARY KEY,value TEXT NOT NULL,at INTEGER NOT NULL)`,
       // "Signaler un concert": shows members add, visible once the admin approves.
@@ -575,6 +577,7 @@ export async function d1DeleteAccount(userId){
     ["DELETE FROM user_blocks WHERE user_id=? OR blocked_id=?",[id,id]],
     ["DELETE FROM user_concerts WHERE user_id=?",[id]],
     ["DELETE FROM user_seen WHERE user_id=?",[id]],
+    ["DELETE FROM user_alert_seen WHERE user_id=?",[id]],
     ["DELETE FROM support_messages WHERE user_id=?",[id]],
     // Approved concerts stay listed for everyone, without their author.
     ["UPDATE community_concerts SET user_id=0 WHERE user_id=? AND status='approved'",[id]],
@@ -585,4 +588,14 @@ export async function d1DeleteAccount(userId){
     ["DELETE FROM users WHERE id=?",[id]]
   ];
   for(const [sql,params] of steps)await query(sql,params);
+}
+// ---- Alerts "nouvel album / nouveau concert" already seen ----
+export async function d1AlertSeenKeys(userId){
+  await ensureD1Schema();
+  return new Set((await query("SELECT akey FROM user_alert_seen WHERE user_id=?",[Number(userId)])).rows.map(r=>r.akey));
+}
+export async function d1MarkAlertsSeen(userId,keys){
+  await ensureD1Schema();const t=now(),list=[...new Set(keys)].filter(Boolean).map(k=>String(k).slice(0,200));
+  for(let i=0;i<list.length;i+=30){const part=list.slice(i,i+30);
+    await query(`INSERT OR IGNORE INTO user_alert_seen(user_id,akey,seen_at) VALUES ${part.map(()=>"(?,?,?)").join(",")}`,part.flatMap(k=>[Number(userId),k,t]));}
 }
