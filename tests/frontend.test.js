@@ -22,4 +22,4 @@ test("concert cards have the ticket button, ticketing sites are recognised",()=>
   for(const h of ["songkick.com","bandsintown.com","concerts-metal.com"])assert.ok(!re.test(h),h)});
 test("ticket sheet uses site searches and opens links with a real link click",()=>{
   assert.doesNotMatch(html,/fnacspectacles\.com\/search|ticketmaster\.fr\/fr\/resultat/);
-  assert.match(html,/onSite\(.fnacspectacles\.com.\)/);assert.match(html,/onPick:openExternal/)});
+  assert.match(html,/onSite\(.fnacspectacles\.com.\)/);assert.match(html,/duckduckgo\.com\/\?q=.+\\\\site:/);assert.match(html,/onPick:openExternal/)});
