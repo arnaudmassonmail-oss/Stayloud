@@ -469,6 +469,7 @@ body.sl-radio-on .wrap{padding-bottom:150px}
 .sl-rel-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;background:none;border:0;color:#fff;text-align:left;padding:10px 0;cursor:pointer;font:inherit;min-height:0}
 .sl-rel-cal{flex:0 0 40px;width:40px;height:40px;border-radius:50%;border:1px solid #2c343d;background:#0d1116;font-size:17px;cursor:pointer;padding:0;min-height:0}
 .sl-rel-cd{color:#ff5a64;font-weight:700}
+.sl-ticket svg{width:17px;height:17px}.sl-news-pill.sl-ticket{border:0}.sl-news-pill.sl-ticket:not(.on){background:#1a2027;color:#e8ebee;box-shadow:none;border:1px solid #2c343d}
 /* ---- v7.21 alerts: new album / new concert ---- */
 .sl-alert{border:1px solid #5a1a1f;background:linear-gradient(180deg,#1a0b0d,#0a0d11);border-radius:14px;padding:10px 10px 6px;margin:8px 0 14px}
 .sl-alert-h{display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px}.sl-alert-h b{font:900 14px Inter,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase}
@@ -1155,6 +1156,23 @@ async function loadAgenda(){try{const d=await api('/api/agenda');AG={};for(const
 function openMarkSheet(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const cur=AG[k]?.status||'';const items=[{value:'going',label:'J’y vais',icon:'✓',sub:'Ajouté à ton agenda'},{value:'interested',label:'Intéressé',icon:'★',sub:'À garder en tête'}];if(cur)items.push({value:'remove',label:'Retirer de mon agenda',icon:'✕'});
  if(x.date)items.push({value:'cal',label:'Ajouter à mon calendrier',icon:'📅',sub:'iPhone, Android, Outlook…'},{value:'gcal',label:'Google Agenda',icon:'G',sub:'Ouvre Google Agenda'});
  openChoiceSheet({title:String(x.artist||x.title||'Concert').slice(0,60),items,current:cur,onPick:v=>v==='cal'?addToCalendar(x):v==='gcal'?window.open(googleCalUrl(x),'_blank','noopener'):setMark(k,v)})}
+// ---- 🎫 Billets: a ticketing link when the concert has one, otherwise a
+// small menu (concert page, Fnac Spectacles, Ticketmaster, web search) ----
+const TICKET_HOSTS=/(^|\.)(helloasso\.com|fnacspectacles\.com|fnac\.com|ticketmaster\.(fr|com|be|ch|de|co\.uk)|livenation\.fr|seetickets\.(com|fr)|digitick\.com|weezevent\.com|billetweb\.fr|yurplan\.com|shotgun\.live|dice\.fm|eventbrite\.(fr|com)|festik\.net|francebillet\.com|billetreduc\.com|infoconcert\.com|ticketnet\.fr|carrefourspectacles\.fr|leclercbilletterie\.com|placeminute\.com|ticketswap\.(fr|com)|tickettailor\.com|bigcartel\.com)$/i;
+function ticketHost(u){try{const h=new URL(String(u||'')).hostname.replace(/^www\./,'');return TICKET_HOSTS.test(h)?h:''}catch{return ''}}
+const TICKET_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/></svg>';
+function ticketBtnHTML(x){const k=agendaKey(x);if(k&&!k.startsWith('|'))EVREG[k]=x;const h=ticketHost(x.url);
+ if(h)return `<a class="sl-news-pill sl-ticket on" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="Billets sur ${esc(h)}" onclick="event.stopPropagation()">${TICKET_ICON}</a>`;
+ return `<button type="button" class="sl-news-pill sl-ticket" data-k="${esc(k)}" onclick="event.stopPropagation();openTickets(this.dataset.k)" aria-label="Billets et infos">${TICKET_ICON}</button>`}
+function ticketBand(x){const own=followedInText(`${x.title||''} ${x.artist||''}`);return String(x.artist||own?.name||String(x.title||'').split(/\s[+\/–-]\s|,\s|:\s/)[0]||'').trim()}
+function openTickets(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const band=ticketBand(x),city=String(x.city||'').trim();
+ const d=x.date?new Date(String(x.date).slice(0,10)+'T12:00:00'):null,day=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
+ const items=[];
+ if(/^https?:\/\//.test(String(x.url||'')))items.push({value:x.url,label:'Page du concert',icon:'↗',sub:(()=>{try{return new URL(x.url).hostname.replace(/^www\./,'')}catch{return ''}})()+' · billets et infos'});
+ items.push({value:'https://www.fnacspectacles.com/search/?searchterm='+encodeURIComponent(band),label:'Fnac Spectacles',icon:'🎫',sub:'Chercher « '+band+' »'});
+ items.push({value:'https://www.ticketmaster.fr/fr/resultat?ipSearch='+encodeURIComponent(band),label:'Ticketmaster',icon:'🎫',sub:'Chercher « '+band+' »'});
+ items.push({value:'https://www.google.com/search?q='+encodeURIComponent([band,city,day,'billets'].filter(Boolean).join(' ')),label:'Rechercher les billets',icon:'🔍',sub:[band,city,day].filter(Boolean).join(' · ')});
+ openChoiceSheet({title:'Billets · '+String(x.title||band).slice(0,50),items,current:'',onPick:v=>window.open(v,'_blank','noopener')})}
 // ---- "Ajouter à mon calendrier" (one concert) and agenda sync (feed) ----
 function calParams(x){const p=new URLSearchParams();for(const k of ['title','artist','date','time','venue','city','url']){const v=String(x?.[k]||'').trim();if(v)p.set(k,k==='date'?v.slice(0,10):k==='time'?v.slice(0,5):v)}if(!p.get('title'))p.set('title',String(x?.artist||'Concert'));return p}
 function addToCalendar(x){const url='/api/calendar/event.ics?'+calParams(x).toString();if(SL_IOS||/Android/i.test(navigator.userAgent))location.href=url;else window.open(url,'_blank','noopener')}
@@ -1410,7 +1428,7 @@ function concertCardHTML(x,{mine=false,geo=false,festival=false}={}){
  const place=[x.venue,x.city].map(v=>String(v||'').replace(/^[\[\]]|[\[\]]$/g,'').trim()).filter(Boolean).map(v=>esc(cleanDiscoverText?cleanDiscoverText(v):v)).join(' · ');
  const dist=geo&&Number.isFinite(Number(x.distanceKm))?` · <b>${Math.round(Number(x.distanceKm))} km</b>`:'';
  const thumb=own?`<div class="sl-ev-img" ${photoStyle(imgForArtist(own))}></div>`:`<div class="sl-ev-img sl-ev-ph">${esc(String(band||'?').trim().charAt(0).toUpperCase())}</div>`;
- return `<article class="sl-ev"><div class="sl-ev-date"><b>${day}</b><small>${esc(mon)}</small></div>${thumb}<div class="sl-ev-info"><div class="sl-ev-band">${esc(band)}${geo&&own?' <span class="sl-mine">Ton groupe</span>':''}${festival?' <span class="sl-fest">Festival</span>':''}${x.community?' <span class="sl-cc-tag">Signalé</span>':''}</div><div class="sl-ev-title">${esc(title)}${support?' <span class="support-tag">Première partie</span>':''}</div><div class="sl-ev-place">${place}${dist}</div>${friendsLineHTML(agendaKey(x))}</div><div class="sl-ev-acts">${markBtnHTML(x)}${x.url?`<a class="sl-news-pill" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="Voir le concert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>`:''}</div></article>`}
+ return `<article class="sl-ev"><div class="sl-ev-date"><b>${day}</b><small>${esc(mon)}</small></div>${thumb}<div class="sl-ev-info"><div class="sl-ev-band">${esc(band)}${geo&&own?' <span class="sl-mine">Ton groupe</span>':''}${festival?' <span class="sl-fest">Festival</span>':''}${x.community?' <span class="sl-cc-tag">Signalé</span>':''}</div><div class="sl-ev-title">${esc(title)}${support?' <span class="support-tag">Première partie</span>':''}</div><div class="sl-ev-place">${place}${dist}</div>${friendsLineHTML(agendaKey(x))}</div><div class="sl-ev-acts">${markBtnHTML(x)}${ticketBtnHTML(x)}</div></article>`}
 function concertGeoSummary(place){const rows=[...discoverEventsData,...discoverFestivalsData];const mine=new Set(rows.map(x=>followedInText(`${x.title||''} ${x.artist||''}`)?.id).filter(Boolean)).size;return `Concerts métal autour de <strong>${esc(place)}</strong> · ${discoverRadius} km${mine?` · <strong>${mine}</strong> de vos groupes`:''}`}
 function syncRadiusChips(){const r=Number($('discoverRadius').value)||50;document.querySelectorAll('#geoTools .sl-chip').forEach(c=>c.classList.toggle('on',Number(c.dataset.r)===r))}
 function setConcertMode(m,{run=true}={}){
