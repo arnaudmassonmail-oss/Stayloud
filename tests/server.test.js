@@ -62,3 +62,7 @@ test("setlists: off without a setlist.fm key; a past concert keeps its setlist i
   assert.equal((await fetch(B+"/api/setlists/search?artist=Gojira")).status,401);
   const put=await fetch(B+"/api/agenda",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({key:"2022-09-03|zenith",status:"going",data:{title:"Gojira",artist:"Gojira",date:"2022-09-03",venue:"Zénith",city:"Nantes",provider:"setlist.fm",setlistId:"63d6b2a7"}})});assert.equal(put.status,200);
   const ag=await (await fetch(B+"/api/agenda",{headers:{cookie:a}})).json();assert.equal(ag.items.find(x=>x.key==="2022-09-03|zenith")?.data.setlistId,"63d6b2a7")});
+test("videos: off without a YouTube key, login required",async()=>{
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  const r=await fetch(B+"/api/videos?artist=Gojira",{headers:{cookie:a}});assert.equal(r.status,200);assert.deepEqual(await r.json(),{configured:false,items:[]});
+  assert.equal((await fetch(B+"/api/videos?artist=Gojira")).status,401)});
