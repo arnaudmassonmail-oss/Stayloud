@@ -18,3 +18,7 @@ test("YouTube: keeps the band's own videos, drops reactions, covers and other ba
   assert.equal(v[2].title,"Silent Planet & Friends 'Live'");assert.equal(v[0].published,"2024-05-02");
   assert.deepEqual(pickVideos({},"Silent Planet"),[]);
 });
+test("YouTube: background preparation keeps most of the daily quota for bands opened by hand",async()=>{
+  const {prefetchAllowed,PREFETCH_PER_DAY}=await import("../src/providers/youtube.js");
+  assert.ok(PREFETCH_PER_DAY>0&&PREFETCH_PER_DAY<=50);assert.equal(prefetchAllowed(Date.parse("2026-10-27T10:00:00Z")),true);
+});

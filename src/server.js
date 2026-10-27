@@ -13,7 +13,7 @@ import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./provi
 import {cachedJson} from "./apicache.js";
 import {findTickets,ticketmasterConfigured} from "./providers/tickets.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
-import {bandVideos,youtubeConfigured} from "./providers/youtube.js";
+import {bandVideos,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
 import {setAlertSink,sourcesHealth} from "./health.js";
 import {recentAlbums,pickNew} from "./alerts.js";
@@ -229,7 +229,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.27.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.27.1",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -549,9 +549,10 @@ function setlistGuard(req,res){if(!setlistConfigured()){res.json({configured:fal
 app.get("/api/setlist",requireAuth,async(req,res)=>{try{if(!setlistGuard(req,res))return;res.json({configured:true,setlist:await findSetlist({band:req.query.artist,date:req.query.date,city:req.query.city,id:req.query.id})})}catch(e){res.status(502).json({error:"setlist.fm ne répond pas pour le moment."})}});
 app.get("/api/setlists/search",requireAuth,async(req,res)=>{try{if(!setlistGuard(req,res))return;res.json({configured:true,...await searchSetlists({band:req.query.artist,page:req.query.p})})}catch(e){res.status(502).json({error:"setlist.fm ne répond pas pour le moment."})}});
 // Clips: a band's YouTube videos, played inside the app (cached a week).
+// prefetch=1: prepared in the background, within a part of the daily quota.
 const videosIp=makeLimiter({max:90,windowMs:15*60e3});
 app.get("/api/videos",requireAuth,async(req,res)=>{try{if(!youtubeConfigured())return res.json({configured:false,items:[]});const ip=req.ip||"";if(!videosIp.allowed(ip))return res.status(429).json({error:"Trop de recherches, réessaie dans quelques minutes."});videosIp.add(ip);
- res.json({configured:true,items:await bandVideos({band:req.query.artist,kind:String(req.query.kind||"clips")})})}catch(e){res.status(502).json({error:"YouTube ne répond pas pour le moment."})}});
+ res.json({configured:true,items:await bandVideos({band:req.query.artist,kind:String(req.query.kind||"clips"),prefetch:req.query.prefetch==="1"})})}catch(e){if(e instanceof PrefetchSkipped)return res.json({configured:true,items:[],skipped:true});res.status(502).json({error:"YouTube ne répond pas pour le moment."})}});
 app.post("/api/alerts/seen",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(String).filter(k=>/^[ac]:/.test(k)&&k.length<200).slice(0,300);if(keys.length)await d1MarkAlertsSeen(req.user.id,keys);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 // "Ajouter à mon calendrier": one concert as an .ics file (opens the phone's
 // calendar), and the user's agenda as a feed phones subscribe to (secret link).
