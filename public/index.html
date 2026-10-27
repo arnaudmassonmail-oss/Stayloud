@@ -469,7 +469,7 @@ body.sl-radio-on .wrap{padding-bottom:150px}
 .sl-rel-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;background:none;border:0;color:#fff;text-align:left;padding:10px 0;cursor:pointer;font:inherit;min-height:0}
 .sl-rel-cal{flex:0 0 40px;width:40px;height:40px;border-radius:50%;border:1px solid #2c343d;background:#0d1116;font-size:17px;cursor:pointer;padding:0;min-height:0}
 .sl-rel-cd{color:#ff5a64;font-weight:700}
-.sl-ticket svg{width:17px;height:17px}.sl-news-pill.sl-ticket{border:0}.sl-news-pill.sl-ticket:not(.on){background:#1a2027;color:#e8ebee;box-shadow:none;border:1px solid #2c343d}
+.sl-ticket svg{width:17px;height:17px}.sl-ticket.busy{opacity:.5;animation:slTixPulse 1s ease-in-out infinite}@keyframes slTixPulse{50%{opacity:.25}}.sl-news-pill.sl-ticket{border:0}.sl-news-pill.sl-ticket:not(.on){background:#1a2027;color:#e8ebee;box-shadow:none;border:1px solid #2c343d}
 /* ---- v7.21 alerts: new album / new concert ---- */
 .sl-alert{border:1px solid #5a1a1f;background:linear-gradient(180deg,#1a0b0d,#0a0d11);border-radius:14px;padding:10px 10px 6px;margin:8px 0 14px}
 .sl-alert-h{display:flex;align-items:center;justify-content:space-between;margin:0 2px 8px}.sl-alert-h b{font:900 14px Inter,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase}
@@ -1163,11 +1163,21 @@ function ticketHost(u){try{const h=new URL(String(u||'')).hostname.replace(/^www
 const TICKET_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2M13 17v2M13 11v2"/></svg>';
 function ticketBtnHTML(x){const k=agendaKey(x);if(k&&!k.startsWith('|'))EVREG[k]=x;const h=ticketHost(x.url);
  if(h)return `<a class="sl-news-pill sl-ticket on" href="${esc(x.url)}" target="_blank" rel="noopener" aria-label="Billets sur ${esc(h)}" onclick="event.stopPropagation()">${TICKET_ICON}</a>`;
- return `<button type="button" class="sl-news-pill sl-ticket" data-k="${esc(k)}" onclick="event.stopPropagation();openTickets(this.dataset.k)" aria-label="Billets et infos">${TICKET_ICON}</button>`}
+ return `<button type="button" class="sl-news-pill sl-ticket" data-k="${esc(k)}" onclick="event.stopPropagation();openTickets(this.dataset.k,this)" aria-label="Billets et infos">${TICKET_ICON}</button>`}
 function ticketBand(x){const own=followedInText(`${x.title||''} ${x.artist||''}`);return String(x.artist||own?.name||String(x.title||'').split(/\s[+\/–-]\s|,\s|:\s/)[0]||'').trim()}
-function openTickets(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const band=ticketBand(x),city=String(x.city||'').trim();
+// The server checks Ticketmaster (exact page of this date) and Bandsintown
+// (organiser's ticket link); answers are kept for the session.
+const TIX={};
+async function ticketLinks(band,date,city){const key=[band,date,city].join('|');if(key in TIX)return TIX[key];
+ const q=new URLSearchParams({artist:band,date:String(date||'').slice(0,10),city});
+ try{const r=await Promise.race([api('/api/tickets?'+q),new Promise((_,no)=>setTimeout(()=>no(Error('timeout')),6000))]);return TIX[key]=r}catch{return null}}
+async function openTickets(k,btn){const x=EVREG[k]||AG[k]?.data;if(!x)return;const band=ticketBand(x),city=String(x.city||'').trim();
+ if(btn){if(btn.classList.contains('busy'))return;btn.classList.add('busy')}
+ const found=x.date?await ticketLinks(band,x.date,city):null;btn?.classList.remove('busy');
  const d=x.date?new Date(String(x.date).slice(0,10)+'T12:00:00'):null,day=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
  const items=[];
+ if(found?.ticketmaster?.url)items.push({value:found.ticketmaster.url,label:'Ticketmaster',icon:'🎫',sub:'✓ En vente sur Ticketmaster · cette date'});
+ if(found?.official?.url)items.push({value:found.official.url,label:'Billetterie officielle',icon:'🎫',sub:'✓ Lien de l’organisateur (via Bandsintown)'});
  if(/^https?:\/\//.test(String(x.url||'')))items.push({value:x.url,label:'Page du concert',icon:'↗',sub:(()=>{try{return new URL(x.url).hostname.replace(/^www\./,'')}catch{return ''}})()+' · billets et infos'});
  // Fnac Spectacles has a fixed page per artist (/artist/<name>/) listing its dates.
  const slug=normUi(band.replace(/['’]/g,'')).replace(/ /g,'-');
