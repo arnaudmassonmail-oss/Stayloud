@@ -35,3 +35,8 @@ test("clips load faster: lists prepared in the background, connections opened ea
 test("clips page is a feed of the latest clips, band page shows 4 clips and links to it",()=>{
   for(const f of ["/api/videos/feed","Derniers clips de tes groupes","function openClipsFor","data-max=\"4\"","Voir tous les clips"])assert.ok(html.includes(f),f);
 });
+test("tour presents the current app (billets, setlists, clips feed, radio)",()=>{
+  const t=html.slice(html.indexOf("const SLIDES=["),html.indexOf("let i=0,el=null;"));
+  for(const f of ["Agenda et billets","Tes concerts passés","setlist","Écouter : clips et radio","Actus et sorties","Ticketmaster"])assert.ok(t.includes(f),f);
+  assert.ok(html.includes("'stayloud.tour5.'"));
+});
