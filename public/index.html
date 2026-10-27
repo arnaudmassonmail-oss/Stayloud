@@ -1169,10 +1169,15 @@ function openTickets(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const band=ti
  const d=x.date?new Date(String(x.date).slice(0,10)+'T12:00:00'):null,day=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}):'';
  const items=[];
  if(/^https?:\/\//.test(String(x.url||'')))items.push({value:x.url,label:'Page du concert',icon:'↗',sub:(()=>{try{return new URL(x.url).hostname.replace(/^www\./,'')}catch{return ''}})()+' · billets et infos'});
- items.push({value:'https://www.fnacspectacles.com/search/?searchterm='+encodeURIComponent(band),label:'Fnac Spectacles',icon:'🎫',sub:'Chercher « '+band+' »'});
- items.push({value:'https://www.ticketmaster.fr/fr/resultat?ipSearch='+encodeURIComponent(band),label:'Ticketmaster',icon:'🎫',sub:'Chercher « '+band+' »'});
+ // Searches restricted to each ticket site: their own search pages change
+ // address often, a web search on the site always lands on the right page.
+ const onSite=site=>'https://www.google.com/search?q='+encodeURIComponent('site:'+site+' "'+band+'"');
+ items.push({value:onSite('fnacspectacles.com'),label:'Fnac Spectacles',icon:'🎫',sub:'Chercher « '+band+' »'});
+ items.push({value:onSite('ticketmaster.fr'),label:'Ticketmaster',icon:'🎫',sub:'Chercher « '+band+' »'});
  items.push({value:'https://www.google.com/search?q='+encodeURIComponent([band,city,day,'billets'].filter(Boolean).join(' ')),label:'Rechercher les billets',icon:'🔍',sub:[band,city,day].filter(Boolean).join(' · ')});
- openChoiceSheet({title:'Billets · '+String(x.title||band).slice(0,50),items,current:'',onPick:v=>window.open(v,'_blank','noopener')})}
+ openChoiceSheet({title:'Billets · '+String(x.title||band).slice(0,50),items,current:'',onPick:openExternal})}
+// A real link click opens the page reliably, also from the app installed on iPhone.
+function openExternal(u){const a=document.createElement('a');a.href=u;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}
 // ---- "Ajouter à mon calendrier" (one concert) and agenda sync (feed) ----
 function calParams(x){const p=new URLSearchParams();for(const k of ['title','artist','date','time','venue','city','url']){const v=String(x?.[k]||'').trim();if(v)p.set(k,k==='date'?v.slice(0,10):k==='time'?v.slice(0,5):v)}if(!p.get('title'))p.set('title',String(x?.artist||'Concert'));return p}
 function addToCalendar(x){const url='/api/calendar/event.ics?'+calParams(x).toString();if(SL_IOS||/Android/i.test(navigator.userAgent))location.href=url;else window.open(url,'_blank','noopener')}
