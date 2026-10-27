@@ -11,6 +11,7 @@ import {artistReleaseGroups,resolve,resolveByMbid,searchArtistCandidates,fetchAr
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
+import {findTickets,ticketmasterConfigured} from "./providers/tickets.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
 import {setAlertSink,sourcesHealth} from "./health.js";
 import {recentAlbums,pickNew} from "./alerts.js";
@@ -226,7 +227,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.24.4",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.25.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -534,6 +535,11 @@ app.get("/api/releases",requireAuth,async(req,res)=>{try{const uid=req.user.id,a
  const st=userAlbums(uid,artists);if(!st.done)await Promise.race([st.promise,new Promise(r=>setTimeout(r,2500))]);
  const items=[...st.map.values()].flat();const seen=new Set();const uniq=items.filter(x=>!seen.has(x.key)&&seen.add(x.key));
  res.json({items:uniq,computing:!st.done,bands:artists.filter(a=>a.mbid).length})}catch(e){res.status(502).json({error:e.message})}});
+// 🎫 Billets: does Ticketmaster sell this concert, and has Bandsintown the
+// organiser's ticket link? (cached; limited per address)
+const ticketsIp=makeLimiter({max:120,windowMs:15*60e3});
+app.get("/api/tickets",requireAuth,async(req,res)=>{try{const ip=req.ip||"";if(!ticketsIp.allowed(ip))return res.status(429).json({error:"Trop de recherches, réessaie dans quelques minutes."});ticketsIp.add(ip);
+ const r=await findTickets({band:req.query.artist,date:req.query.date,city:req.query.city});res.json({...r,ticketmasterConfigured:ticketmasterConfigured()})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/alerts/seen",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(String).filter(k=>/^[ac]:/.test(k)&&k.length<200).slice(0,300);if(keys.length)await d1MarkAlertsSeen(req.user.id,keys);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 // "Ajouter à mon calendrier": one concert as an .ics file (opens the phone's
 // calendar), and the user's agenda as a feed phones subscribe to (secret link).
