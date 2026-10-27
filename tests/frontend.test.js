@@ -26,3 +26,6 @@ test("ticket sheet links the Fnac artist page and opens links with a real link c
 test("agenda has the past concerts view with setlists",()=>{
   for(const f of ["function pastAgendaHTML","function openSetlist","function openAddPastSheet","/api/setlist?","/api/setlists/search?"])assert.ok(html.includes(f),f);
 });
+test("clips play inside the app (embedded player, band page section)",()=>{
+  for(const f of ["function openVideo","youtube-nocookie.com/embed/","/api/videos?","profile-vids"])assert.ok(html.includes(f),f);
+});

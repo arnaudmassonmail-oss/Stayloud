@@ -1,0 +1,33 @@
+// Clips played inside the app: a band's videos from the YouTube Data API
+// (free key: YOUTUBE_API_KEY). A search costs 100 of the 10 000 daily units,
+// so each band's list is cached a week (one search serves every user).
+import {fetchJson} from "../utils.js";
+import {cachedJson} from "../apicache.js";
+
+const DAY=864e5;
+const norm=s=>String(s||"").normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+const decode=s=>String(s||"").replace(/&amp;/g,"&").replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&lt;/g,"<").replace(/&gt;/g,">");
+export const youtubeConfigured=()=>!!String(process.env.YOUTUBE_API_KEY||"").trim();
+export const VIDEO_KINDS={clips:"official music video",live:"live"};
+
+// Search results -> the band's videos (the band must be named in the title or
+// be the channel; reactions, covers and lessons are left out).
+export function pickVideos(data,band){
+  const b=norm(band),seen=new Set();
+  return (data?.items||[]).map(it=>({id:String(it?.id?.videoId||""),title:decode(it?.snippet?.title),channel:decode(it?.snippet?.channelTitle),published:String(it?.snippet?.publishedAt||"").slice(0,10)}))
+    .filter(v=>/^[\w-]{11}$/.test(v.id)&&!seen.has(v.id)&&seen.add(v.id))
+    .filter(v=>{const t=` ${norm(v.title)} `,c=norm(v.channel);return b&&(t.includes(` ${b} `)||c===b||c.startsWith(b+" ")||c.replace(/ /g,"")===b.replace(/ /g,""))})
+    .filter(v=>!/\b(reaction|react|reacts|cover|guitar lesson|drum cover|tutorial|karaoke|lyrics video fan)\b/i.test(v.title))
+    .slice(0,12);
+}
+
+export async function bandVideos({band,kind="clips"}){
+  band=String(band||"").trim().slice(0,120);if(!VIDEO_KINDS[kind])kind="clips";
+  const key=String(process.env.YOUTUBE_API_KEY||"").trim();
+  if(!band||!key)return [];
+  return cachedJson(`yt:${kind}:${norm(band)}`,v=>v?.length?7*DAY:DAY,async()=>{
+    const p=new URLSearchParams({part:"snippet",type:"video",videoEmbeddable:"true",maxResults:"25",q:`${band} ${VIDEO_KINDS[kind]}`,key});
+    const data=await fetchJson(`https://www.googleapis.com/youtube/v3/search?${p}`,{headers:{Accept:"application/json"}},10000);
+    return pickVideos(data,band);
+  });
+}
