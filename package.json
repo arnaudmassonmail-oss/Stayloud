@@ -1,11 +1,12 @@
 {
   "name": "music-radar-backend-v2",
-  "version": "7.20.0",
+  "version": "7.20.1",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test": "node --test \"tests/*.test.js\""
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -13,5 +14,8 @@
     "express": "^4.21.2",
     "fast-xml-parser": "^5.2.5",
     "node-cron": "^4.2.1"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

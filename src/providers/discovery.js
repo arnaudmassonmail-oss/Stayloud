@@ -3,6 +3,7 @@ import {XMLParser} from "fast-xml-parser";
 import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
 import {d1LoadGeoCache,d1PutGeoBatch,d1GetBandCache,d1PutBandEvents} from "../d1.js";
 import {mb} from "./musicbrainz.js";
+import {recordSource} from "../health.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -537,7 +538,8 @@ async function cachedSourceRows(key,fetcher){
   if(hit&&hit.rows.length&&Date.now()-hit.at<SOURCE_TTL)return {...hit.fresh,rows:hit.rows,cached:true};
   if(sourceInflight.has(k))return sourceInflight.get(k);
   const job=(async()=>{
-    let res=null;try{res=await fetcher()}catch{}
+    let res=null,thrown='';try{res=await fetcher()}catch(e){thrown=e?.message||String(e)}
+    recordSource(key,Boolean(res?.rows?.length),thrown||res?.error||(Array.isArray(res?.errors)?res.errors.join(' · '):'')||'aucun concert lu').catch(()=>{});
     if(res?.rows?.length){const {rows,...meta}=res;sourceMem.set(k,{rows,at:Date.now(),fresh:meta});d1PutBandEvents(k,rows).catch(()=>{});return res}
     if(hit?.rows?.length)return {...(res||{}),rows:hit.rows,stale:true};
     return res||{rows:[]};
