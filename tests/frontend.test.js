@@ -15,3 +15,8 @@ test("every navigation target is a section",()=>{
 test("bottom bar has the 5 tabs",()=>{const m=html.match(/<div class="mobile-bottom">([\s\S]*?)<\/div>/);assert.ok(m);
   const labels=[...m[1].matchAll(/class="nav-label">([^<]+)</g)].map(x=>x[1]);assert.deepEqual(labels,["Actus","Concerts","Écouter","Groupes","Communauté"])});
 test("privacy page names the publisher and contact",()=>{const p=fs.readFileSync(new URL("../public/confidentialite.html",import.meta.url),"utf8");assert.match(p,/Arnaud Masson/);assert.match(p,/contact@stayloud-radar\.online/)});
+test("concert cards have the ticket button, ticketing sites are recognised",()=>{
+  assert.match(html,/\$\{ticketBtnHTML\(x\)\}/);
+  const m=html.match(/const TICKET_HOSTS=(\/.*\/i);/);assert.ok(m);const re=eval(m[1]);
+  for(const h of ["helloasso.com","fnacspectacles.com","ticketmaster.fr","dice.fm","weezevent.com"])assert.ok(re.test(h),h);
+  for(const h of ["songkick.com","bandsintown.com","concerts-metal.com"])assert.ok(!re.test(h),h)});
