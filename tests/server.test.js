@@ -66,3 +66,7 @@ test("videos: off without a YouTube key, login required",async()=>{
   const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
   const r=await fetch(B+"/api/videos?artist=Gojira",{headers:{cookie:a}});assert.equal(r.status,200);assert.deepEqual(await r.json(),{configured:false,items:[]});
   assert.equal((await fetch(B+"/api/videos?artist=Gojira")).status,401)});
+test("video feed: off without a YouTube key, login required",async()=>{
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  const r=await fetch(B+"/api/videos/feed",{headers:{cookie:a}});assert.equal(r.status,200);assert.equal((await r.json()).configured,false);
+  assert.equal((await fetch(B+"/api/videos/feed")).status,401)});

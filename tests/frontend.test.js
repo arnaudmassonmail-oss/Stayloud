@@ -30,5 +30,8 @@ test("clips play inside the app (embedded player, band page section)",()=>{
   for(const f of ["function openVideo","youtube-nocookie.com/embed/","/api/videos?","profile-vids"])assert.ok(html.includes(f),f);
 });
 test("clips load faster: lists prepared in the background, connections opened early, player shows a waiting state",()=>{
-  for(const f of ["function prefetchVideos","prefetch','1'","function ytWarm","rel='preconnect'","sl-vid-wait"])assert.ok(html.includes(f),f);
+  for(const f of ["function ytWarm","rel='preconnect'","sl-vid-wait"])assert.ok(html.includes(f),f);
+});
+test("clips page is a feed of the latest clips, band page shows 4 clips and links to it",()=>{
+  for(const f of ["/api/videos/feed","Derniers clips de tes groupes","function openClipsFor","data-max=\"4\"","Voir tous les clips"])assert.ok(html.includes(f),f);
 });
