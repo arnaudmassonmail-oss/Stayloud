@@ -22,3 +22,10 @@ test("YouTube: background preparation keeps most of the daily quota for bands op
   const {prefetchAllowed,PREFETCH_PER_DAY}=await import("../src/providers/youtube.js");
   assert.ok(PREFETCH_PER_DAY>0&&PREFETCH_PER_DAY<=50);assert.equal(prefetchAllowed(Date.parse("2026-10-27T10:00:00Z")),true);
 });
+test("YouTube feed: every band's clips mixed, newest first, no duplicates",async()=>{
+  const {mergeFeed}=await import("../src/providers/youtube.js");
+  const v=(id,published)=>({id,title:id,channel:"x",published});
+  const f=mergeFeed([{artist:{id:1,name:"Gojira"},items:[v("a",  "2023-01-01"),v("b","2025-06-01")]},{artist:{id:2,name:"Thrown"},items:[v("c","2024-03-01"),v("a","2023-01-01")]}]);
+  assert.deepEqual(f.map(x=>x.id),["b","c","a"]);assert.equal(f[0].artist,"Gojira");assert.equal(f[1].artistId,2);
+  assert.equal(mergeFeed([{artist:{id:1,name:"G"},items:[v("a","2020"),v("b","2021")]}],1).length,1);
+});

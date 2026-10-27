@@ -38,3 +38,18 @@ export async function bandVideos({band,kind="clips",prefetch=false}){
     return pickVideos(data,band);
   });
 }
+
+// "Derniers clips de tes groupes": every followed band's clips, newest first.
+// Lists already known come from the cache; missing ones are searched within
+// the background quota (the others show up on a later visit).
+export function mergeFeed(lists,limit=80){
+  const seen=new Set(),out=[];
+  for(const {artist,items} of lists)for(const v of items||[])if(!seen.has(v.id)){seen.add(v.id);out.push({...v,artistId:artist.id,artist:artist.name})}
+  return out.sort((a,b)=>String(b.published).localeCompare(String(a.published))).slice(0,limit);
+}
+export async function videoFeed(artists){
+  const todo=[...(artists||[])].filter(a=>String(a?.name||"").trim()).slice(0,150),lists=[];let pending=0;
+  const next=async()=>{while(todo.length){const a=todo.shift();try{lists.push({artist:a,items:await bandVideos({band:a.name,prefetch:true})})}catch{pending++}}};
+  await Promise.all([next(),next(),next(),next()]);
+  return {items:mergeFeed(lists),pending,bands:lists.length};
+}
