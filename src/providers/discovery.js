@@ -549,8 +549,11 @@ async function cachedSourceRows(key,fetcher){
   sourceInflight.set(k,job);return job;
 }
 // Attempts alternate relay (r.jina.ai) / direct fetch, which labels the errors.
+// When every attempt fails, the answer is {rows:[],errors:[...]}: the reasons
+// ("relais HTTP 402", "direct HTTP 403"…) are kept for the source monitoring.
 async function firstWithRows(attempts,errs=null){
-  try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){if(errs)errs.push(`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`);throw e}}))}catch{return null}
+  const log=[];
+  try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){const m=`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`;log.push(m);if(errs)errs.push(m);throw e}}))}catch{return {rows:[],errors:log}}
 }
 // Direct page fetches present themselves like a regular browser (Songkick answers
 // HTTP 406 to unknown clients).
@@ -656,7 +659,7 @@ async function fetchMetalRegionalSourceLive(source,errs=null){
   async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseConcertsMetalHtml(text,url);if(!rows.length)rows=parseConcertsMetalText(text,url);return {source,rows,error:null,transport:'jina'}},
   async()=>{const html=await fetchText(url,{headers:BROWSER_HEADERS},15000);return {source,rows:parseConcertsMetalHtml(html,url),error:null,transport:'direct'}}
  ],errs);
- return r||{source,rows:[],error:new Error('no rows')};
+ return r.rows.length?r:{source,rows:[],errors:r.errors};
 }
 
 
@@ -752,7 +755,7 @@ async function fetchBandsintownCityLive(city,lat=null,lon=null,errs=null){
     async()=>({rows:parseBandsintownMetalText(await fetchDiscoveryProxy(url,15000),city,url),url,transport:'jina'}),
     async()=>({rows:parseBandsintownMetalText(await fetchText(url,{headers:BROWSER_HEADERS},15000),city,url),url,transport:'direct'})
   ],errs);
-  return r||{rows:[],url};
+  return r.rows.length?r:{rows:[],url,errors:r.errors};
 }
 // Resolve a concert venue (e.g. "Le Trabendo") to coordinates and its real
 // commune. Bandsintown city pages list every show in the surrounding area
@@ -914,7 +917,7 @@ function parseSongkickMetalText(text,metro){
 function songkickYears(){const d=new Date(),y=d.getFullYear();return d.getMonth()>=6?[y,y+1]:[y]}
 function fetchSongkickMetro(metro,errs=null){const years=songkickYears();return cachedSourceRows(`sk2:${metro.slug}:${years.join('-')}`,async()=>{
   const parts=await Promise.all(years.map(y=>fetchSongkickMetroLive(metro,y,errs)));
-  return {metro,rows:parts.flatMap(r=>r.rows)};
+  return {metro,rows:parts.flatMap(r=>r.rows),errors:parts.flatMap(r=>r.errors||[])};
 }).then(r=>({...r,metro}))}
 async function fetchSongkickMetroLive(metro,year,errs=null){
   const urls=[`https://www.songkick.com/fr/metro-areas/${metro.slug}/${year}/genre/metal`,`https://songkick.com/metro-areas/${metro.slug}/${year}/genre/metal`];
@@ -922,7 +925,7 @@ async function fetchSongkickMetroLive(metro,year,errs=null){
     async()=>{const text=await fetchDiscoveryProxy(url,15000);let rows=parseSongkickMetalText(text,metro);if(!rows.length)rows=parseSongkickMetalHtml(text,metro);return {metro,rows,transport:'jina'}},
     async()=>{const html=await fetchText(url,{headers:BROWSER_HEADERS},12000);return {metro,rows:parseSongkickMetalHtml(html,metro),transport:'direct'}}
   ]),errs);
-  return r||{metro,rows:[]};
+  return r.rows.length?r:{metro,rows:[],errors:r.errors};
 }
 async function discoverSongkickMetal(lat,lon,radiusKm,diag={}){
   const ranked=SONGKICK_METAL_METROS.map(m=>({...m,distance:distanceKm(lat,lon,m.lat,m.lon)})).sort((a,b)=>a.distance-b.distance);
@@ -1004,7 +1007,7 @@ async function fetchSueurDeMetalLive(region,errs=null){
     async()=>({region,rows:parseSueurDeMetalText(await fetchDiscoveryProxy(region.url,15000),region),transport:'jina'}),
     async()=>({region,rows:parseSueurDeMetalText(String(await fetchText(region.url,{headers:BROWSER_HEADERS},15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'direct'})
   ],errs);
-  return r||{region,rows:[]};
+  return r.rows.length?r:{region,rows:[],errors:r.errors};
 }
 function fetchSueurDeMetal(region,errs=null){return cachedSourceRows('sdm:'+region.slug,()=>fetchSueurDeMetalLive(region,errs)).then(r=>({...r,region}))}
 async function discoverSueurDeMetal(lat,lon,radiusKm,diag={}){
@@ -1234,4 +1237,34 @@ export async function discoverNearbyConcerts(lat,lon,radiusKm=50,placeOverride=n
   // Discovery is deliberately isolated from the tracked-artist concert engine.
   // Tracked concerts come only from Bandsintown + InfoConcert.
   return {place,radiusKm,items,sources};
+}
+
+// Administration › État des sources › « Tester maintenant »: reads one page
+// of each source right now, through the relay (r.jina.ai) and directly, and
+// tells what came back (HTTP status, size, page title, concerts read). It
+// shows why a source is down: relay without credit (402), site blocking the
+// server (403, Cloudflare page), or a page whose layout changed (0 concert).
+export async function testSources(){
+  const y=new Date().getFullYear();
+  const sk=SONGKICK_METAL_METROS.find(m=>m.slug==='28901-france-nantes');
+  const sdm=SDM_REGIONS.find(r=>r.slug==='Pays-de-la-Loire');
+  const cases=[
+    {id:'cm',name:'Concerts-Metal',url:'https://nantes.concerts-metal.com/',parse:(t,url)=>{const r=parseConcertsMetalHtml(t,url);return r.length?r:parseConcertsMetalText(t,url)}},
+    {id:'sdm',name:'Sueur de Metal',url:sdm.url,parse:t=>parseSueurDeMetalText(String(t).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),sdm)},
+    {id:'sk2',name:'Songkick',url:`https://www.songkick.com/fr/metro-areas/${sk.slug}/${y}/genre/metal`,parse:t=>{const r=parseSongkickMetalText(t,sk);return r.length?r:parseSongkickMetalHtml(t,sk)}},
+    {id:'bi',name:'Bandsintown',url:'https://www.bandsintown.com/fr/c/nantes-france/all-dates/genre/metal',parse:(t,url)=>parseBandsintownMetalText(t,'Nantes',url)}
+  ];
+  const probe=async(c,via)=>{
+    const target=via==='relais'?`https://r.jina.ai/${c.url}`:c.url;
+    const headers=via==='relais'?{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}:BROWSER_HEADERS;
+    const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),20000);
+    try{
+      const r=await fetch(target,{headers,signal:ctl.signal});const text=await r.text();
+      let rows=0;try{rows=r.ok?c.parse(text,c.url).length:0}catch{}
+      const title=(String(text).match(/<title[^>]*>([^<]{0,120})/i)?.[1]||String(text).match(/^Title:\s*(.{0,120})$/m)?.[1]||stripHtml(String(text)).replace(/\s+/g,' ').trim().slice(0,120)).trim();
+      return {via,status:r.status,ms:Date.now()-t0,size:text.length,rows,title};
+    }catch(e){return {via,status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}}
+    finally{clearTimeout(timer)}
+  };
+  return Promise.all(cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.JINA_API_KEY),attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})));
 }

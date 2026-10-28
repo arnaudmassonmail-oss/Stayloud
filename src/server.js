@@ -19,7 +19,7 @@ import {setAlertSink,sourcesHealth} from "./health.js";
 import {recentAlbums,pickNew} from "./alerts.js";
 import {vevent,calendar,validConcert} from "./ics.js";
 import {radioStations,radioByIds,radioNowPlaying,radioClick,RADIO_STYLES} from "./providers/radio.js";
-import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts,rowsNear} from "./providers/discovery.js";
+import {warmGeoCache,discoverArtists,discoverNearbyConcerts,discoverNearbyFestivals,geocodeQuery,discoverManualCityConcerts,mergeFollowedConcerts,mergeCommunityConcerts,rowsNear,testSources} from "./providers/discovery.js";
 
 const app=express();app.set("trust proxy",1);app.use(compression());app.use(express.json({limit:"10mb"}));
 const dir=path.dirname(fileURLToPath(import.meta.url));app.use(express.static(path.join(dir,"../public"),{etag:false,lastModified:false,setHeaders:(res,filePath)=>{if(filePath.endsWith(".html"))res.setHeader("Cache-Control","no-store");else if(/\.(png|jpe?g|webp|svg|ico)$/i.test(filePath))res.setHeader("Cache-Control","public, max-age=604800");}}));
@@ -229,7 +229,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.29.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.29.1",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -461,6 +461,7 @@ app.post("/api/support",requireAuth,async(req,res)=>{try{const message=String(re
 app.get("/api/support/mine",requireAuth,async(req,res)=>{try{const rows=await d1MySupportMessages(req.user.id);await d1MarkRepliesSeen(req.user.id);res.json({items:rows})}catch(e){res.status(502).json({error:e.message})}});
 // Concert sources health (Mon compte › Administration › État des sources) and
 // alerts sent to the administrator's "Messages reçus".
+app.get("/api/admin/sources/test",requireAuth,requireAdmin,async(req,res)=>{try{res.json({results:await testSources()})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources",requireAuth,requireAdmin,async(req,res)=>{try{res.json({sources:await sourcesHealth()})}catch(e){res.status(502).json({error:e.message})}});
 setAlertSink(async(subject,message)=>{if(!d1Enabled)return;const names=String(process.env.ADMIN_USERS||"").split(",").map(x=>x.trim()).filter(Boolean);let id=0;if(names.length){const u=await d1FindUserByUsername(names[0]).catch(()=>null);id=Number(u?.id)||0}if(!id)id=await d1FirstUserId();if(id)await d1AddSupportMessage(id,subject,message)});
 app.get("/api/support/admin",requireAuth,requireAdmin,async(req,res)=>{try{res.json({items:await d1AllSupportMessages()})}catch(e){res.status(502).json({error:e.message})}});
