@@ -40,3 +40,10 @@ test("Ticketmaster nearby: geohash and concert rows with coordinates",async()=>{
   assert.equal(r.artist,"Gojira");assert.equal(r.time,"20:00");assert.equal(r.city,"Saint-Herblain");assert.equal(r.country,"France");assert.equal(r.provider,"Ticketmaster");
   assert.equal(r._place.coordinates.latitude,47.229);
 });
+test("Ticketmaster nearby: only metal styles are kept from the music events",async()=>{
+  const {ticketmasterRows,isMetalEvent}=await import("../src/providers/tickets.js");
+  const ev=(name,genre,sub)=>({name,dates:{start:{localDate:"2027-01-31"}},classifications:[{segment:{name:"Music"},genre:{name:genre},subGenre:{name:sub}}],_embedded:{venues:[{name:"Zénith",city:{name:"Saint-Herblain"}}]}});
+  const data={_embedded:{events:[ev("Electric Callboy","Rock","Metalcore"),ev("Sabaton","Metal","Heavy Metal"),ev("Zaz","Pop","French Pop"),ev("Rise Against","Rock","Punk")]}};
+  assert.deepEqual(ticketmasterRows(data,{metalOnly:true}).map(r=>r.title),["Electric Callboy","Sabaton","Rise Against"]);
+  assert.equal(ticketmasterRows(data).length,4);assert.equal(isMetalEvent({}),false);
+});

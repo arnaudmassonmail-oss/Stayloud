@@ -537,10 +537,10 @@ function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m
 // page read through the relay costs Jina tokens). When a source refuses us (429/403)
 // the last good copy is used instead of showing nothing.
 const SOURCE_TTL=12*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
-async function cachedSourceRows(key,fetcher){
+async function cachedSourceRows(key,fetcher,ttl=SOURCE_TTL){
   const k='src:'+key;let hit=sourceMem.get(k);
   if(!hit){try{const r=(await d1GetBandCache([k])).get(k);if(r?.events_json){hit={rows:JSON.parse(r.events_json)||[],at:Date.parse(r.events_at)||0};sourceMem.set(k,hit)}}catch{}}
-  if(hit&&hit.rows.length&&Date.now()-hit.at<SOURCE_TTL)return {...hit.fresh,rows:hit.rows,cached:true};
+  if(hit&&hit.rows.length&&Date.now()-hit.at<ttl)return {...hit.fresh,rows:hit.rows,cached:true};
   if(sourceInflight.has(k))return sourceInflight.get(k);
   const job=(async()=>{
     let res=null,thrown='';try{res=await fetcher()}catch(e){thrown=e?.message||String(e)}
@@ -571,19 +571,21 @@ const JINA_HEADERS=()=>({...(process.env.JINA_API_KEY?{Authorization:`Bearer ${p
 // Relay used for the agenda pages that block the server: ScraperAPI when
 // SCRAPERAPI_KEY is set (free plan, returns the page HTML), otherwise Jina
 // Reader (r.jina.ai, returns Markdown, paid in tokens).
-export function relayRequest(url){
+// render:true asks ScraperAPI to run the page's JavaScript (pages that load
+// their list afterwards, e.g. Sueur de Metal); it costs more credits.
+export function relayRequest(url,{render=false}={}){
   const sk=String(process.env.SCRAPERAPI_KEY||'').trim();
-  if(sk){const p=new URLSearchParams({api_key:sk,url,country_code:'fr'});if(process.env.SCRAPERAPI_PREMIUM==='1')p.set('premium','true');
+  if(sk){const p=new URLSearchParams({api_key:sk,url,country_code:'fr'});if(process.env.SCRAPERAPI_PREMIUM==='1')p.set('premium','true');if(render)p.set('render','true');
     return {name:'ScraperAPI',target:`https://api.scraperapi.com/?${p}`,headers:{Accept:'text/html'},timeout:60000}}
   return {name:'Jina',target:`https://r.jina.ai/${url}`,headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()},timeout:0};
 }
-async function fetchDiscoveryProxy(url,timeout=18000){
-  const r=relayRequest(url);
+async function fetchDiscoveryProxy(url,timeout=18000,opts={}){
+  const r=relayRequest(url,opts);
   const go=()=>fetchText(r.target,{headers:r.headers},Math.max(timeout,r.timeout));
   // The relay allows a few requests per minute: on "too many requests" wait
   // a moment and try once more. The same page asked twice within 12 h (city
   // searches, several regions sharing a page) is read once.
-  return cachedJson(`relay:${r.name}:${url}`,SOURCE_TTL,async()=>{try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}},{persist:false});
+  return cachedJson(`relay:${r.name}:${opts.render?'js:':''}${url}`,SOURCE_TTL,async()=>{try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}},{persist:false});
 }
 
 async function cityWebSearch(query){
@@ -771,7 +773,9 @@ async function fetchBandsintownCityLive(city,lat=null,lon=null,errs=null){
   const suffix=(Number.isFinite(Number(lat))&&Number.isFinite(Number(lon)))?`?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}`:'';
   const url=`https://www.bandsintown.com/fr/c/${slug}-france/all-dates/genre/metal${suffix}`;
   const r=await firstWithRows([
-    async()=>({rows:parseBandsintownMetalText(await fetchDiscoveryProxy(url,15000),city,url),url,transport:'jina'}),
+    // Bandsintown refuses ScraperAPI's normal mode ("Protected", after ~30 s):
+    // skip it there instead of making every search wait.
+    async()=>{if(relayRequest(url).name==='ScraperAPI'&&process.env.SCRAPERAPI_PREMIUM!=='1')throw new Error('non tenté (Bandsintown refuse ce relais)');return {rows:parseBandsintownMetalText(await fetchDiscoveryProxy(url,15000),city,url),url,transport:'jina'}},
     async()=>({rows:parseBandsintownMetalText(await fetchText(url,{headers:BROWSER_HEADERS},15000),city,url),url,transport:'direct'})
   ],errs);
   return r.rows.length?r:{rows:[],url,errors:r.errors};
@@ -1023,12 +1027,14 @@ function parseSueurDeMetalText(text,region){
 }
 async function fetchSueurDeMetalLive(region,errs=null){
   const r=await firstWithRows([
-    async()=>({region,rows:parseSueurDeMetalText(String(await fetchDiscoveryProxy(region.url,15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'relay'}),
+    async()=>({region,rows:parseSueurDeMetalText(String(await fetchDiscoveryProxy(region.url,15000,{render:true})).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'relay'}),
     async()=>({region,rows:parseSueurDeMetalText(String(await fetchText(region.url,{headers:BROWSER_HEADERS},15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'direct'})
   ],errs);
   return r.rows.length?r:{region,rows:[],errors:r.errors};
 }
-function fetchSueurDeMetal(region,errs=null){return cachedSourceRows('sdm:'+region.slug,()=>fetchSueurDeMetalLive(region,errs)).then(r=>({...r,region}))}
+// Its timeline is built by JavaScript: read with rendering (10 ScraperAPI
+// credits instead of 1), so it is kept 24 h.
+function fetchSueurDeMetal(region,errs=null){return cachedSourceRows('sdm:'+region.slug,()=>fetchSueurDeMetalLive(region,errs),24*60*60*1000).then(r=>({...r,region}))}
 async function discoverSueurDeMetal(lat,lon,radiusKm,diag={}){
   const selected=SDM_REGIONS.map(r=>({...r,distance:distanceKm(lat,lon,r.lat,r.lon)})).sort((a,b)=>a.distance-b.distance).filter((r,i)=>i===0||r.distance<=Math.max(radiusKm+150,200)).slice(0,2);
   const errs=[];const results=await Promise.all(selected.map(r=>fetchSueurDeMetal(r,errs)));
@@ -1273,12 +1279,12 @@ export async function testSources(){
   const sdm=SDM_REGIONS.find(r=>r.slug==='Pays-de-la-Loire');
   const cases=[
     {id:'cm',name:'Concerts-Metal',url:'https://nantes.concerts-metal.com/',parse:(t,url)=>{const r=parseConcertsMetalHtml(t,url);return r.length?r:parseConcertsMetalText(t,url)}},
-    {id:'sdm',name:'Sueur de Metal',url:sdm.url,parse:t=>parseSueurDeMetalText(String(t).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),sdm)},
+    {id:'sdm',name:'Sueur de Metal',url:sdm.url,render:true,parse:t=>parseSueurDeMetalText(String(t).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),sdm)},
     {id:'sk2',name:'Songkick',url:`https://www.songkick.com/fr/metro-areas/${sk.slug}/${y}/genre/metal`,parse:t=>{const r=parseSongkickMetalText(t,sk);return r.length?r:parseSongkickMetalHtml(t,sk)}},
     {id:'bi',name:'Bandsintown',url:'https://www.bandsintown.com/fr/c/nantes-france/all-dates/genre/metal',parse:(t,url)=>parseBandsintownMetalText(t,'Nantes',url)}
   ];
   const probe=async(c,via)=>{
-    const rr=relayRequest(c.url);
+    const rr=relayRequest(c.url,{render:!!c.render});
     const target=via==='relais'?rr.target:c.url;
     const headers=via==='relais'?rr.headers:BROWSER_HEADERS;
     const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),via==='relais'&&rr.timeout?rr.timeout:20000);
