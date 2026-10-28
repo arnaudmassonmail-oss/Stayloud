@@ -66,9 +66,14 @@ const GH="0123456789bcdefghjkmnpqrstuvwxyz";
 export function geohash(lat,lon,len=7){let la=[-90,90],lo=[-180,180],bit=0,ch=0,even=true,out="";
   while(out.length<len){const r=even?lo:la,v=even?lon:lat,mid=(r[0]+r[1])/2;if(v>=mid){ch=(ch<<1)|1;r[0]=mid}else{ch=ch<<1;r[1]=mid}even=!even;if(++bit===5){out+=GH[ch];bit=0;ch=0}}return out}
 // Discovery API events -> concert rows (same shape as the other sources).
-export function ticketmasterRows(data){
+// Ticketmaster France files metal under several genres ("Metal", "Hard
+// Rock", "Rock"…), so all music is asked for and the metal styles are kept.
+const METAL_GENRE=/metal|hard ?rock|punk|hardcore|grind|doom|thrash|sludge|stoner|\bcore\b|deathcore|metalcore/i;
+export function isMetalEvent(e){return (e?.classifications||[]).some(c=>METAL_GENRE.test([c?.genre?.name,c?.subGenre?.name].filter(Boolean).join(" ")))}
+export function ticketmasterRows(data,{metalOnly=false}={}){
   const out=[];
   for(const e of data?._embedded?.events||[]){
+    if(metalOnly&&!isMetalEvent(e))continue;
     const date=String(e?.dates?.start?.localDate||"");if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
     if(/cancel/i.test(String(e?.dates?.status?.code||"")))continue;
     const v=e?._embedded?.venues?.[0]||{},bands=(e?._embedded?.attractions||[]).map(a=>String(a?.name||"").trim()).filter(Boolean);
@@ -84,8 +89,14 @@ export async function ticketmasterNearby(lat,lon,radiusKm=50){
   if(!key||!Number.isFinite(Number(lat))||!Number.isFinite(Number(lon)))return {rows:[],configured:!!key};
   const r=Math.max(10,Math.min(150,Math.round(Number(radiusKm)||50)+20));
   const rows=await cachedJson(`tm:near:${Number(lat).toFixed(1)}|${Number(lon).toFixed(1)}|${r}`,6*HOUR,async()=>{
-    const p=new URLSearchParams({apikey:key,classificationName:"metal",geoPoint:geohash(Number(lat),Number(lon)),radius:String(r),unit:"km",size:"100",sort:"date,asc",startDateTime:new Date().toISOString().slice(0,19)+"Z"});
-    return ticketmasterRows(await fetchJson(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`,{headers:{Accept:"application/json"}},10000));
+    const rows=[];
+    for(const page of [0,1]){
+      const p=new URLSearchParams({apikey:key,classificationName:"music",geoPoint:geohash(Number(lat),Number(lon)),radius:String(r),unit:"km",size:"200",page:String(page),sort:"date,asc",startDateTime:new Date().toISOString().slice(0,19)+"Z"});
+      const data=await fetchJson(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`,{headers:{Accept:"application/json"}},10000);
+      rows.push(...ticketmasterRows(data,{metalOnly:true}));
+      if((Number(data?.page?.totalPages)||1)<=page+1)break;
+    }
+    return rows;
   });
   return {rows,configured:true};
 }
