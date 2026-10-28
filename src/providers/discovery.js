@@ -568,14 +568,22 @@ async function firstWithRows(attempts,errs=null){
 const BROWSER_HEADERS={Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'};
 // Jina bills by the size of the answer: no images, no menus or footers.
 const JINA_HEADERS=()=>({...(process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{}),'X-Retain-Images':'none','X-Remove-Selector':'nav, footer, script, style, noscript, iframe'});
+// Relay used for the agenda pages that block the server: ScraperAPI when
+// SCRAPERAPI_KEY is set (free plan, returns the page HTML), otherwise Jina
+// Reader (r.jina.ai, returns Markdown, paid in tokens).
+export function relayRequest(url){
+  const sk=String(process.env.SCRAPERAPI_KEY||'').trim();
+  if(sk){const p=new URLSearchParams({api_key:sk,url,country_code:'fr'});if(process.env.SCRAPERAPI_PREMIUM==='1')p.set('premium','true');
+    return {name:'ScraperAPI',target:`https://api.scraperapi.com/?${p}`,headers:{Accept:'text/html'},timeout:60000}}
+  return {name:'Jina',target:`https://r.jina.ai/${url}`,headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()},timeout:0};
+}
 async function fetchDiscoveryProxy(url,timeout=18000){
-  const proxy=`https://r.jina.ai/${url}`;
-  const go=()=>fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}},timeout);
-  // The free relay allows a few requests per minute: on "too many requests"
-  // wait a moment and try once more.
-  // The same page asked twice within 12 h (city searches, several regions
-  // sharing a page) is read once.
-  return cachedJson('jina:'+url,SOURCE_TTL,async()=>{try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}},{persist:false});
+  const r=relayRequest(url);
+  const go=()=>fetchText(r.target,{headers:r.headers},Math.max(timeout,r.timeout));
+  // The relay allows a few requests per minute: on "too many requests" wait
+  // a moment and try once more. The same page asked twice within 12 h (city
+  // searches, several regions sharing a page) is read once.
+  return cachedJson(`relay:${r.name}:${url}`,SOURCE_TTL,async()=>{try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}},{persist:false});
 }
 
 async function cityWebSearch(query){
@@ -1015,7 +1023,7 @@ function parseSueurDeMetalText(text,region){
 }
 async function fetchSueurDeMetalLive(region,errs=null){
   const r=await firstWithRows([
-    async()=>({region,rows:parseSueurDeMetalText(await fetchDiscoveryProxy(region.url,15000),region),transport:'jina'}),
+    async()=>({region,rows:parseSueurDeMetalText(String(await fetchDiscoveryProxy(region.url,15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'relay'}),
     async()=>({region,rows:parseSueurDeMetalText(String(await fetchText(region.url,{headers:BROWSER_HEADERS},15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'direct'})
   ],errs);
   return r.rows.length?r:{region,rows:[],errors:r.errors};
@@ -1270,9 +1278,10 @@ export async function testSources(){
     {id:'bi',name:'Bandsintown',url:'https://www.bandsintown.com/fr/c/nantes-france/all-dates/genre/metal',parse:(t,url)=>parseBandsintownMetalText(t,'Nantes',url)}
   ];
   const probe=async(c,via)=>{
-    const target=via==='relais'?`https://r.jina.ai/${c.url}`:c.url;
-    const headers=via==='relais'?{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}:BROWSER_HEADERS;
-    const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),20000);
+    const rr=relayRequest(c.url);
+    const target=via==='relais'?rr.target:c.url;
+    const headers=via==='relais'?rr.headers:BROWSER_HEADERS;
+    const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),via==='relais'&&rr.timeout?rr.timeout:20000);
     try{
       const r=await fetch(target,{headers,signal:ctl.signal});const text=await r.text();
       let rows=0;try{rows=r.ok?c.parse(text,c.url).length:0}catch{}
@@ -1284,6 +1293,6 @@ export async function testSources(){
   const tm=(async()=>{const t0=Date.now();if(!process.env.TICKETMASTER_API_KEY)return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:0,size:0,rows:0,title:'clé TICKETMASTER_API_KEY absente'}]};
     try{const r=await ticketmasterNearby(47.2184,-1.5536,50);return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:200,ms:Date.now()-t0,size:0,rows:r.rows.length,title:r.rows.slice(0,3).map(x=>x.title).join(' · ')}]}}
     catch(e){return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}]}}})();
-  return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.JINA_API_KEY),attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
+  return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.SCRAPERAPI_KEY||process.env.JINA_API_KEY),relay:relayRequest(c.url).name,attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
 }
 export {firstWithRows as _firstWithRows};

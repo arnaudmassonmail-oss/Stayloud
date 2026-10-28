@@ -32,3 +32,15 @@ test("sources: the free direct fetch is tried first, the paid relay only when it
   const r3=await _firstWithRows([async()=>{throw new Error("HTTP 402")},async()=>({rows:[]})]);
   assert.deepEqual(r3.rows,[]);assert.deepEqual(r3.errors.sort(),["direct page sans concert","relais HTTP 402"]);
 });
+test("relay: ScraperAPI when its key is set, Jina otherwise",async()=>{
+  const {relayRequest}=await import("../src/providers/discovery.js");
+  const old={sk:process.env.SCRAPERAPI_KEY,pr:process.env.SCRAPERAPI_PREMIUM};
+  try{
+    delete process.env.SCRAPERAPI_KEY;
+    const j=relayRequest("https://nantes.concerts-metal.com/");assert.equal(j.name,"Jina");assert.equal(j.target,"https://r.jina.ai/https://nantes.concerts-metal.com/");
+    process.env.SCRAPERAPI_KEY="abc";delete process.env.SCRAPERAPI_PREMIUM;
+    const s=relayRequest("https://nantes.concerts-metal.com/");const u=new URL(s.target);
+    assert.equal(s.name,"ScraperAPI");assert.equal(u.hostname,"api.scraperapi.com");assert.equal(u.searchParams.get("api_key"),"abc");assert.equal(u.searchParams.get("url"),"https://nantes.concerts-metal.com/");assert.equal(u.searchParams.get("premium"),null);
+    process.env.SCRAPERAPI_PREMIUM="1";assert.equal(new URL(relayRequest("https://x.test/").target).searchParams.get("premium"),"true");
+  }finally{if(old.sk==null)delete process.env.SCRAPERAPI_KEY;else process.env.SCRAPERAPI_KEY=old.sk;if(old.pr==null)delete process.env.SCRAPERAPI_PREMIUM;else process.env.SCRAPERAPI_PREMIUM=old.pr}
+});
