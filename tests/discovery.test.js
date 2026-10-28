@@ -22,3 +22,13 @@ test("approved member concerts: inside the radius, never twice",()=>{
   assert.equal(m.mergeCommunityConcerts([],[c],47.218,-1.553,50).length,1);
   assert.equal(m.mergeCommunityConcerts([],[c],47.218,-1.553,10).length,0);
   assert.equal(m.mergeCommunityConcerts([{title:"Wildfire",date:"2026-12-24",venue:"x",city:"y"}],[c],47.218,-1.553,50).length,1)});
+test("sources: the free direct fetch is tried first, the paid relay only when it fails",async()=>{
+  const {_firstWithRows}=await import("../src/providers/discovery.js");
+  let relay=0;const rows=[{title:"x"}];
+  const r1=await _firstWithRows([async()=>{relay++;return {rows}},async()=>({rows,transport:"direct"})]);
+  assert.equal(r1.transport,"direct");assert.equal(relay,0);
+  const r2=await _firstWithRows([async()=>({rows,transport:"jina"}),async()=>{throw new Error("HTTP 403")}]);
+  assert.equal(r2.transport,"jina");
+  const r3=await _firstWithRows([async()=>{throw new Error("HTTP 402")},async()=>({rows:[]})]);
+  assert.deepEqual(r3.rows,[]);assert.deepEqual(r3.errors.sort(),["direct page sans concert","relais HTTP 402"]);
+});

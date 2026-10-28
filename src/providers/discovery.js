@@ -5,6 +5,7 @@ import {d1LoadGeoCache,d1PutGeoBatch,d1GetBandCache,d1PutBandEvents} from "../d1
 import {mb} from "./musicbrainz.js";
 import {recordSource} from "../health.js";
 import {ticketmasterNearby} from "./tickets.js";
+import {cachedJson} from "../apicache.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -532,9 +533,10 @@ function eventHasMetal(row){
 // "aucun concert" diagnostic so a blocked or slow source is visible).
 function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m))return 'délai dépassé';const h=m.match(/HTTP \d{3}/);if(h)return h[0];if(m==='empty')return 'page sans concert';return m.slice(0,40)||'erreur'}
 // Source agenda pages (Concerts-Metal region, Songkick metro, Bandsintown
-// city) are kept 6 h in memory and in D1. When a source refuses us (429/403)
+// city) are kept 12 h in memory and in D1 (agendas change slowly, and every
+// page read through the relay costs Jina tokens). When a source refuses us (429/403)
 // the last good copy is used instead of showing nothing.
-const SOURCE_TTL=6*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
+const SOURCE_TTL=12*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
 async function cachedSourceRows(key,fetcher){
   const k='src:'+key;let hit=sourceMem.get(k);
   if(!hit){try{const r=(await d1GetBandCache([k])).get(k);if(r?.events_json){hit={rows:JSON.parse(r.events_json)||[],at:Date.parse(r.events_at)||0};sourceMem.set(k,hit)}}catch{}}
@@ -552,20 +554,28 @@ async function cachedSourceRows(key,fetcher){
 // Attempts alternate relay (r.jina.ai) / direct fetch, which labels the errors.
 // When every attempt fails, the answer is {rows:[],errors:[...]}: the reasons
 // ("relais HTTP 402", "direct HTTP 403"…) are kept for the source monitoring.
+// Attempts come in pairs (relay, direct): the free direct fetches are tried
+// first, the relay (paid in Jina tokens) only when they all fail.
 async function firstWithRows(attempts,errs=null){
   const log=[];
-  try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){const m=`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`;log.push(m);if(errs)errs.push(m);throw e}}))}catch{return {rows:[],errors:log}}
+  const run=list=>Promise.any(list.map(async([f,i])=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){const m=`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`;log.push(m);if(errs)errs.push(m);throw e}}));
+  const indexed=attempts.map((f,i)=>[f,i]);
+  try{return await run(indexed.filter(([,i])=>i%2))}catch{}
+  try{return await run(indexed.filter(([,i])=>!(i%2)))}catch{return {rows:[],errors:log}}
 }
 // Direct page fetches present themselves like a regular browser (Songkick answers
 // HTTP 406 to unknown clients).
 const BROWSER_HEADERS={Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'};
-const JINA_HEADERS=()=>process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{};
+// Jina bills by the size of the answer: no images, no menus or footers.
+const JINA_HEADERS=()=>({...(process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{}),'X-Retain-Images':'none','X-Remove-Selector':'nav, footer, script, style, noscript, iframe'});
 async function fetchDiscoveryProxy(url,timeout=18000){
   const proxy=`https://r.jina.ai/${url}`;
   const go=()=>fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}},timeout);
   // The free relay allows a few requests per minute: on "too many requests"
   // wait a moment and try once more.
-  try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}
+  // The same page asked twice within 12 h (city searches, several regions
+  // sharing a page) is read once.
+  return cachedJson('jina:'+url,SOURCE_TTL,async()=>{try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}},{persist:false});
 }
 
 async function cityWebSearch(query){
@@ -1276,3 +1286,4 @@ export async function testSources(){
     catch(e){return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}]}}})();
   return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.JINA_API_KEY),attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
 }
+export {firstWithRows as _firstWithRows};
