@@ -29,3 +29,14 @@ test("Bandsintown: ticket link of the concert of this date and city, not sold ou
   assert.equal(pickBandsintown(evs,{date:"2027-01-31",city:"Lille"}),null);
   assert.equal(pickBandsintown(null,{date:"2027-01-28",city:"Nantes"}),null);
 });
+test("Ticketmaster nearby: geohash and concert rows with coordinates",async()=>{
+  const {geohash,ticketmasterRows}=await import("../src/providers/tickets.js");
+  assert.equal(geohash(57.64911,10.40744,11),"u4pruydqqvj");
+  const rows=ticketmasterRows({_embedded:{events:[
+    {name:"Gojira + Mastodon",url:"https://www.ticketmaster.fr/fr/manifestation/x",dates:{start:{localDate:"2027-03-02",localTime:"20:00:00"},status:{code:"onsale"}},_embedded:{venues:[{name:"Zénith Nantes Métropole",city:{name:"Saint-Herblain"},country:{countryCode:"FR"},location:{latitude:"47.229",longitude:"-1.628"}}],attractions:[{name:"Gojira"},{name:"Mastodon"}]}},
+    {name:"Annulé",dates:{start:{localDate:"2027-03-03"},status:{code:"cancelled"}}},
+    {name:"Sans date",dates:{start:{}}}]}});
+  assert.equal(rows.length,1);const r=rows[0];
+  assert.equal(r.artist,"Gojira");assert.equal(r.time,"20:00");assert.equal(r.city,"Saint-Herblain");assert.equal(r.country,"France");assert.equal(r.provider,"Ticketmaster");
+  assert.equal(r._place.coordinates.latitude,47.229);
+});

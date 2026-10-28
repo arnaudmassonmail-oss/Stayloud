@@ -59,3 +59,33 @@ export async function findTickets({band,date,city}){
   const [tm,bit]=await Promise.all([ticketmaster({band,date,city}).catch(()=>null),bandsintown({band,date,city}).catch(()=>null)]);
   return {ticketmaster:tm,official:bit};
 }
+
+// "Autour de moi": Ticketmaster's metal concerts around a point (official
+// API, nothing to scrape, so it cannot be blocked). Cached 6 h per area.
+const GH="0123456789bcdefghjkmnpqrstuvwxyz";
+export function geohash(lat,lon,len=7){let la=[-90,90],lo=[-180,180],bit=0,ch=0,even=true,out="";
+  while(out.length<len){const r=even?lo:la,v=even?lon:lat,mid=(r[0]+r[1])/2;if(v>=mid){ch=(ch<<1)|1;r[0]=mid}else{ch=ch<<1;r[1]=mid}even=!even;if(++bit===5){out+=GH[ch];bit=0;ch=0}}return out}
+// Discovery API events -> concert rows (same shape as the other sources).
+export function ticketmasterRows(data){
+  const out=[];
+  for(const e of data?._embedded?.events||[]){
+    const date=String(e?.dates?.start?.localDate||"");if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;
+    if(/cancel/i.test(String(e?.dates?.status?.code||"")))continue;
+    const v=e?._embedded?.venues?.[0]||{},bands=(e?._embedded?.attractions||[]).map(a=>String(a?.name||"").trim()).filter(Boolean);
+    const lat=Number(v?.location?.latitude),lon=Number(v?.location?.longitude);
+    out.push({title:String(e.name||bands.join(" + ")).trim(),artist:bands[0]||"",date,time:/^\d{2}:\d{2}/.test(String(e?.dates?.start?.localTime||""))?String(e.dates.start.localTime).slice(0,5):null,
+      venue:String(v.name||"").trim(),city:String(v?.city?.name||"").trim(),country:v?.country?.countryCode==="FR"?"France":String(v?.country?.name||""),url:String(e.url||""),provider:"Ticketmaster",
+      ...(Number.isFinite(lat)&&Number.isFinite(lon)?{_place:{coordinates:{latitude:lat,longitude:lon}}}:{})});
+  }
+  return out;
+}
+export async function ticketmasterNearby(lat,lon,radiusKm=50){
+  const key=String(process.env.TICKETMASTER_API_KEY||"").trim();
+  if(!key||!Number.isFinite(Number(lat))||!Number.isFinite(Number(lon)))return {rows:[],configured:!!key};
+  const r=Math.max(10,Math.min(150,Math.round(Number(radiusKm)||50)+20));
+  const rows=await cachedJson(`tm:near:${Number(lat).toFixed(1)}|${Number(lon).toFixed(1)}|${r}`,6*HOUR,async()=>{
+    const p=new URLSearchParams({apikey:key,classificationName:"metal",geoPoint:geohash(Number(lat),Number(lon)),radius:String(r),unit:"km",size:"100",sort:"date,asc",startDateTime:new Date().toISOString().slice(0,19)+"Z"});
+    return ticketmasterRows(await fetchJson(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`,{headers:{Accept:"application/json"}},10000));
+  });
+  return {rows,configured:true};
+}

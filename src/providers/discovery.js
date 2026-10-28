@@ -4,6 +4,7 @@ import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
 import {d1LoadGeoCache,d1PutGeoBatch,d1GetBandCache,d1PutBandEvents} from "../d1.js";
 import {mb} from "./musicbrainz.js";
 import {recordSource} from "../health.js";
+import {ticketmasterNearby} from "./tickets.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -1113,6 +1114,9 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   // 2) Songkick city/metro Metal agenda: second independent nationwide source.
   const songkickJob=discoverSongkickMetal(lat,lon,radiusKm,skDiag).catch(e=>{skDiag.errors.push(fetchErrorLabel(e));return []});
   const sdmJob=discoverSueurDeMetal(lat,lon,radiusKm,sdmDiag).catch(e=>{sdmDiag.errors.push(fetchErrorLabel(e));return []});
+  // 2b) Ticketmaster (official API): metal concerts around the point.
+  const tmDiag={raw:0,errors:[]};
+  const tmJob=ticketmasterNearby(lat,lon,radiusKm).then(r=>{tmDiag.raw=r.rows.length;if(r.configured)recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),true).catch(()=>{});return r.rows}).catch(e=>{tmDiag.errors.push(fetchErrorLabel(e));recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),false,fetchErrorLabel(e)).catch(()=>{});return []});
 
   // 3) Specialist Concerts-Metal regional feed: keep it because it is especially
   // rich for local French metal shows. Force the region containing the target city.
@@ -1138,7 +1142,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     }}
   }catch{}
 
-  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob,sdmRows=await sdmJob;
+  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob,sdmRows=await sdmJob,tmRows=await tmJob;
   // Rows each source returned before the distance filter (shown when nothing is found).
   // Raw rows per source (before the distance filter) and why a source failed.
   const uniq=a=>[...new Set(a)].slice(0,3);
@@ -1146,9 +1150,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     bandsintown:{raw:biDiag.raw,kept:biRows.length,located:biDiag.located??null,errors:biDiag.raw?[]:uniq(biDiag.errors)},
     songkick:{raw:skDiag.raw,kept:skRows.length,errors:skDiag.raw?[]:uniq(skDiag.errors)},
     sueurDeMetal:{raw:sdmDiag.raw,kept:sdmRows.length,errors:sdmDiag.raw?[]:uniq(sdmDiag.errors)},
-    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs),regions:cmRegions}
+    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs),regions:cmRegions},
+    ticketmaster:{raw:tmDiag.raw,kept:tmRows.length,errors:uniq(tmDiag.errors)}
   };
-  all.push(...biRows,...skRows,...sdmRows);
+  all.push(...biRows,...skRows,...sdmRows,...tmRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const placeDiag={};
   const filtered=await withDistance(dated,lat,lon,radiusKm,placeDiag);
@@ -1266,5 +1271,8 @@ export async function testSources(){
     }catch(e){return {via,status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}}
     finally{clearTimeout(timer)}
   };
-  return Promise.all(cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.JINA_API_KEY),attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})));
+  const tm=(async()=>{const t0=Date.now();if(!process.env.TICKETMASTER_API_KEY)return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:0,size:0,rows:0,title:'clé TICKETMASTER_API_KEY absente'}]};
+    try{const r=await ticketmasterNearby(47.2184,-1.5536,50);return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:200,ms:Date.now()-t0,size:0,rows:r.rows.length,title:r.rows.slice(0,3).map(x=>x.title).join(' · ')}]}}
+    catch(e){return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}]}}})();
+  return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.JINA_API_KEY),attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
 }

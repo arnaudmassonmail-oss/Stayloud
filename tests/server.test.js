@@ -34,7 +34,7 @@ test("sign-ups from one address are limited",async()=>{
   assert.equal((await post("/api/auth/register",{username:"eve",email:"e@example.com",password:"secret123"})).status,429)});
 test("admin-only routes are protected",async()=>{
   const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
-  const s=await fetch(B+"/api/admin/sources",{headers:{cookie:a}});assert.equal(s.status,200);assert.equal((await s.json()).sources.length,4);
+  const s=await fetch(B+"/api/admin/sources",{headers:{cookie:a}});assert.equal(s.status,200);assert.equal((await s.json()).sources.length,5);
   assert.equal((await fetch(B+"/api/admin/sources",{headers:{cookie:carl2}})).status,403,"members are refused");
   assert.equal((await fetch(B+"/api/admin/sources")).status,401,"visitors are refused")});
 test("alerts: empty at first, only valid keys can be marked seen",async()=>{
