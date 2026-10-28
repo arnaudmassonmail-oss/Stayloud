@@ -4,6 +4,8 @@ import {getArtists,putEvent,geoCacheGet,geoCacheSet} from "../db.js";
 import {d1LoadGeoCache,d1PutGeoBatch,d1GetBandCache,d1PutBandEvents} from "../d1.js";
 import {mb} from "./musicbrainz.js";
 import {recordSource} from "../health.js";
+import {ticketmasterNearby} from "./tickets.js";
+import {cachedJson} from "../apicache.js";
 
 // In-memory map backed by the persistent geo_cache table (see db.js).
 const geoMem=new Map();
@@ -531,9 +533,10 @@ function eventHasMetal(row){
 // "aucun concert" diagnostic so a blocked or slow source is visible).
 function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m))return 'délai dépassé';const h=m.match(/HTTP \d{3}/);if(h)return h[0];if(m==='empty')return 'page sans concert';return m.slice(0,40)||'erreur'}
 // Source agenda pages (Concerts-Metal region, Songkick metro, Bandsintown
-// city) are kept 6 h in memory and in D1. When a source refuses us (429/403)
+// city) are kept 12 h in memory and in D1 (agendas change slowly, and every
+// page read through the relay costs Jina tokens). When a source refuses us (429/403)
 // the last good copy is used instead of showing nothing.
-const SOURCE_TTL=6*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
+const SOURCE_TTL=12*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
 async function cachedSourceRows(key,fetcher){
   const k='src:'+key;let hit=sourceMem.get(k);
   if(!hit){try{const r=(await d1GetBandCache([k])).get(k);if(r?.events_json){hit={rows:JSON.parse(r.events_json)||[],at:Date.parse(r.events_at)||0};sourceMem.set(k,hit)}}catch{}}
@@ -551,20 +554,36 @@ async function cachedSourceRows(key,fetcher){
 // Attempts alternate relay (r.jina.ai) / direct fetch, which labels the errors.
 // When every attempt fails, the answer is {rows:[],errors:[...]}: the reasons
 // ("relais HTTP 402", "direct HTTP 403"…) are kept for the source monitoring.
+// Attempts come in pairs (relay, direct): the free direct fetches are tried
+// first, the relay (paid in Jina tokens) only when they all fail.
 async function firstWithRows(attempts,errs=null){
   const log=[];
-  try{return await Promise.any(attempts.map(async(f,i)=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){const m=`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`;log.push(m);if(errs)errs.push(m);throw e}}))}catch{return {rows:[],errors:log}}
+  const run=list=>Promise.any(list.map(async([f,i])=>{try{const r=await f();if(!r?.rows?.length)throw new Error('empty');return r}catch(e){const m=`${i%2?'direct':'relais'} ${fetchErrorLabel(e)}`;log.push(m);if(errs)errs.push(m);throw e}}));
+  const indexed=attempts.map((f,i)=>[f,i]);
+  try{return await run(indexed.filter(([,i])=>i%2))}catch{}
+  try{return await run(indexed.filter(([,i])=>!(i%2)))}catch{return {rows:[],errors:log}}
 }
 // Direct page fetches present themselves like a regular browser (Songkick answers
 // HTTP 406 to unknown clients).
 const BROWSER_HEADERS={Accept:'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8','Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'};
-const JINA_HEADERS=()=>process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{};
+// Jina bills by the size of the answer: no images, no menus or footers.
+const JINA_HEADERS=()=>({...(process.env.JINA_API_KEY?{Authorization:`Bearer ${process.env.JINA_API_KEY}`}:{}),'X-Retain-Images':'none','X-Remove-Selector':'nav, footer, script, style, noscript, iframe'});
+// Relay used for the agenda pages that block the server: ScraperAPI when
+// SCRAPERAPI_KEY is set (free plan, returns the page HTML), otherwise Jina
+// Reader (r.jina.ai, returns Markdown, paid in tokens).
+export function relayRequest(url){
+  const sk=String(process.env.SCRAPERAPI_KEY||'').trim();
+  if(sk){const p=new URLSearchParams({api_key:sk,url,country_code:'fr'});if(process.env.SCRAPERAPI_PREMIUM==='1')p.set('premium','true');
+    return {name:'ScraperAPI',target:`https://api.scraperapi.com/?${p}`,headers:{Accept:'text/html'},timeout:60000}}
+  return {name:'Jina',target:`https://r.jina.ai/${url}`,headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()},timeout:0};
+}
 async function fetchDiscoveryProxy(url,timeout=18000){
-  const proxy=`https://r.jina.ai/${url}`;
-  const go=()=>fetchText(proxy,{headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}},timeout);
-  // The free relay allows a few requests per minute: on "too many requests"
-  // wait a moment and try once more.
-  try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}
+  const r=relayRequest(url);
+  const go=()=>fetchText(r.target,{headers:r.headers},Math.max(timeout,r.timeout));
+  // The relay allows a few requests per minute: on "too many requests" wait
+  // a moment and try once more. The same page asked twice within 12 h (city
+  // searches, several regions sharing a page) is read once.
+  return cachedJson(`relay:${r.name}:${url}`,SOURCE_TTL,async()=>{try{return await go()}catch(e){if(!/HTTP 429/.test(String(e?.message)))throw e;await sleep(4000);return go()}},{persist:false});
 }
 
 async function cityWebSearch(query){
@@ -1004,7 +1023,7 @@ function parseSueurDeMetalText(text,region){
 }
 async function fetchSueurDeMetalLive(region,errs=null){
   const r=await firstWithRows([
-    async()=>({region,rows:parseSueurDeMetalText(await fetchDiscoveryProxy(region.url,15000),region),transport:'jina'}),
+    async()=>({region,rows:parseSueurDeMetalText(String(await fetchDiscoveryProxy(region.url,15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'relay'}),
     async()=>({region,rows:parseSueurDeMetalText(String(await fetchText(region.url,{headers:BROWSER_HEADERS},15000)).replace(/<\/(div|p|li|h\d|span|a|td|tr|section|article)>|<br\s*\/?>/gi,'\n'),region),transport:'direct'})
   ],errs);
   return r.rows.length?r:{region,rows:[],errors:r.errors};
@@ -1113,6 +1132,9 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   // 2) Songkick city/metro Metal agenda: second independent nationwide source.
   const songkickJob=discoverSongkickMetal(lat,lon,radiusKm,skDiag).catch(e=>{skDiag.errors.push(fetchErrorLabel(e));return []});
   const sdmJob=discoverSueurDeMetal(lat,lon,radiusKm,sdmDiag).catch(e=>{sdmDiag.errors.push(fetchErrorLabel(e));return []});
+  // 2b) Ticketmaster (official API): metal concerts around the point.
+  const tmDiag={raw:0,errors:[]};
+  const tmJob=ticketmasterNearby(lat,lon,radiusKm).then(r=>{tmDiag.raw=r.rows.length;if(r.configured)recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),true).catch(()=>{});return r.rows}).catch(e=>{tmDiag.errors.push(fetchErrorLabel(e));recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),false,fetchErrorLabel(e)).catch(()=>{});return []});
 
   // 3) Specialist Concerts-Metal regional feed: keep it because it is especially
   // rich for local French metal shows. Force the region containing the target city.
@@ -1138,7 +1160,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     }}
   }catch{}
 
-  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob,sdmRows=await sdmJob;
+  const cmCount=all.length;const biRows=await bandsintownJob,skRows=await songkickJob,sdmRows=await sdmJob,tmRows=await tmJob;
   // Rows each source returned before the distance filter (shown when nothing is found).
   // Raw rows per source (before the distance filter) and why a source failed.
   const uniq=a=>[...new Set(a)].slice(0,3);
@@ -1146,9 +1168,10 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
     bandsintown:{raw:biDiag.raw,kept:biRows.length,located:biDiag.located??null,errors:biDiag.raw?[]:uniq(biDiag.errors)},
     songkick:{raw:skDiag.raw,kept:skRows.length,errors:skDiag.raw?[]:uniq(skDiag.errors)},
     sueurDeMetal:{raw:sdmDiag.raw,kept:sdmRows.length,errors:sdmDiag.raw?[]:uniq(sdmDiag.errors)},
-    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs),regions:cmRegions}
+    concertsMetal:{raw:cmRaw,kept:cmCount,errors:cmRaw?[]:uniq(cmErrs),regions:cmRegions},
+    ticketmaster:{raw:tmDiag.raw,kept:tmRows.length,errors:uniq(tmDiag.errors)}
   };
-  all.push(...biRows,...skRows,...sdmRows);
+  all.push(...biRows,...skRows,...sdmRows,...tmRows);
   const dated=all.filter(x=>x?.date).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   const placeDiag={};
   const filtered=await withDistance(dated,lat,lon,radiusKm,placeDiag);
@@ -1255,9 +1278,10 @@ export async function testSources(){
     {id:'bi',name:'Bandsintown',url:'https://www.bandsintown.com/fr/c/nantes-france/all-dates/genre/metal',parse:(t,url)=>parseBandsintownMetalText(t,'Nantes',url)}
   ];
   const probe=async(c,via)=>{
-    const target=via==='relais'?`https://r.jina.ai/${c.url}`:c.url;
-    const headers=via==='relais'?{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()}:BROWSER_HEADERS;
-    const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),20000);
+    const rr=relayRequest(c.url);
+    const target=via==='relais'?rr.target:c.url;
+    const headers=via==='relais'?rr.headers:BROWSER_HEADERS;
+    const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),via==='relais'&&rr.timeout?rr.timeout:20000);
     try{
       const r=await fetch(target,{headers,signal:ctl.signal});const text=await r.text();
       let rows=0;try{rows=r.ok?c.parse(text,c.url).length:0}catch{}
@@ -1266,5 +1290,9 @@ export async function testSources(){
     }catch(e){return {via,status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}}
     finally{clearTimeout(timer)}
   };
-  return Promise.all(cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.JINA_API_KEY),attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})));
+  const tm=(async()=>{const t0=Date.now();if(!process.env.TICKETMASTER_API_KEY)return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:0,size:0,rows:0,title:'clé TICKETMASTER_API_KEY absente'}]};
+    try{const r=await ticketmasterNearby(47.2184,-1.5536,50);return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:200,ms:Date.now()-t0,size:0,rows:r.rows.length,title:r.rows.slice(0,3).map(x=>x.title).join(' · ')}]}}
+    catch(e){return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}]}}})();
+  return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.SCRAPERAPI_KEY||process.env.JINA_API_KEY),relay:relayRequest(c.url).name,attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
 }
+export {firstWithRows as _firstWithRows};

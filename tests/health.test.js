@@ -14,4 +14,4 @@ test("one alert when a working source fails for more than a day, again only afte
 test("a source that never worked does not alert; unknown families ignored",async()=>{
   _resetHealth();const alerts=[];setAlertSink(async s=>alerts.push(s));
   for(const t of [0,30,60,90])await recordSource("sk2:paris",false,"406",T+t*H);await recordSource("zz:x",false,"",T+0);
-  assert.equal(alerts.length,0);assert.equal((await sourcesHealth()).length,4)});
+  assert.equal(alerts.length,0);assert.equal((await sourcesHealth()).length,5)});

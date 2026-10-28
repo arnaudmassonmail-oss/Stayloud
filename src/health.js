@@ -5,7 +5,7 @@
 // message is sent only after the source worked again in between.
 import {d1ApiCacheGet,d1ApiCachePut} from "./d1.js";
 
-export const SOURCE_NAMES={cm:"Concerts-Metal",sdm:"Sueur de Metal",sk2:"Songkick",bi:"Bandsintown"};
+export const SOURCE_NAMES={cm:"Concerts-Metal",sdm:"Sueur de Metal",sk2:"Songkick",bi:"Bandsintown",tm:"Ticketmaster"};
 const DOWN_AFTER=24*3600e3,MIN_FAILS=3,KEY="health:sources";
 let state=null,loading=null,saveTimer=null,sink=null;
 export function setAlertSink(fn){sink=fn}

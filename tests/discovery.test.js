@@ -22,3 +22,25 @@ test("approved member concerts: inside the radius, never twice",()=>{
   assert.equal(m.mergeCommunityConcerts([],[c],47.218,-1.553,50).length,1);
   assert.equal(m.mergeCommunityConcerts([],[c],47.218,-1.553,10).length,0);
   assert.equal(m.mergeCommunityConcerts([{title:"Wildfire",date:"2026-12-24",venue:"x",city:"y"}],[c],47.218,-1.553,50).length,1)});
+test("sources: the free direct fetch is tried first, the paid relay only when it fails",async()=>{
+  const {_firstWithRows}=await import("../src/providers/discovery.js");
+  let relay=0;const rows=[{title:"x"}];
+  const r1=await _firstWithRows([async()=>{relay++;return {rows}},async()=>({rows,transport:"direct"})]);
+  assert.equal(r1.transport,"direct");assert.equal(relay,0);
+  const r2=await _firstWithRows([async()=>({rows,transport:"jina"}),async()=>{throw new Error("HTTP 403")}]);
+  assert.equal(r2.transport,"jina");
+  const r3=await _firstWithRows([async()=>{throw new Error("HTTP 402")},async()=>({rows:[]})]);
+  assert.deepEqual(r3.rows,[]);assert.deepEqual(r3.errors.sort(),["direct page sans concert","relais HTTP 402"]);
+});
+test("relay: ScraperAPI when its key is set, Jina otherwise",async()=>{
+  const {relayRequest}=await import("../src/providers/discovery.js");
+  const old={sk:process.env.SCRAPERAPI_KEY,pr:process.env.SCRAPERAPI_PREMIUM};
+  try{
+    delete process.env.SCRAPERAPI_KEY;
+    const j=relayRequest("https://nantes.concerts-metal.com/");assert.equal(j.name,"Jina");assert.equal(j.target,"https://r.jina.ai/https://nantes.concerts-metal.com/");
+    process.env.SCRAPERAPI_KEY="abc";delete process.env.SCRAPERAPI_PREMIUM;
+    const s=relayRequest("https://nantes.concerts-metal.com/");const u=new URL(s.target);
+    assert.equal(s.name,"ScraperAPI");assert.equal(u.hostname,"api.scraperapi.com");assert.equal(u.searchParams.get("api_key"),"abc");assert.equal(u.searchParams.get("url"),"https://nantes.concerts-metal.com/");assert.equal(u.searchParams.get("premium"),null);
+    process.env.SCRAPERAPI_PREMIUM="1";assert.equal(new URL(relayRequest("https://x.test/").target).searchParams.get("premium"),"true");
+  }finally{if(old.sk==null)delete process.env.SCRAPERAPI_KEY;else process.env.SCRAPERAPI_KEY=old.sk;if(old.pr==null)delete process.env.SCRAPERAPI_PREMIUM;else process.env.SCRAPERAPI_PREMIUM=old.pr}
+});
