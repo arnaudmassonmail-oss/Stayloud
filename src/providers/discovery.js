@@ -1066,16 +1066,17 @@ const SCAN_RADIUS_KM=100;
 async function discoverConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const r=Number(radiusKm)||50;const res=await discoverConcertsMetalScan(lat,lon,SCAN_RADIUS_KM,targetCityOverride);
   const keep=x=>!Number.isFinite(Number(x?.distanceKm))||Number(x.distanceKm)<=r;
-  const concerts=(res.concerts||[]).filter(keep);
+  const concerts=(res.concerts||[]).filter(keep),festivals=(res.festivals||[]).filter(keep);
   // Around Nantes, the built-in agenda of known local shows (Montaigu, Vallet,
   // Clisson…) is always merged in: the online sources often miss small venues.
+  // A show the sources already list as a festival is not added again.
   if(distanceKm(lat,lon,47.2184,-1.5536)<=150){
-    const k=x=>`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.venue).replace(/^(le|la|les|l)\s+/,'')}`;const have=new Set(concerts.map(k));
+    const k=x=>`${String(x.date).slice(0,10)}|${norm(x.city)}|${norm(x.venue).replace(/^(le|la|les|l)\s+/,'')}`;const have=new Set([...concerts,...festivals].map(k));
     for(const x of await curatedConcertFallback(lat,lon,r))if(!have.has(k(x))){have.add(k(x));concerts.push(x)}
     concerts.sort((a,b)=>String(a.date).localeCompare(String(b.date))||Number(a.distanceKm||9999)-Number(b.distanceKm||9999));
   }
   const merged=dedupeAcrossSources(concerts);concerts.length=0;concerts.push(...merged);
-  return {concerts,festivals:(res.festivals||[]).filter(keep),sources:res.sources||null};
+  return {concerts,festivals,sources:res.sources||null};
 }
 // The same show often comes from two sources with a slightly different venue
 // name ("Zenith Nantes Métropole" / "Zénith de Nantes Métropole") and, for
