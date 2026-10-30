@@ -247,7 +247,7 @@ const DISCOVER_FALLBACK={
   'Post-Hardcore':[['Holding Absence','Post-Hardcore'],['Static Dress','Post-Hardcore'],['Thornhill','Post-Hardcore']],
   Progressif:[['Periphery','Progressif'],['TesseracT','Progressif'],['ERRA','Progressif']]
 };
-export {discoverManualCityConcerts,splitBandsFromGenres,dedupeAcrossSources,parseSongkickMetalText,parseSueurDeMetalText};
+export {discoverManualCityConcerts,splitBandsFromGenres,dedupeAcrossSources,parseSongkickMetalText,parseSueurDeMetalText,parseConcertsMetalHtml};
 // Concerts of the user's own bands (from "Mes groupes") that fall inside the
 // searched radius are added to the city / near-me lists. When the same show is
 // already listed (same date and venue), the band is added to its title instead
@@ -397,11 +397,16 @@ function parseConcertsMetalHtml(html,sourceUrl=''){
   const rows=[];
   const matches=[...String(html||'').matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)];
   for(const m of matches){
-    const cells=[...m[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(x=>stripHtml(x[1]));
-    if(cells.length<2)continue;
-    const whole=cells.join(' | ');
+    // A cell can hold the date line AND the bands (separated by <br> or
+    // blocks, as in the page served by ScraperAPI): read it line by line so
+    // the bands do not end up in the city name.
+    const rawCells=[...m[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(x=>x[1]);
+    if(rawCells.length<2)continue;
+    const lines=rawCells.flatMap(c=>String(c).replace(/<br\s*\/?>|<\/(?:div|p|li|h\d|tr|b|strong)>/gi,'\n').split('\n').map(stripHtml).filter(Boolean));
+    const whole=lines.join(' | ');
     const date=parseCmDate(whole); if(!date)continue;
-    const header=cells.find(x=>parseCmDate(x))||whole;
+    const header=lines.find(x=>parseCmDate(x))||whole;
+    const cells=lines.filter(x=>x!==header);cells.unshift(header);
     const locMatch=header.match(/(?:20\d{2}-\d{2}-\d{2})(?:\s*\([^)]*\))?\s*-\s*(.+)$/i);
     const location=locMatch?locMatch[1].trim():'';
     const bits=location.split(',').map(x=>x.trim()).filter(Boolean);

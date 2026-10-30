@@ -48,3 +48,12 @@ test("find in sources: too short a query returns nothing",()=>{
   const r=m.findInSources("ab");assert.deepEqual(r.items,[]);
   const r2=m.findInSources("no matter what");assert.ok(Array.isArray(r2.items));
 });
+test("Concerts-Metal HTML: date line and bands in the same cell are kept apart",()=>{
+  const html=`<table><tr><td><img src="x.jpg"></td><td><b>Ve 2026-11-06 (2 jours) - Le Zinor, Montaigu</b><br><a href="#">In Your Face #6</a> Melodic Hardcore <a>Murphy's Law</a> Hardcore Punk<br><a>Aurore</a> Metalcore</td></tr>
+  <tr><td>Sa 2026-11-21 - Le Ferrailleur, Nantes</td><td><a>Cage Fight</a> Hardcore <a>Kabbel</a> Metal</td></tr></table>`;
+  const rows=m.parseConcertsMetalHtml(html,"https://nantes.concerts-metal.com/");
+  assert.equal(rows.length,2);
+  assert.equal(rows[0].city,"Montaigu");assert.equal(rows[0].venue,"Le Zinor");assert.equal(rows[0].date,"2026-11-06");
+  assert.doesNotMatch(rows[0].title,/2026|Zinor/);assert.match(rows[0].title,/In Your Face/);
+  assert.equal(rows[1].city,"Nantes");assert.equal(rows[1].venue,"Le Ferrailleur");assert.match(rows[1].title,/Cage Fight/);
+});
