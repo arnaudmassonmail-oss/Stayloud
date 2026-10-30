@@ -1302,3 +1302,20 @@ export async function testSources(){
   return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.SCRAPERAPI_KEY||process.env.JINA_API_KEY),relay:relayRequest(c.url).name,attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
 }
 export {firstWithRows as _firstWithRows};
+
+// Administration › État des sources › « Chercher un concert »: looks for a
+// word in what the sources last returned (memory of this server, no new
+// request), and says whether the metal filter keeps each match. Tells apart
+// "the source does not list it" from "the app drops it".
+export function findInSources(q){
+  const n=norm(q);if(n.length<3)return {query:q,pages:0,items:[]};
+  const items=[];let pages=0;
+  for(const [k,v] of sourceMem){pages++;
+    for(const r of v.rows||[]){
+      if(!norm(`${r.title||''} ${r.artist||''} ${r.venue||''} ${r.city||''}`).includes(n))continue;
+      items.push({source:k.replace(/^src:/,''),readAt:v.at,title:r.title||'',date:String(r.date||'').slice(0,10),venue:r.venue||'',city:r.city||'',metal:eventHasMetal(r),past:String(r.date||'').slice(0,10)<new Date().toISOString().slice(0,10)});
+      if(items.length>=60)return {query:q,pages,items};
+    }
+  }
+  return {query:q,pages,items};
+}

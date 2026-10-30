@@ -44,3 +44,7 @@ test("relay: ScraperAPI when its key is set, Jina otherwise",async()=>{
     process.env.SCRAPERAPI_PREMIUM="1";assert.equal(new URL(relayRequest("https://x.test/").target).searchParams.get("premium"),"true");
   }finally{if(old.sk==null)delete process.env.SCRAPERAPI_KEY;else process.env.SCRAPERAPI_KEY=old.sk;if(old.pr==null)delete process.env.SCRAPERAPI_PREMIUM;else process.env.SCRAPERAPI_PREMIUM=old.pr}
 });
+test("find in sources: too short a query returns nothing",()=>{
+  const r=m.findInSources("ab");assert.deepEqual(r.items,[]);
+  const r2=m.findInSources("no matter what");assert.ok(Array.isArray(r2.items));
+});
