@@ -84,19 +84,34 @@ export function ticketmasterRows(data,{metalOnly=false}={}){
   }
   return out;
 }
-export async function ticketmasterNearby(lat,lon,radiusKm=50){
+// The geographic search does not always cover Ticketmaster France: when it
+// finds no metal concert, the old lat/long parameter and then the city name
+// (country FR) are tried. `tried` tells, per query, how many music events
+// and how many metal concerts came back (shown by the source test).
+export async function ticketmasterNearby(lat,lon,radiusKm=50,{city=""}={}){
   const key=String(process.env.TICKETMASTER_API_KEY||"").trim();
-  if(!key||!Number.isFinite(Number(lat))||!Number.isFinite(Number(lon)))return {rows:[],configured:!!key};
-  const r=Math.max(10,Math.min(150,Math.round(Number(radiusKm)||50)+20));
-  const rows=await cachedJson(`tm:near:${Number(lat).toFixed(1)}|${Number(lon).toFixed(1)}|${r}`,6*HOUR,async()=>{
-    const rows=[];
-    for(const page of [0,1]){
-      const p=new URLSearchParams({apikey:key,classificationName:"music",geoPoint:geohash(Number(lat),Number(lon)),radius:String(r),unit:"km",size:"200",page:String(page),sort:"date,asc",startDateTime:new Date().toISOString().slice(0,19)+"Z"});
-      const data=await fetchJson(`https://app.ticketmaster.com/discovery/v2/events.json?${p}`,{headers:{Accept:"application/json"}},10000);
-      rows.push(...ticketmasterRows(data,{metalOnly:true}));
-      if((Number(data?.page?.totalPages)||1)<=page+1)break;
+  if(!key||!Number.isFinite(Number(lat))||!Number.isFinite(Number(lon)))return {rows:[],configured:!!key,tried:[]};
+  const r=Math.max(10,Math.min(150,Math.round(Number(radiusKm)||50)+20));city=String(city||"").trim();
+  const out=await cachedJson(`tm:near2:${Number(lat).toFixed(1)}|${Number(lon).toFixed(1)}|${r}|${city.toLowerCase()}`,v=>v?.rows?.length?6*HOUR:2*HOUR,async()=>{
+    const base={apikey:key,classificationName:"music",size:"200",sort:"date,asc",startDateTime:new Date().toISOString().slice(0,19)+"Z"};
+    const variants=[
+      ["position",{geoPoint:geohash(Number(lat),Number(lon)),radius:String(r),unit:"km"}],
+      ["lat/long",{latlong:`${Number(lat)},${Number(lon)}`,radius:String(r),unit:"km"}],
+      ...(city?[[`ville ${city}`,{countryCode:"FR",city}]]:[])
+    ];
+    const tried=[];
+    for(const [name,extra] of variants){
+      const rows=[];let total=0;
+      for(const page of [0,1]){
+        const data=await fetchJson(`https://app.ticketmaster.com/discovery/v2/events.json?${new URLSearchParams({...base,...extra,page:String(page)})}`,{headers:{Accept:"application/json"}},10000);
+        total=Number(data?.page?.totalElements)||0;
+        rows.push(...ticketmasterRows(data,{metalOnly:true}));
+        if((Number(data?.page?.totalPages)||1)<=page+1)break;
+      }
+      tried.push({name,total,metal:rows.length});
+      if(rows.length)return {rows,tried};
     }
-    return rows;
+    return {rows:[],tried};
   });
-  return {rows,configured:true};
+  return {rows:out.rows,configured:true,tried:out.tried};
 }

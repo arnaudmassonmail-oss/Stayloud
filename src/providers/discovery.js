@@ -1140,7 +1140,7 @@ async function scanConcertsMetal(lat,lon,radiusKm,targetCityOverride=''){
   const sdmJob=discoverSueurDeMetal(lat,lon,radiusKm,sdmDiag).catch(e=>{sdmDiag.errors.push(fetchErrorLabel(e));return []});
   // 2b) Ticketmaster (official API): metal concerts around the point.
   const tmDiag={raw:0,errors:[]};
-  const tmJob=ticketmasterNearby(lat,lon,radiusKm).then(r=>{tmDiag.raw=r.rows.length;if(r.configured)recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),true).catch(()=>{});return r.rows}).catch(e=>{tmDiag.errors.push(fetchErrorLabel(e));recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),false,fetchErrorLabel(e)).catch(()=>{});return []});
+  const tmJob=ticketmasterNearby(lat,lon,radiusKm,{city:effectiveCity}).then(r=>{tmDiag.raw=r.rows.length;if(r.configured)recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),true).catch(()=>{});return r.rows}).catch(e=>{tmDiag.errors.push(fetchErrorLabel(e));recordSource('tm:'+Number(lat).toFixed(1)+','+Number(lon).toFixed(1),false,fetchErrorLabel(e)).catch(()=>{});return []});
 
   // 3) Specialist Concerts-Metal regional feed: keep it because it is especially
   // rich for local French metal shows. Force the region containing the target city.
@@ -1297,7 +1297,7 @@ export async function testSources(){
     finally{clearTimeout(timer)}
   };
   const tm=(async()=>{const t0=Date.now();if(!process.env.TICKETMASTER_API_KEY)return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:0,size:0,rows:0,title:'clé TICKETMASTER_API_KEY absente'}]};
-    try{const r=await ticketmasterNearby(47.2184,-1.5536,50);return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:200,ms:Date.now()-t0,size:0,rows:r.rows.length,title:r.rows.slice(0,3).map(x=>x.title).join(' · ')}]}}
+    try{const r=await ticketmasterNearby(47.2184,-1.5536,50,{city:'Nantes'});return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:200,ms:Date.now()-t0,size:0,rows:r.rows.length,title:[(r.tried||[]).map(t=>`${t.name} : ${t.total} concerts de musique, ${t.metal} metal`).join(' · '),r.rows.slice(0,3).map(x=>x.title).join(' · ')].filter(Boolean).join(' — ')}]}}
     catch(e){return {id:'tm',name:'Ticketmaster',attempts:[{via:'api',status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}]}}})();
   return Promise.all([...cases.map(async c=>({id:c.id,name:c.name,url:c.url,relayKey:Boolean(process.env.SCRAPERAPI_KEY||process.env.JINA_API_KEY),relay:relayRequest(c.url).name,attempts:await Promise.all([probe(c,'relais'),probe(c,'direct')])})),tm]);
 }
