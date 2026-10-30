@@ -543,7 +543,9 @@ function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m
 // the last good copy is used instead of showing nothing.
 const SOURCE_TTL=12*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
 async function cachedSourceRows(key,fetcher,ttl=SOURCE_TTL){
-  const k='src:'+key;let hit=sourceMem.get(k);
+  // The prefix changes when a parser changes (src2: Concerts-Metal cells read
+  // line by line), so rows saved in D1 with the old reading are not reused.
+  const k='src2:'+key;let hit=sourceMem.get(k);
   if(!hit){try{const r=(await d1GetBandCache([k])).get(k);if(r?.events_json){hit={rows:JSON.parse(r.events_json)||[],at:Date.parse(r.events_at)||0};sourceMem.set(k,hit)}}catch{}}
   if(hit&&hit.rows.length&&Date.now()-hit.at<ttl)return {...hit.fresh,rows:hit.rows,cached:true};
   if(sourceInflight.has(k))return sourceInflight.get(k);
@@ -1318,7 +1320,7 @@ export function findInSources(q){
   for(const [k,v] of sourceMem){pages++;
     for(const r of v.rows||[]){
       if(!norm(`${r.title||''} ${r.artist||''} ${r.venue||''} ${r.city||''}`).includes(n))continue;
-      items.push({source:k.replace(/^src:/,''),readAt:v.at,title:r.title||'',date:String(r.date||'').slice(0,10),venue:r.venue||'',city:r.city||'',metal:eventHasMetal(r),past:String(r.date||'').slice(0,10)<new Date().toISOString().slice(0,10)});
+      items.push({source:k.replace(/^src\d*:/,''),readAt:v.at,title:r.title||'',date:String(r.date||'').slice(0,10),venue:r.venue||'',city:r.city||'',metal:eventHasMetal(r),past:String(r.date||'').slice(0,10)<new Date().toISOString().slice(0,10)});
       if(items.length>=60)return {query:q,pages,items};
     }
   }
