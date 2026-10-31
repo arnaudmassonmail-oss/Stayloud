@@ -273,6 +273,16 @@ export async function mergeFollowedConcerts(items,followed,lat,lon,radiusKm){
 // numbers: city-only list), unless the same show is already listed.
 // Rows (with a city) within radiusKm of lat/lon, with their distance (alerts).
 export function rowsNear(rows,lat,lon,radiusKm){return withDistance(rows,lat,lon,radiusKm)}
+// "Mes groupes": coordinates of the concert cities, to show how far each
+// concert is from the user. Same geocoder and cache as "Autour de moi";
+// lookups that do not finish within the budget fill the cache for next time.
+export async function locateCities(cities){
+  const list=[...new Set((Array.isArray(cities)?cities:[]).map(c=>String(c||'').trim().slice(0,80)).filter(c=>c&&!badCity(c)))].slice(0,80);
+  const out={};
+  const run=(async()=>{for(const c of list){try{const g=await geocodeCity(c,'France');if(g)out[c]=[Math.round(g.lat*1e4)/1e4,Math.round(g.lon*1e4)/1e4]}catch{}}})();
+  await withinBudget(run);
+  return {...out};
+}
 export function mergeCommunityConcerts(items,rows,lat,lon,radiusKm){
   const list=[...(items||[])];if(!rows?.length)return list;
   const venueKey=v=>norm(cleanPlaceName(v)).replace(/^(le|la|les|l)\s+/,'').replace(/[^a-z0-9]+/g,' ').trim();
