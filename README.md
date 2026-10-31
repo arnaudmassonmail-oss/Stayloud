@@ -1,8 +1,8 @@
-# STAYLOUD — Radar Metal
+# STAYPIT — Radar Metal
 
 Application web (installable sur téléphone) pour suivre ses groupes de metal : actualités, concerts près de chez soi, albums et extraits, clips, radio métal, amis.
 
-En ligne : https://stayloud-radar.online
+En ligne : https://staypit.com
 
 ## Organisation
 

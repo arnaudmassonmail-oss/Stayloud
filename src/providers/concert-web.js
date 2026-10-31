@@ -1,13 +1,13 @@
 import {fetchText,eventKey,countryGuess,parseDate,isFranceEvent} from "../utils.js";
 
-// STAYLOUD 5.16 — concert engine: Bandsintown + InfoConcert + lineup discovery.
+// STAYPIT 5.16 — concert engine: Bandsintown + InfoConcert + lineup discovery.
 // Bandsintown and InfoConcert remain the primary artist calendars. A separate
 // lineup discovery path finds real event pages where the artist is explicitly
 // billed as support/opening/guest. Search-result snippets are never stored as
 // concert evidence.
 
 const HEADERS={
-  "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36 STAYLOUD/5.16",
+  "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36 STAYPIT/5.16",
   "Accept-Language":"fr-FR,fr;q=0.9,en;q=0.8"
 };
 
@@ -76,7 +76,7 @@ async function readSource(url){
     }catch{}
   }
   try{
-    const txt=await fetchText(`https://r.jina.ai/${url}`,{"Accept":"text/plain","User-Agent":"STAYLOUD/5.16"},25000);
+    const txt=await fetchText(`https://r.jina.ai/${url}`,{"Accept":"text/plain","User-Agent":"STAYPIT/5.16"},25000);
     if(txt && txt.length>500)return txt;
   }catch{}
   try{
@@ -382,7 +382,7 @@ async function resolveBandsintown(artist){
   // need for a hard-coded artist table and gives us the canonical /a/<id> URL.
   if(BANDSINTOWN_APP_ID && name){
     try{
-      const raw=await fetchText(`https://rest.bandsintown.com/artists/${encodeURIComponent(name)}?app_id=${encodeURIComponent(BANDSINTOWN_APP_ID)}`,{"Accept":"application/json","User-Agent":"STAYLOUD/5.16"},15000);
+      const raw=await fetchText(`https://rest.bandsintown.com/artists/${encodeURIComponent(name)}?app_id=${encodeURIComponent(BANDSINTOWN_APP_ID)}`,{"Accept":"application/json","User-Agent":"STAYPIT/5.16"},15000);
       const d=JSON.parse(raw||"{}");
       const u=String(d?.url||"").trim();
       if(/bandsintown\.com\/a\//i.test(u))return u;
@@ -451,7 +451,7 @@ async function fetchBandsintownApi(artist){
     ?`https://rest.bandsintown.com/artists/id_${id}/events?app_id=${encodeURIComponent(BANDSINTOWN_APP_ID)}&date=upcoming`
     :`https://rest.bandsintown.com/artists/${encodeURIComponent(name)}/events?app_id=${encodeURIComponent(BANDSINTOWN_APP_ID)}&date=upcoming`;
   try{
-    const raw=await fetchText(target,{"Accept":"application/json","User-Agent":"STAYLOUD/5.16"},20000);
+    const raw=await fetchText(target,{"Accept":"application/json","User-Agent":"STAYPIT/5.16"},20000);
     const data=JSON.parse(raw||"[]");
     if(!Array.isArray(data))return {ok:false,rows:[]};
     const rows=[];

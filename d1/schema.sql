@@ -1,4 +1,4 @@
--- STAYLOUD D1 — comptes + groupes
+-- STAYPIT D1 — comptes + groupes
 -- Peut être exécuté dans Cloudflare D1 / Wrangler.
 CREATE TABLE IF NOT EXISTS users(
   id INTEGER PRIMARY KEY AUTOINCREMENT,

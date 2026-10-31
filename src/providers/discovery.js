@@ -96,7 +96,7 @@ function cleanArtist(a){return {id:a.id,name:a.name,sortname:a.sortname||a.name,
 function inferStyle(tags){const t=tags.join(' ');const rules=[['Deathcore',/deathcore/],['Metalcore',/metalcore/],['Post-Hardcore',/post-hardcore/],['Hardcore',/hardcore/],['Nu Metal',/nu metal|nu-metal/],['Death Metal',/death metal/],['Black Metal',/black metal/],['Thrash Metal',/thrash metal/],['Progressif',/progressive metal|progressive rock/],['Alternative',/alternative metal/],['Metal',/metal/],['Grunge',/grunge/],['Punk',/punk/],['Alternative',/alternative rock/],['Rock',/rock/]];return rules.find(([,re])=>re.test(t))?.[0]||null}
 
 export async function reverseCity(lat,lon){
-  for(const zoom of [14,12,10]){try{const u=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=${zoom}&addressdetails=1`;const d=await fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0'}},12000);const a=d?.address||{};const locality=a.village||a.hamlet||a.suburb||a.locality||'';const city=a.city||a.town||a.municipality||a.city_district||locality||'';const county=a.county||'';const state=a.state||'';const country=a.country||'';if(city||country)return {city,locality,municipality:a.municipality||'',county,state,country,lat:Number(lat),lon:Number(lon),display_name:String(d?.display_name||'')}}catch{}}
+  for(const zoom of [14,12,10]){try{const u=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&zoom=${zoom}&addressdetails=1`;const d=await fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0'}},12000);const a=d?.address||{};const locality=a.village||a.hamlet||a.suburb||a.locality||'';const city=a.city||a.town||a.municipality||a.city_district||locality||'';const county=a.county||'';const state=a.state||'';const country=a.country||'';if(city||country)return {city,locality,municipality:a.municipality||'',county,state,country,lat:Number(lat),lon:Number(lon),display_name:String(d?.display_name||'')}}catch{}}
   return {city:'',locality:'',municipality:'',county:'',state:'',country:'',lat:Number(lat),lon:Number(lon),display_name:''};
 }
 
@@ -144,7 +144,7 @@ export async function geocodeQuery(query){
     const wait=Math.max(0,650-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
     try{
       const u=`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(searchQ)}&type=municipality&limit=10`;
-      const d=await fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
+      const d=await fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0 (local app)'}},12000);
       const features=Array.isArray(d?.features)?d.features:[];
       const hit=features.find(f=>strictCityMatch(f,q));
       const out=hit?buildGeocodedCity(hit,q):null;
@@ -156,7 +156,7 @@ export async function geocodeQuery(query){
   for(const searchQ of queries){
     const wait=Math.max(0,650-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
     try{
-      const d=await fetchJson(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(searchQ)}&type=municipality&limit=10`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
+      const d=await fetchJson(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(searchQ)}&type=municipality&limit=10`,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0 (local app)'}},12000);
       const features=Array.isArray(d?.features)?d.features:[];
       const hit=features.find(f=>strictCityMatch(f,q));
       const out=hit?buildGeocodedCity(hit,q):null;
@@ -169,7 +169,7 @@ export async function geocodeQuery(query){
   for(const searchQ of queries){
     const wait=Math.max(0,800-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
     try{
-      const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&countrycodes=fr&addressdetails=1&q=${encodeURIComponent(searchQ)}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
+      const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&countrycodes=fr&addressdetails=1&q=${encodeURIComponent(searchQ)}`,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0 (local app)'}},12000);
       const hits=Array.isArray(d)?d:[];
       const hit=hits.find(x=>strictCityMatch(x,q));
       if(hit){
@@ -199,9 +199,9 @@ async function geocodeCity(city,country=''){
   // Nominatim. A failed request is NOT remembered as "unknown city", so a
   // temporary refusal (429/403) cannot hide a city for the rest of the day.
   let failed=false;
-  if(fr){try{const d=await fetchJson(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(c)}&type=municipality&limit=5`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},10000);const f=(d?.features||[]).find(x=>strictCityMatch(x,c));if(f){const [lon,lat]=f.geometry.coordinates;const out={lat:Number(lat),lon:Number(lon)};if(Number.isFinite(out.lat)&&Number.isFinite(out.lon)){geoCache.set(key,out);return out}}}catch{failed=true}}
+  if(fr){try{const d=await fetchJson(`https://data.geopf.fr/geocodage/search?q=${encodeURIComponent(c)}&type=municipality&limit=5`,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0 (local app)'}},10000);const f=(d?.features||[]).find(x=>strictCityMatch(x,c));if(f){const [lon,lat]=f.geometry.coordinates;const out={lat:Number(lat),lon:Number(lon)};if(Number.isFinite(out.lat)&&Number.isFinite(out.lon)){geoCache.set(key,out);return out}}}catch{failed=true}}
   const wait=Math.max(0,1050-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
-  try{const q=encodeURIComponent([c,country].filter(Boolean).join(', '));const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${q}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);const hit=d?.[0];const out=hit?{lat:Number(hit.lat),lon:Number(hit.lon)}:null;if(out||!failed)geoCache.set(key,out);return out}catch{return null}
+  try{const q=encodeURIComponent([c,country].filter(Boolean).join(', '));const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${q}`,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0 (local app)'}},12000);const hit=d?.[0];const out=hit?{lat:Number(hit.lat),lon:Number(hit.lon)}:null;if(out||!failed)geoCache.set(key,out);return out}catch{return null}
 }
 function distanceKm(lat1,lon1,lat2,lon2){const toRad=v=>v*Math.PI/180,dLat=toRad(lat2-lat1),dLon=toRad(lon2-lon1),a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
 
@@ -584,7 +584,7 @@ export function relayRequest(url,{render=false}={}){
   const sk=String(process.env.SCRAPERAPI_KEY||'').trim();
   if(sk){const p=new URLSearchParams({api_key:sk,url,country_code:'fr'});if(process.env.SCRAPERAPI_PREMIUM==='1')p.set('premium','true');if(render)p.set('render','true');
     return {name:'ScraperAPI',target:`https://api.scraperapi.com/?${p}`,headers:{Accept:'text/html'},timeout:60000}}
-  return {name:'Jina',target:`https://r.jina.ai/${url}`,headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYLOUD/1.0',...JINA_HEADERS()},timeout:0};
+  return {name:'Jina',target:`https://r.jina.ai/${url}`,headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYPIT/1.0',...JINA_HEADERS()},timeout:0};
 }
 async function fetchDiscoveryProxy(url,timeout=18000,opts={}){
   const r=relayRequest(url,opts);
@@ -605,7 +605,7 @@ async function cityWebSearch(query){
   ];
   for(const u of urls){
     try{
-      const t=await fetchText(u,{headers:{Accept:'text/html,text/plain', 'Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'Mozilla/5.0 STAYLOUD/1.0'}},18000);
+      const t=await fetchText(u,{headers:{Accept:'text/html,text/plain', 'Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'Mozilla/5.0 STAYPIT/1.0'}},18000);
       if(t&&t.length>300)return t;
     }catch{}
   }
@@ -795,7 +795,7 @@ async function fetchBandsintownCityLive(city,lat=null,lon=null,errs=null){
 // name alone and keep the hit closest to the searched city.
 async function nominatimVenue(q,near){
   const wait=Math.max(0,1100-(Date.now()-geoLast));if(wait)await sleep(wait);geoLast=Date.now();
-  const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&countrycodes=fr&addressdetails=1&q=${encodeURIComponent(q)}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD-Music-Radar/3.0 (local app)'}},12000);
+  const d=await fetchJson(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&countrycodes=fr&addressdetails=1&q=${encodeURIComponent(q)}`,{headers:{Accept:'application/json','User-Agent':'STAYPIT-Music-Radar/3.0 (local app)'}},12000);
   const hits=(Array.isArray(d)?d:[]).map(h=>{const a=h.address||{};return {lat:Number(h.lat),lon:Number(h.lon),city:String(a.city||a.town||a.village||a.municipality||'').trim()}}).filter(h=>Number.isFinite(h.lat)&&Number.isFinite(h.lon));
   if(!hits.length)return null;
   if(near&&Number.isFinite(near.lat)&&Number.isFinite(near.lon))hits.sort((x,y)=>distanceKm(near.lat,near.lon,x.lat,x.lon)-distanceKm(near.lat,near.lon,y.lat,y.lon));

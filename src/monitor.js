@@ -64,7 +64,7 @@ async function sendEmail(subject,text){
   const apiKey=String(process.env.RESEND_API_KEY||"").trim(),from=String(process.env.EMAIL_FROM||"").trim();
   const to=String(process.env.ALERT_EMAIL||"contact@stayloud-radar.online").trim();
   if(!apiKey||!from||!to)return false;
-  const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:640px"><h2 style="color:#c40010">STAYLOUD · contrôle du jour</h2>${text.split("\n").map(l=>l?`<p style="margin:6px 0">${l.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p>`:"").join("")}</div>`;
+  const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:640px"><h2 style="color:#c40010">STAYPIT · contrôle du jour</h2>${text.split("\n").map(l=>l?`<p style="margin:6px 0">${l.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p>`:"").join("")}</div>`;
   const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[to],subject,html})});
   return r.ok;
 }
@@ -81,7 +81,7 @@ export async function runDailyCheck({force=false,now=Date.now()}={}){
   let alerted=false,emailed=false;
   if(problems.length&&(force||!repeat)){
     const text=`Le contrôle automatique de ce matin a trouvé ${problems.length} problème${problems.length>1?"s":""} :\n\n${problems.map(p=>"• "+p).join("\n")}\n\nConcerts lus : ${summary||"?"}${svc.info.scraperapi?`\nScraperAPI : ${svc.info.scraperapi}`:""}\n\nDétails : Mon compte › Administration › État des sources.`;
-    try{emailed=await sendEmail(`STAYLOUD : ${problems.length} problème${problems.length>1?"s":""} détecté${problems.length>1?"s":""}`,text)}catch(e){console.error("Monitor e-mail:",e?.message||e)}
+    try{emailed=await sendEmail(`STAYPIT : ${problems.length} problème${problems.length>1?"s":""} détecté${problems.length>1?"s":""}`,text)}catch(e){console.error("Monitor e-mail:",e?.message||e)}
     try{await sink?.(`Contrôle du jour : ${problems.length} problème${problems.length>1?"s":""}`,text);alerted=true}catch(e){console.error("Monitor message:",e?.message||e)}
   }
   last={at:now,ok:!problems.length,problems,summary,info:svc.info,emailed,alerted,sig,alertedAt:alerted||emailed?now:(prev?.alertedAt||0)};
