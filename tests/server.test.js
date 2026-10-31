@@ -72,3 +72,6 @@ test("video feed: off without a YouTube key, login required",async()=>{
   assert.equal((await fetch(B+"/api/videos/feed")).status,401)});
 test("source test: login required",async()=>{
   assert.equal((await fetch(B+"/api/admin/sources/test")).status,401)});
+test("daily check: administrators only",async()=>{
+  assert.equal((await fetch(B+"/api/admin/monitor")).status,401);
+  assert.equal((await fetch(B+"/api/admin/monitor/run",{method:"POST"})).status,401)});
