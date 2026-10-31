@@ -152,7 +152,7 @@
 @media(max-width:700px){.mobile-bottom .nav-icon{width:29px;height:29px}.mobile-bottom .nav-label{font-size:10px}.mobile-bottom button{min-height:44px;}}
 
 .auth-gate{position:fixed;inset:0;z-index:100000;background:radial-gradient(circle at 50% -10%,#15191e 0,#050607 45%);display:grid;place-items:center;padding:22px}.auth-gate.hidden{display:none}.auth-box{width:min(430px,100%);background:linear-gradient(145deg,#0d1116,#07090b);border:1px solid #2a333d;border-radius:14px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.6)}.auth-logo{font:900 58px/.8 'Barlow Condensed';letter-spacing:-.02em;margin-bottom:5px}.auth-logo .red{color:var(--red)}.auth-sub{color:var(--muted);font-size:12px;margin-bottom:20px}.auth-title{font:800 25px 'Barlow Condensed';margin:0 0 12px}.auth-form{display:grid;gap:10px}.auth-form input{height:48px;background:#090c10;border:1px solid var(--line);border-radius:9px;color:#fff;padding:0 13px;font:600 14px Inter,Arial,sans-serif;outline:none}.auth-form input:focus{border-color:var(--red)}.auth-error{min-height:18px;color:#ff727b;font-size:12px}.auth-note{color:#858f99;font-size:11px;line-height:1.45;margin-top:12px}.auth-switch{margin-top:16px;text-align:center;color:#9ba4ad;font-size:12px}.auth-switch button{border:0;background:none;color:#ff5a62;font-weight:800;cursor:pointer}.auth-forgot{margin-top:8px;text-align:center}.auth-forgot button{border:0;background:none;color:#aab2ba;font-size:11px;cursor:pointer}.auth-forgot button:hover{color:#fff}.auth-extra{display:none}.auth-extra.open{display:grid}.auth-email-note{font-size:10px;color:#89939d;line-height:1.4}.account-pill{display:inline-flex;align-items:center;gap:8px;margin-left:8px;color:#c7cdd3;font-size:11px}.account-pill button{border:1px solid #343d47;background:#0b0e12;color:#fff;border-radius:7px;padding:4px 8px;cursor:pointer}@media(max-width:700px){.auth-box{padding:20px}.auth-logo{font-size:52px}}
-.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 </style><style id="sl-albums-v2">
 /* Albums & extract player (v7.18.12) */
 .profile-albums .profile-section-title{text-align:left;margin:22px 0 12px}
@@ -685,7 +685,7 @@ function pagerHTML(page,pages,fn){return pages>1?`<div class="news-pager"><butto
 function pageSlice(rows,page){const pages=Math.max(1,Math.ceil(rows.length/CONCERT_PAGE));page=Math.min(Math.max(0,page),pages-1);return {page,pages,rows:rows.slice(page*CONCERT_PAGE,page*CONCERT_PAGE+CONCERT_PAGE)}}
 function concertGo(d){concertPage+=d;live();scrollToListTop($('events'),'.sl-ev')}
 function geoGo(d){geoPage+=d;renderDiscoverEvents();scrollToListTop($('discoverEvents'),'.sl-ev')}
-function live(){const id=+$('la2').value||0;const all=liveRows(id,'').filter(within6Months);const pg=pageSlice(all,concertPage);concertPage=pg.page;$('events').innerHTML=eventHTML(pg.rows)+pagerHTML(pg.page,pg.pages,'concertGo');liveSubHTML();ensureCityCoords(all)}
+function live(){const id=+$('la2').value||0;let all=liveRows(id,'').filter(within6Months);if(mineSortByDistance())all=sortByDistance(all);const pg=pageSlice(all,concertPage);concertPage=pg.page;$('events').innerHTML=eventHTML(pg.rows)+pagerHTML(pg.page,pg.pages,'concertGo');liveSubHTML();ensureCityCoords(all)}
 // ---- Distance of "Mes groupes" concerts from where I am (v7.34) ----
 // The point is the one of "Autour de moi" (my position or the city typed),
 // or my position asked here. City coordinates come from the server
@@ -696,8 +696,13 @@ function cityKey(c){return String(c||'').trim().toLowerCase()}
 function myPoint(){const p=loadConcertPrefs();if(p.alertLat==null||p.alertLon==null)return null;const lat=Number(p.alertLat),lon=Number(p.alertLon);return Number.isFinite(lat)&&Number.isFinite(lon)?{lat,lon,place:String(p.alertPlace||'')}:null}
 function kmBetween(a,b,c,d){const r=v=>v*Math.PI/180,x=Math.sin(r(c-a)/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(r(d-b)/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 function mineDistance(x){const me=myPoint();if(!me)return null;const lat=Number(x.lat??x.latitude),lon=Number(x.lon??x.longitude);let at=Number.isFinite(lat)&&Number.isFinite(lon)?[lat,lon]:cityCoords[cityKey(x.city)];if(!Array.isArray(at))return null;return kmBetween(me.lat,me.lon,at[0],at[1])}
+function mineSortByDistance(){return !!myPoint()&&loadConcertPrefs().mineSort==='distance'}
+// Nearest first; concerts whose city is not located yet go last (by date).
+function sortByDistance(rows){const d=new Map(rows.map(x=>[x,mineDistance(x)]));const day=x=>String(x.date||'');
+ return [...rows].sort((a,b)=>{const da=d.get(a),db=d.get(b);if(da==null&&db==null)return day(a).localeCompare(day(b));if(da==null)return 1;if(db==null)return -1;return (Math.round(da)-Math.round(db))||day(a).localeCompare(day(b))})}
+function setMineSort(v){saveConcertPrefs({mineSort:v});concertPage=0;live()}
 function liveSubHTML(){const el=$('liveSub');if(!el)return;const me=myPoint();
- el.innerHTML='Vos groupes en France · têtes d’affiche et premières parties'+(me?` · distances depuis <b>${esc(me.place||'ta position')}</b> <button type="button" class="sl-linkbtn" onclick="useMyPositionForDistance()">📍 ma position</button>`:` · <button type="button" class="sl-linkbtn" onclick="useMyPositionForDistance()">📍 Afficher la distance depuis ma position</button>`)}
+ el.innerHTML='Vos groupes en France · têtes d’affiche et premières parties'+(me?` · distances depuis <b>${esc(me.place||'ta position')}</b> <button type="button" class="sl-linkbtn" onclick="useMyPositionForDistance()">📍 ma position</button><span class="sl-sort">Trier : <button type="button" class="sl-linkbtn${mineSortByDistance()?'':' on'}" onclick="setMineSort('date')">date</button> · <button type="button" class="sl-linkbtn${mineSortByDistance()?' on':''}" onclick="setMineSort('distance')">distance</button></span>`:` · <button type="button" class="sl-linkbtn" onclick="useMyPositionForDistance()">📍 Afficher la distance depuis ma position</button>`)}
 async function ensureCityCoords(rows){
  if(!myPoint()||cityBusy)return;
  const need=[...new Set(rows.map(x=>String(x.city||'').trim()).filter(c=>c&&!(cityKey(c) in cityCoords)&&!cityTried.has(cityKey(c))))].slice(0,80);
