@@ -85,3 +85,7 @@ test("shared clip page is public and rejects bad ids",async()=>{
   const bad=await fetch(B+"/clip/not-an-id!",{redirect:"manual"});assert.equal(bad.status,302);
   const ok=await fetch(B+"/clip/dQw4w9WgXcQ");assert.equal(ok.status,200);const h=await ok.text();
   assert.match(h,/og:image/);assert.match(h,/Découvrir STAYPIT/)});
+test("shared band page is public and rejects bad ids",async()=>{
+  assert.equal((await fetch(B+"/groupe/not-an-id",{redirect:"manual"})).status,302);
+  assert.equal((await fetch(B+"/groupe",{redirect:"manual"})).status,302);
+  const r=await fetch(B+"/groupe?n=Gojira");assert.equal(r.status,200);const h=await r.text();assert.match(h,/og:title" content="Gojira/);assert.match(h,/Suivre Gojira sur STAYPIT/)});
