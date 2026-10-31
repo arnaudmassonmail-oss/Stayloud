@@ -11,7 +11,7 @@ import {artistReleaseGroups,resolve,resolveByMbid,searchArtistCandidates,fetchAr
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
-import {findTickets,ticketmasterConfigured} from "./providers/tickets.js";
+import {findTickets,ticketmasterConfigured,bandActivity} from "./providers/tickets.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
@@ -230,7 +230,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.35.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.36.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -581,6 +581,9 @@ app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const out=await discoverManualCityConcerts(q);try{out.items=mergeCommunityConcerts(out.items,(await approvedCommunity()).filter(c=>normCity(c.city)===normCity(q)),NaN,NaN,0)}catch{}res.json(out);}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/resolve-city",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:`ville introuvable : ${q}`});res.json({city:q,resolvedCity:p.resolved_city||q,country:p.country||"France",lat:p.lat,lon:p.lon,display_name:p.display_name||`${q}, France`,resolvedCityVerified:true});}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/reverse",async(req,res)=>{const lat=Number(req.query.lat),lon=Number(req.query.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return res.status(400).json({error:"lat/lon requis"});try{const {reverseCity}=await import("./providers/discovery.js");res.json(await reverseCity(lat,lon))}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/discover/activity",requireAuth,async(req,res)=>{try{let names=[];try{names=JSON.parse(String(req.query.names||"[]"))}catch{}names=[...new Set((Array.isArray(names)?names:[]).map(n=>String(n||"").trim().slice(0,120)).filter(Boolean))].slice(0,30);
+  const out={},todo=[...names];const worker=async()=>{while(todo.length){const n=todo.shift();try{const a=await bandActivity(n);if(a)out[n]=a}catch{}}};
+  await Promise.all([worker(),worker(),worker(),worker()]);res.set("Cache-Control","private, max-age=1800");res.json({items:out})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/artists",async(req,res)=>{try{const style=String(req.query.style||"all");const limit=Math.min(Number(req.query.limit||18),30);const page=Math.max(0,Math.min(Number(req.query.page)||0,50));res.json(await discoverArtists(style,limit,page))}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/festivals",async(req,res)=>{let lat=Number(req.query.lat),lon=Number(req.query.lon),radius=Number(req.query.radius||75);const targetCity=String(req.query.targetCity||req.query.city||"").trim();const place={city:targetCity,locality:String(req.query.locality||"").trim(),municipality:String(req.query.municipality||"").trim(),county:String(req.query.county||"").trim(),state:String(req.query.state||"").trim(),country:String(req.query.country||"").trim(),manualTarget:Boolean(targetCity),targetLat:Number(req.query.targetLat),targetLon:Number(req.query.targetLon),resolvedCityVerified:String(req.query.resolvedCityVerified||"")==='1'};try{if(targetCity){const g=await geocodeQuery(targetCity);if(!g)throw new Error(`Ville introuvable : ${targetCity}`);lat=g.lat;lon=g.lon;place.city=g.city||targetCity;place.lat=g.lat;place.lon=g.lon;place.country=g.country||"France"}else if(!Number.isFinite(lat)||!Number.isFinite(lon))return res.status(400).json({error:"lat/lon requis"});res.json(await discoverNearbyFestivals(lat,lon,Math.min(Math.max(radius,5),100),place.city||place.country?place:null))}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/geo/cities",requireAuth,async(req,res)=>{try{res.json({coords:await locateCities(req.body?.cities)})}catch(e){res.status(502).json({error:"Villes introuvables"})}});

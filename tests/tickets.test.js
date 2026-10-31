@@ -47,3 +47,10 @@ test("Ticketmaster nearby: only metal styles are kept from the music events",asy
   assert.deepEqual(ticketmasterRows(data,{metalOnly:true}).map(r=>r.title),["Electric Callboy","Sabaton","Rise Against"]);
   assert.equal(ticketmasterRows(data).length,4);assert.equal(isMetalEvent({}),false);
 });
+test("activity summary: upcoming dates, France first date, past dates ignored",async()=>{
+  const {activitySummary}=await import("../src/providers/tickets.js");
+  const now=Date.parse("2026-11-01T12:00:00Z");
+  const s=activitySummary([{datetime:"2026-12-05T20:00:00",venue:{city:"Lyon",country:"France"}},{datetime:"2026-11-20T20:00:00",venue:{city:"Berlin",country:"Germany"}},{datetime:"2026-10-01T20:00:00",venue:{city:"Paris",country:"France"}}],now);
+  assert.equal(s.total,2);assert.equal(s.france,1);assert.equal(s.next.city,"Berlin");assert.equal(s.nextFrance.city,"Lyon");
+  assert.deepEqual(activitySummary({errorMessage:"x"},now),{total:0,france:0,next:null,nextFrance:null});
+});

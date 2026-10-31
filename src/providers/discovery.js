@@ -92,7 +92,7 @@ function syncNearbyEventsToFollowedArtists(items){
   }
   return linked;
 }
-function cleanArtist(a){return {id:a.id,name:a.name,sortname:a.sortname||a.name,score:a.score||0,disambiguation:a.disambiguation||'',style:inferStyle((a.tags||[]).map(t=>String(t.name||'').toLowerCase())),mbid:a.id,source:'MusicBrainz'}}
+function cleanArtist(a){const ls=a['life-span']||{};return {id:a.id,name:a.name,sortname:a.sortname||a.name,score:a.score||0,disambiguation:a.disambiguation||'',style:inferStyle((a.tags||[]).map(t=>String(t.name||'').toLowerCase())),mbid:a.id,source:'MusicBrainz',ended:ls.ended===true,endYear:String(ls.end||'').slice(0,4),beginYear:String(ls.begin||'').slice(0,4)}}
 function inferStyle(tags){const t=tags.join(' ');const rules=[['Deathcore',/deathcore/],['Metalcore',/metalcore/],['Post-Hardcore',/post-hardcore/],['Hardcore',/hardcore/],['Nu Metal',/nu metal|nu-metal/],['Death Metal',/death metal/],['Black Metal',/black metal/],['Thrash Metal',/thrash metal/],['Progressif',/progressive metal|progressive rock/],['Alternative',/alternative metal/],['Metal',/metal/],['Grunge',/grunge/],['Punk',/punk/],['Alternative',/alternative rock/],['Rock',/rock/]];return rules.find(([,re])=>re.test(t))?.[0]||null}
 
 export async function reverseCity(lat,lon){
