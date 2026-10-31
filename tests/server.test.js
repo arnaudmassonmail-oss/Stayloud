@@ -80,3 +80,4 @@ test("concert cities are located for the distance (login needed)",async()=>{
   const c=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
   const g=await post("/api/geo/cities",{cities:["Paris","x".repeat(60)]},c);assert.equal(g.status,200);const {coords}=await g.json();
   assert.ok(Array.isArray(coords.Paris)&&Math.abs(coords.Paris[0]-48.85)<0.2,"Paris is known");assert.equal(Object.keys(coords).length,1,"nonsense city left out")});
+test("band activity needs login",async()=>{assert.equal((await fetch(B+"/api/discover/activity?names=%5B%5D")).status,401)});

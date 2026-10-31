@@ -115,3 +115,24 @@ export async function ticketmasterNearby(lat,lon,radiusKm=50,{city=""}={}){
   });
   return {rows:out.rows,configured:true,tried:out.tried};
 }
+
+// "Découvrir": is the band still touring? Upcoming Bandsintown dates
+// (all countries, and how many in France), cached 12 h per band.
+const FRANCE=/^(fr|france)$/i;
+export function activitySummary(events,now=Date.now()){
+  const today=new Date(now).toISOString().slice(0,10);
+  const list=(Array.isArray(events)?events:[]).map(ev=>({date:String(ev?.datetime||'').slice(0,10),city:String(ev?.venue?.city||''),country:String(ev?.venue?.country||'')}))
+    .filter(e=>/^\d{4}-\d{2}-\d{2}$/.test(e.date)&&e.date>=today).sort((a,b)=>a.date.localeCompare(b.date));
+  const fr=list.filter(e=>FRANCE.test(e.country.trim()));
+  return {total:list.length,france:fr.length,next:list[0]||null,nextFrance:fr[0]||null};
+}
+export async function bandActivity(band){
+  band=String(band||'').trim().slice(0,120);
+  if(!band||!BANDSINTOWN_APP_ID)return null;
+  return cachedJson(`act:bit:${norm(band)}`,12*HOUR,async()=>{
+    let data;
+    try{data=await fetchJson(`https://rest.bandsintown.com/artists/${encodeURIComponent(band)}/events?app_id=${encodeURIComponent(BANDSINTOWN_APP_ID)}&date=upcoming`,{headers:{Accept:"application/json"}},10000)}
+    catch(e){if(/HTTP 404/.test(String(e?.message)))return activitySummary([]);throw e}
+    return activitySummary(Array.isArray(data)?data:[]);
+  });
+}
