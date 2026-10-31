@@ -1276,6 +1276,9 @@ export async function discoverNearbyConcerts(lat,lon,radiusKm=50,placeOverride=n
   return {place,radiusKm,items,sources};
 }
 
+// A city that cannot be a city (bands glued to it, a date…) means a page
+// layout changed: such concerts cannot be placed on the map.
+export function badCity(c){const v=String(c||'').trim();return !v||v.length>40||/\d{4}|\s(metal|hardcore|punk|core)\b/i.test(v)}
 // Administration › État des sources › « Tester maintenant »: reads one page
 // of each source right now, through the relay (r.jina.ai) and directly, and
 // tells what came back (HTTP status, size, page title, concerts read). It
@@ -1298,9 +1301,9 @@ export async function testSources(){
     const t0=Date.now(),ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),via==='relais'&&rr.timeout?rr.timeout:20000);
     try{
       const r=await fetch(target,{headers,signal:ctl.signal});const text=await r.text();
-      let rows=0;try{rows=r.ok?c.parse(text,c.url).length:0}catch{}
+      let rows=0,badCities=0,badSample='';try{const list=r.ok?c.parse(text,c.url):[];rows=list.length;const bad=list.filter(x=>badCity(x.city));badCities=bad.length;badSample=bad[0]?.city||''}catch{}
       const title=(String(text).match(/<title[^>]*>([^<]{0,120})/i)?.[1]||String(text).match(/^Title:\s*(.{0,120})$/m)?.[1]||stripHtml(String(text)).replace(/\s+/g,' ').trim().slice(0,120)).trim();
-      return {via,status:r.status,ms:Date.now()-t0,size:text.length,rows,title};
+      return {via,status:r.status,ms:Date.now()-t0,size:text.length,rows,badCities,badSample,title};
     }catch(e){return {via,status:0,ms:Date.now()-t0,size:0,rows:0,title:fetchErrorLabel(e)}}
     finally{clearTimeout(timer)}
   };

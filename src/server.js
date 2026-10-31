@@ -15,6 +15,7 @@ import {findTickets,ticketmasterConfigured} from "./providers/tickets.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
+import {runDailyCheck,lastDailyCheck,setMonitorSink} from "./monitor.js";
 import {setAlertSink,sourcesHealth} from "./health.js";
 import {recentAlbums,pickNew} from "./alerts.js";
 import {vevent,calendar,validConcert} from "./ics.js";
@@ -229,7 +230,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.31.6",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.32.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -462,9 +463,13 @@ app.get("/api/support/mine",requireAuth,async(req,res)=>{try{const rows=await d1
 // Concert sources health (Mon compte › Administration › État des sources) and
 // alerts sent to the administrator's "Messages reçus".
 app.get("/api/admin/sources/find",requireAuth,requireAdmin,(req,res)=>res.json(findInSources(String(req.query.q||"").slice(0,80))));
+// Daily check of the sources and services (e-mail + message when something is wrong).
+app.get("/api/admin/monitor",requireAuth,requireAdmin,async(req,res)=>{try{res.json({last:await lastDailyCheck()})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/admin/monitor/run",requireAuth,requireAdmin,async(req,res)=>{try{res.json({last:await runDailyCheck({force:true})})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources/test",requireAuth,requireAdmin,async(req,res)=>{try{res.json({results:await testSources()})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources",requireAuth,requireAdmin,async(req,res)=>{try{res.json({sources:await sourcesHealth()})}catch(e){res.status(502).json({error:e.message})}});
-setAlertSink(async(subject,message)=>{if(!d1Enabled)return;const names=String(process.env.ADMIN_USERS||"").split(",").map(x=>x.trim()).filter(Boolean);let id=0;if(names.length){const u=await d1FindUserByUsername(names[0]).catch(()=>null);id=Number(u?.id)||0}if(!id)id=await d1FirstUserId();if(id)await d1AddSupportMessage(id,subject,message)});
+const adminMessage=async(subject,message)=>{if(!d1Enabled)return;const names=String(process.env.ADMIN_USERS||"").split(",").map(x=>x.trim()).filter(Boolean);let id=0;if(names.length){const u=await d1FindUserByUsername(names[0]).catch(()=>null);id=Number(u?.id)||0}if(!id)id=await d1FirstUserId();if(id)await d1AddSupportMessage(id,subject,message)};
+setAlertSink(adminMessage);setMonitorSink(adminMessage);
 app.get("/api/support/admin",requireAuth,requireAdmin,async(req,res)=>{try{res.json({items:await d1AllSupportMessages()})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/support/:id/read",requireAuth,requireAdmin,async(req,res)=>{try{await d1MarkSupportRead(req.params.id);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/support/:id/reply",requireAuth,requireAdmin,async(req,res)=>{try{const reply=String(req.body?.reply||"").trim();if(!reply)return res.status(400).json({error:"Réponse vide"});await d1ReplySupport(req.params.id,reply);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
@@ -599,3 +604,4 @@ try{
 }catch(e){console.error("D1 bootstrap error:",e?.message||e)}
 app.listen(port,()=>{console.log(`Music Radar V2: http://localhost:${port}`);setTimeout(()=>refreshAll().catch(e=>console.error(e)),500)});
 cron.schedule(process.env.REFRESH_CRON||"7 */2 * * *",()=>refreshAll().catch(e=>console.error(e)));
+cron.schedule(process.env.MONITOR_CRON||"17 7 * * *",()=>runDailyCheck().catch(e=>console.error("Daily check:",e?.message||e)),{timezone:"Europe/Paris"});
