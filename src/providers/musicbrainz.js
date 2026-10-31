@@ -15,7 +15,7 @@ function mbTtl(url){const u=String(url);if(/\/(release-group|event)\?artist=/.te
 export function artistReleaseGroups(mbid){return mb(`${BASE}/release-group?artist=${encodeURIComponent(mbid)}&fmt=json&limit=100`).then(d=>d['release-groups']||[])}
 export function mb(url,opts={}){return cachedJson('mb:'+url,mbTtl(url),()=>mbLive(url,opts))}
 async function mbLive(url,{tries=4,timeout=20000}={}){
- let err;for(let i=0;i<tries;i++){await mbSlot();try{return await fetchJson(url,{headers:{Accept:"application/json","User-Agent":"STAYLOUD-Music-Radar/3.0 (stayloud-radar.online)"}},timeout)}catch(e){err=e;if(i<tries-1)await sleep(1500*2**i)}}throw err;
+ let err;for(let i=0;i<tries;i++){await mbSlot();try{return await fetchJson(url,{headers:{Accept:"application/json","User-Agent":"STAYPIT-Music-Radar/3.0 (staypit.com)"}},timeout)}catch(e){err=e;if(i<tries-1)await sleep(1500*2**i)}}throw err;
 }
 const ARTIST_ALIASES={
   "landmarks":"LANDMVRKS",
@@ -58,7 +58,7 @@ async function bandsintownIdentity(name){
  const n=String(name||'').trim();
  if(!app||!n)return null;
  try{
-  const r=await fetch(`https://rest.bandsintown.com/artists/${encodeURIComponent(n)}?app_id=${encodeURIComponent(app)}`,{headers:{Accept:'application/json','User-Agent':'STAYLOUD/5.32'}});
+  const r=await fetch(`https://rest.bandsintown.com/artists/${encodeURIComponent(n)}?app_id=${encodeURIComponent(app)}`,{headers:{Accept:'application/json','User-Agent':'STAYPIT/5.32'}});
   if(!r.ok)return null;
   const d=await r.json();
   if(!d?.id||!d?.name)return null;
@@ -81,7 +81,7 @@ async function metalArchivesCandidates(input,limit=10){
  const out=[];const seen=new Set();
  for(const u of urls){
   try{
-   const html=await fetchText(u,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.0 (metal band search)'}},20000);
+   const html=await fetchText(u,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.0 (metal band search)'}},20000);
    for(const row of String(html||'').matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)){
     const block=row[1];
     const m=block.match(/href=["'](https?:\/\/www\.metal-archives\.com)?(\/bands\/[^"'#?]+)["'][^>]*>([\s\S]*?)<\/a>/i);
@@ -107,14 +107,14 @@ async function metalArchivesSearchEngineCandidates(input,limit=10){
  const out=[];const seen=new Set();
  for(const query of queries){
   try{
-   const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(query)}`,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.1'}},20000);
+   const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(query)}`,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.1'}},20000);
    for(const m of String(html||'').matchAll(/<li[^>]*class=["'][^"']*b_algo[^"']*["'][\s\S]*?<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){
     const href=m[1].replace(/&amp;/g,'&');
     if(!/^https?:\/\/www\.metal-archives\.com\/bands\//i.test(href)||seen.has(href))continue;
     const title=stripHtmlText(m[2]);
     if(normArtistName(title).indexOf(normArtistName(q))<0)continue;
     seen.add(href);
-    let detail='';try{detail=await fetchText(href,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.1'}},15000)}catch{}
+    let detail='';try{detail=await fetchText(href,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.1'}},15000)}catch{}
     const pick=(label)=>{const re=new RegExp(label+'\\s*:?\\s*<[^>]*>\\s*([^<]+)','i');return stripHtmlText(detail.match(re)?.[1]||'')};
     const text=stripHtmlText(detail);
     const country=(text.match(/Country of origin:\s*([^\n]+?)(?:\s+Location:|$)/i)||[])[1]?.trim()||'';
@@ -140,7 +140,7 @@ async function spiritOfMetalCandidates(input,limit=10){
  const out=[];const seen=new Set();
  for(const query of queries){
   try{
-   const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(query)}`,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.0'}},20000);
+   const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(query)}`,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.0'}},20000);
    for(const m of String(html||'').matchAll(/<li[^>]*class=["'][^"']*b_algo[^"']*["'][\s\S]*?<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/gi)){
     let href=m[1].replace(/&amp;/g,'&'); if(!/^https?:\/\/www\.spirit-of-metal\.com\//i.test(href))continue;
     if(seen.has(href))continue;
@@ -412,7 +412,7 @@ async function imageSearchBrave(query,limit=40){
  if(!key)return [];
  try{
   const u=`https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=${Math.max(1,Math.min(Number(limit)||40,200))}&country=ALL&search_lang=en&safesearch=strict`;
-  const r=await fetch(u,{headers:{Accept:'application/json','X-Subscription-Token':key,'User-Agent':'STAYLOUD/7.0'} });
+  const r=await fetch(u,{headers:{Accept:'application/json','X-Subscription-Token':key,'User-Agent':'STAYPIT/7.0'} });
   if(!r.ok)return [];
   const d=await r.json(); const out=[];
   for(const x of Array.isArray(d?.results)?d.results:[]){
@@ -559,7 +559,7 @@ async function bandsintownPhotoCandidates(artistName,explicitUrl=''){
  }
  const addPage=async(url,defaultDate='')=>{
    if(!url||seenPages.has(url))return; seenPages.add(url);
-   try{const html=await fetchText(url,{headers:{Accept:'text/html','Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'STAYLOUD/6.5'},},15000);if(!html)return;
+   try{const html=await fetchText(url,{headers:{Accept:'text/html','Accept-Language':'fr-FR,fr;q=0.9,en;q=0.8','User-Agent':'STAYPIT/6.5'},},15000);if(!html)return;
      const found=extractBandsintownImages(html,url,artist.name,defaultDate);
      for(const x of found){const u=cleanImageUrl(x.url);if(u&&!seenImages.has(u)){seenImages.add(u);out.push(x)}}
      for(const m of html.matchAll(/https?:\/\/www\.bandsintown\.com\/e\/\d+[^\s"'<>]*/gi)){if(out.length>120)break;const u=m[0].replace(/[),.;]+$/g,''); if(!seenPages.has(u)){let d=bandsintownDateFromText(u); await addPage(u,d)}}
@@ -578,7 +578,7 @@ async function bandsintownPhotoCandidates(artistName,explicitUrl=''){
  ];
  for(const q of webQueries){
    try{
-     const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(q)}`,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.5'},},15000);
+     const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(q)}`,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.5'},},15000);
      for(const m of String(html||'').matchAll(/https?:\/\/(?:www\.)?bandsintown\.com\/(?:fr\/)?e\/\d+[^\s"'<>]*/gi)){
        if(seenPages.size>=30)break;
        const u=m[0].replace(/[),.;]+$/g,'');
@@ -616,7 +616,7 @@ async function bandsintownPhotoCandidates(artistName,explicitUrl=''){
 async function sourcePageDate(url){
  const u=String(url||'').trim(); if(!/^https?:\/\//i.test(u))return '';
  try{
-  const html=await fetchText(u,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.0'}},10000);
+  const html=await fetchText(u,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.0'}},10000);
   const patterns=[
    /(?:datePublished|dateCreated|uploadDate)["'\s:]+["'](\d{4}-\d{2}-\d{2})/i,
    /(?:article:published_time|og:published_time)["'\s]+content=["']([^"']+)["']/i,
@@ -642,7 +642,7 @@ async function specializedMetalPageImages(wanted, context=''){
  const queries=domains.map(d=>`site:${d} "${q.replace(/"/g,'')}"`);
  for(const query of queries){
   try{
-   const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(query)}`,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.2 (metal photo search)'}},15000);
+   const html=await fetchText(`https://www.bing.com/search?q=${encodeURIComponent(query)}`,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.2 (metal photo search)'}},15000);
    for(const m of String(html||'').matchAll(/<li[^>]*class=["'][^"']*b_algo[^"']*["'][\s\S]*?<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?(?:<p[^>]*>([\s\S]*?)<\/p>)?/gi)){
     const href=String(m[1]||'').replace(/&amp;/g,'&');
     if(!/^https?:\/\//i.test(href)||seen.has(href))continue;
@@ -652,7 +652,7 @@ async function specializedMetalPageImages(wanted, context=''){
     const hay=normArtistName(`${title} ${desc} ${href}`), wn=normArtistName(q);
     if(!hay.includes(wn))continue;
     seen.add(href);
-    let page=''; try{page=await fetchText(href,{headers:{Accept:'text/html','User-Agent':'STAYLOUD/6.2'}},12000)}catch{}
+    let page=''; try{page=await fetchText(href,{headers:{Accept:'text/html','User-Agent':'STAYPIT/6.2'}},12000)}catch{}
     if(!page)continue;
     const imgs=[];
     const add=(u,kind='page')=>{u=cleanImageUrl(u);if(u&&!imgs.includes(u))imgs.push(u)};
@@ -696,7 +696,7 @@ async function reliableBandPhotos(name,mbid=''){
  const wanted=String(name||'').trim();if(!wanted)return [];
  const key=`${normArtistName(wanted)}|${mbid}`;const hit=reliablePhotoCache.get(key);if(hit&&Date.now()-hit.at<6*3600e3)return hit.rows;
  const same=n=>normArtistName(n)===normArtistName(wanted);
- const J=u=>fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYLOUD/7.18'}},8000);
+ const J=u=>fetchJson(u,{headers:{Accept:'application/json','User-Agent':'STAYPIT/7.18'}},8000);
  const [bit,dz,adb,wiki]=await Promise.all([
   Promise.race([bandsintownIdentity(wanted),sleep(6000).then(()=>null)]).catch(()=>null),
   J(`https://api.deezer.com/search/artist?q=${encodeURIComponent(wanted)}&limit=10`).catch(()=>null),

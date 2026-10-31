@@ -6,7 +6,7 @@
 import {cachedJson} from "../apicache.js";
 
 const SERVERS=["de1","de2","nl1","fi1","at1"].map(s=>`https://${s}.api.radio-browser.info`);
-const UA="STAYLOUD-Radar-Metal/1.0 (stayloud-radar.online)";
+const UA="STAYPIT-Radar-Metal/1.0 (staypit.com)";
 // App styles -> Radio Browser tags (exact tag match).
 export const RADIO_STYLES={
   "Metal":["metal","heavy metal"],

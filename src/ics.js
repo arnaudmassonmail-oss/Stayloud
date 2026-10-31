@@ -20,13 +20,13 @@ export function vevent(c,{uid,status}={}){
   else lines.push(`DTSTART;VALUE=DATE:${ymd}`,`DTEND;VALUE=DATE:${dayAfter(day)}`);
   lines.push(`SUMMARY:${esc((status==="interested"?"☆ ":"")+title)}`);
   if(place)lines.push(`LOCATION:${esc(place)}`);
-  const desc=[c.artist&&c.artist!==title?`Groupe : ${c.artist}`:"",status==="going"?"Tu y vas (STAYLOUD)":status==="interested"?"Intéressé (STAYLOUD)":"",c.url?`Infos / billets : ${c.url}`:"","Ajouté depuis STAYLOUD Radar Metal"].filter(Boolean).join("\n");
+  const desc=[c.artist&&c.artist!==title?`Groupe : ${c.artist}`:"",status==="going"?"Tu y vas (STAYPIT)":status==="interested"?"Intéressé (STAYPIT)":"",c.url?`Infos / billets : ${c.url}`:"","Ajouté depuis STAYPIT Radar Metal"].filter(Boolean).join("\n");
   lines.push(`DESCRIPTION:${esc(desc)}`);
   if(/^https?:\/\//i.test(String(c.url||"")))lines.push(`URL:${String(c.url).replace(/[\r\n]/g,"")}`);
   lines.push("END:VEVENT");return lines;
 }
-export function calendar(events,{name="STAYLOUD"}={}){
-  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//STAYLOUD//Radar Metal//FR","CALSCALE:GREGORIAN","METHOD:PUBLISH",`X-WR-CALNAME:${esc(name)}`,"X-WR-TIMEZONE:Europe/Paris","REFRESH-INTERVAL;VALUE=DURATION:PT6H","X-PUBLISHED-TTL:PT6H"];
+export function calendar(events,{name="STAYPIT"}={}){
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//STAYPIT//Radar Metal//FR","CALSCALE:GREGORIAN","METHOD:PUBLISH",`X-WR-CALNAME:${esc(name)}`,"X-WR-TIMEZONE:Europe/Paris","REFRESH-INTERVAL;VALUE=DURATION:PT6H","X-PUBLISHED-TTL:PT6H"];
   for(const e of events)lines.push(...e);
   lines.push("END:VCALENDAR");return lines.map(fold).join("\r\n")+"\r\n";
 }
@@ -34,6 +34,6 @@ export function calendar(events,{name="STAYLOUD"}={}){
 export function googleCalendarUrl(c){
   const day=String(c.date).slice(0,10).replace(/-/g,"");const time=/^\d{2}:\d{2}/.test(String(c.time||""))?String(c.time).slice(0,5).replace(":",""):"";
   let dates;if(time){const h=Number(time.slice(0,2)),end=h+3;dates=`${day}T${time}00/${end>=24?dayAfter(String(c.date).slice(0,10)):day}T${pad(end%24)}${time.slice(2)}00`}else dates=`${day}/${dayAfter(String(c.date).slice(0,10))}`;
-  const p=new URLSearchParams({action:"TEMPLATE",text:String(c.title||c.artist||"Concert"),dates,ctz:"Europe/Paris",location:[c.venue,c.city].filter(Boolean).join(", "),details:[c.url?`Infos / billets : ${c.url}`:"","Ajouté depuis STAYLOUD"].filter(Boolean).join("\n")});
+  const p=new URLSearchParams({action:"TEMPLATE",text:String(c.title||c.artist||"Concert"),dates,ctz:"Europe/Paris",location:[c.venue,c.city].filter(Boolean).join(", "),details:[c.url?`Infos / billets : ${c.url}`:"","Ajouté depuis STAYPIT"].filter(Boolean).join("\n")});
   return "https://calendar.google.com/calendar/render?"+p.toString();
 }

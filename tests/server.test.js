@@ -48,7 +48,7 @@ test("calendar: one concert as .ics, agenda feed by secret link",async()=>{
   const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
   const put=await fetch(B+"/api/agenda",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({key:"2099-11-02|zenith",status:"going",data:{title:"Gojira + Mastodon",artist:"Gojira",date:"2099-11-02",venue:"Zénith",city:"Nantes"}})});assert.equal(put.status,200);
   const f=await (await fetch(B+"/api/calendar/feed",{headers:{cookie:a}})).json();assert.match(f.webcal,/^webcal:\/\/.+\/cal\/[A-Za-z0-9_-]+\.ics$/);
-  const feed=await fetch(f.url);assert.equal(feed.status,200);const body=await feed.text();assert.match(body,/SUMMARY:Gojira \+ Mastodon/);assert.match(body,/X-WR-CALNAME:STAYLOUD/);
+  const feed=await fetch(f.url);assert.equal(feed.status,200);const body=await feed.text();assert.match(body,/SUMMARY:Gojira \+ Mastodon/);assert.match(body,/X-WR-CALNAME:STAYPIT/);
   const renewed=await (await fetch(B+"/api/calendar/feed/renew",{method:"POST",headers:{cookie:a}})).json();assert.notEqual(renewed.url,f.url);
   assert.equal((await fetch(f.url)).status,404,"old link stops working");assert.equal((await fetch(renewed.url)).status,200);
   assert.equal((await fetch(B+"/api/calendar/feed")).status,401)});
