@@ -81,3 +81,7 @@ test("concert cities are located for the distance (login needed)",async()=>{
   const g=await post("/api/geo/cities",{cities:["Paris","x".repeat(60)]},c);assert.equal(g.status,200);const {coords}=await g.json();
   assert.ok(Array.isArray(coords.Paris)&&Math.abs(coords.Paris[0]-48.85)<0.2,"Paris is known");assert.equal(Object.keys(coords).length,1,"nonsense city left out")});
 test("band activity needs login",async()=>{assert.equal((await fetch(B+"/api/discover/activity?names=%5B%5D")).status,401)});
+test("shared clip page is public and rejects bad ids",async()=>{
+  const bad=await fetch(B+"/clip/not-an-id!",{redirect:"manual"});assert.equal(bad.status,302);
+  const ok=await fetch(B+"/clip/dQw4w9WgXcQ");assert.equal(ok.status,200);const h=await ok.text();
+  assert.match(h,/og:image/);assert.match(h,/Découvrir STAYPIT/)});
