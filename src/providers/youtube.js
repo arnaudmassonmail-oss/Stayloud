@@ -20,6 +20,8 @@ export function pickVideos(data,band){
     .filter(v=>!/\b(reaction|react|reacts|cover|guitar lesson|drum cover|tutorial|karaoke|lyrics video fan)\b/i.test(v.title))
     .slice(0,12);
 }
+// Newest first (order of release on YouTube); same date keeps the search order.
+export function byRelease(items){return (items||[]).map((v,i)=>({v,i})).sort((a,b)=>String(b.v.published||'').localeCompare(String(a.v.published||''))||a.i-b.i).map(x=>x.v)}
 
 // Lists prepared in the background (Clips page) may use only part of the
 // day's quota, so that bands opened by hand always get their videos.
@@ -31,12 +33,12 @@ export async function bandVideos({band,kind="clips",prefetch=false}){
   band=String(band||"").trim().slice(0,120);if(!VIDEO_KINDS[kind])kind="clips";
   const key=String(process.env.YOUTUBE_API_KEY||"").trim();
   if(!band||!key)return [];
-  return cachedJson(`yt:${kind}:${norm(band)}`,v=>v?.length?7*DAY:DAY,async()=>{
+  return byRelease(await cachedJson(`yt:${kind}:${norm(band)}`,v=>v?.length?7*DAY:DAY,async()=>{
     if(prefetch){if(!prefetchAllowed())throw new PrefetchSkipped("quota de préchargement atteint");budget.prefetch++}
     const p=new URLSearchParams({part:"snippet",type:"video",videoEmbeddable:"true",maxResults:"25",q:`${band} ${VIDEO_KINDS[kind]}`,key});
     const data=await fetchJson(`https://www.googleapis.com/youtube/v3/search?${p}`,{headers:{Accept:"application/json"}},10000);
     return pickVideos(data,band);
-  });
+  }));
 }
 
 // "Derniers clips de tes groupes": every followed band's clips, newest first.

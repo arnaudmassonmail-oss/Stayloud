@@ -29,3 +29,8 @@ test("YouTube feed: every band's clips mixed, newest first, no duplicates",async
   assert.deepEqual(f.map(x=>x.id),["b","c","a"]);assert.equal(f[0].artist,"Gojira");assert.equal(f[1].artistId,2);
   assert.equal(mergeFeed([{artist:{id:1,name:"G"},items:[v("a","2020"),v("b","2021")]}],1).length,1);
 });
+test("band clips: newest first, same date keeps search order",async()=>{
+  const {byRelease}=await import("../src/providers/youtube.js");
+  const r=byRelease([{id:"a",published:"2019-05-01"},{id:"b",published:"2024-02-10"},{id:"c",published:""},{id:"d",published:"2024-02-10"}]);
+  assert.deepEqual(r.map(v=>v.id),["b","d","a","c"]);
+});
