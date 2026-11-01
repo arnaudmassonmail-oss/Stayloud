@@ -14,6 +14,7 @@ import {cachedJson} from "./apicache.js";
 import {findTickets,ticketmasterConfigured,bandActivity} from "./providers/tickets.js";
 import {CLIP_ID,clipMeta,clipPageHTML} from "./clippage.js";
 import {MBID,bandPageHTML} from "./bandpage.js";
+import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding} from "./onboarding.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
@@ -232,7 +233,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.39.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.40.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -410,6 +411,9 @@ app.get("/api/music/preview",async(req,res)=>{
  }catch(e){res.status(502).json({error:e?.name==="AbortError"?"Deezer trop lent":e.message||"Erreur Deezer"})}
 });
 app.get("/api/discover/profile",async(req,res)=>{try{const name=String(req.query.name||"").trim();const mbid=String(req.query.mbid||"").trim();if(!name&&!mbid)return res.status(400).json({error:"name ou mbid requis"});const p=await fetchArtistProfile({id:mbid||`discover-${name}`,name,mbid:mbid||null});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/onboarding/styles",requireAuth,(req,res)=>res.json({styles:Object.keys(ONBOARD_STYLES)}));
+app.get("/api/onboarding/resolve",requireAuth,async(req,res)=>{try{const name=String(req.query.name||"").trim().slice(0,120),from=String(req.query.from||"");if(!name)return res.status(400).json({error:"name requis"});res.json({artist:await resolveForOnboarding(name,from)})}catch(e){res.json({artist:null})}});
+app.get("/api/onboarding/suggestions",requireAuth,async(req,res)=>{try{let styles=[];try{styles=JSON.parse(String(req.query.styles||"[]"))}catch{}res.json(await onboardingSuggestions(styles))}catch(e){res.status(502).json({error:"Suggestions indisponibles"})}});
 app.post("/api/artists",requireAuth,async(req,res)=>{
  const name=String(req.body?.name||"").trim(),mbid=String(req.body?.mbid||"").trim(),photoUrl=String(req.body?.photoUrl||"").trim(),identitySource=String(req.body?.identitySource||"").trim(),identityKey=String(req.body?.identityKey||"").trim(),disambiguation=String(req.body?.disambiguation||"").trim(),country=String(req.body?.country||"").trim(),style=String(req.body?.style||"").trim(),identityLocked=Boolean(req.body?.identityLocked);if(!name&&!mbid)return res.status(400).json({error:"name ou mbid requis"});
  try{
