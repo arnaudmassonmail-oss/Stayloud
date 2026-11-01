@@ -156,6 +156,11 @@
 .sl-vid-share{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.sl-share-btn{display:inline-flex;align-items:center;gap:8px;background:#d4141e;color:#fff;border:0;border-radius:12px;padding:10px 16px;font:700 14px Inter,Arial,sans-serif;cursor:pointer}.sl-share-btn svg{width:18px;height:18px}
 .sl-share-ext{width:100%;justify-content:center;margin-top:4px}
 .auth-follow{margin:0 0 12px;padding:10px 12px;border:1px solid #6b1016;border-radius:12px;background:rgba(212,20,30,.12);color:#f2d4d6;font-size:14px}.auth-follow b{color:#fff}
+.onb .onb-intro{margin:2px 2px 14px;color:#c9d0d6;font-size:14px}.onb .onb-intro b{color:#fff}
+.onb-styles{display:flex;flex-wrap:wrap;gap:8px}.onb-styles .sl-chip{padding:9px 14px;font-size:14px}.onb-styles .sl-chip.on{background:#d4141e;border-color:#d4141e;color:#fff}
+.onb-count{margin:12px 2px 4px;color:#9aa4ae;font-size:13px}.onb-skip{display:block;width:100%;margin-top:8px;background:none;border:0;color:#9aa4ae;font:14px Inter,Arial,sans-serif;padding:10px;cursor:pointer;text-decoration:underline}
+.onb-wait{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 10px;text-align:center}.onb-wait small{color:#9aa4ae}
+.onb-bar{width:80%;height:6px;border-radius:3px;background:#1b2128;overflow:hidden}.onb-bar i{display:block;height:100%;background:#d4141e}
 .sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 </style><style id="sl-albums-v2">
 /* Albums & extract player (v7.18.12) */
@@ -1780,6 +1785,40 @@ async function accountSettings(){
  if(email===null)return;
  try{const d=await api('/api/auth/email',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});authUser=d.user;status('E-mail de récupération enregistré');alert('Adresse e-mail enregistrée. Tu pourras récupérer ton mot de passe avec « Mot de passe oublié ? ».');}catch(e){alert(e.message||'Impossible d’enregistrer l’adresse e-mail.')}
 }
+// ---- Bienvenue : 3 styles max, puis une dizaine de groupes cochés (v7.40) ----
+// So that a new account does not start empty. Shown once per account and
+// device, only while the account has (almost) no band.
+const ONB_STYLES=['Groupes français','Metalcore','Deathcore','Hardcore','Nu Metal','Death Metal','Black Metal','Thrash Metal','Alternative','Post-Hardcore','Progressif','Punk','Grunge','Rock'];
+const onbKey=()=>'stayloud.onboard.'+(authUser?.id||'anon');
+function onbSeen(){try{return localStorage.getItem(onbKey())==='1'}catch{return false}}
+function onbDone(){try{localStorage.setItem(onbKey(),'1')}catch{}}
+function maybeOnboard(){if(onbSeen()||A.length>1||$('onbSheet')){maybeShowTour();return}openOnboarding()}
+function closeOnboarding(){$('onbSheet')?.remove();document.body.classList.remove('sl-sheet-open');onbDone();maybeShowTour()}
+function openOnboarding(){
+ const m=document.createElement('div');m.id='onbSheet';m.className='sl-sheet-backdrop';const picked=[];
+ m.innerHTML=`<div class="sl-sheet onb" role="dialog" aria-modal="true" aria-label="Bienvenue"><div class="sl-sheet-grip"></div><div class="sl-sheet-head"><span class="sl-sheet-title">Bienvenue 🤘</span><button type="button" class="sl-sheet-close" aria-label="Fermer">✕</button></div><div class="sl-sheet-list" id="onbBody"></div></div>`;
+ document.body.appendChild(m);document.body.classList.add('sl-sheet-open');
+ m.querySelector('.sl-sheet-close').onclick=closeOnboarding;
+ const body=$('onbBody');
+ const step1=()=>{body.innerHTML=`<p class="onb-intro">Choisis <b>jusqu’à 3 styles</b> : on t’ajoute une dizaine de groupes pour démarrer, en priorité ceux qui ont des <b>concerts prévus</b>. Tu pourras en ajouter ou en retirer quand tu veux.</p><div class="onb-styles">${ONB_STYLES.map(st=>`<button type="button" class="sl-chip onb-st${picked.includes(st)?' on':''}" data-s="${esc(st)}">${esc(st==='Groupes français'?'🇫🇷 Groupes français':st)}</button>`).join('')}</div><div class="onb-count" id="onbCount"></div><button type="button" class="sl-news-ok" id="onbNext">Voir les groupes →</button><button type="button" class="onb-skip" id="onbSkip">Passer, j’ajouterai mes groupes moi-même</button>`;
+  const sync=()=>{body.querySelectorAll('.onb-st').forEach(b=>b.classList.toggle('on',picked.includes(b.dataset.s)));$('onbCount').textContent=picked.length?`${picked.length} / 3 : ${picked.join(', ')}`:'Aucun style choisi';$('onbNext').disabled=!picked.length};
+  body.querySelectorAll('.onb-st').forEach(b=>b.onclick=()=>{const k=picked.indexOf(b.dataset.s);if(k>=0)picked.splice(k,1);else{if(picked.length>=3){slToast('3 styles maximum : retire-en un d’abord');return}picked.push(b.dataset.s)}sync()});
+  $('onbSkip').onclick=closeOnboarding;$('onbNext').onclick=step2;sync()};
+ const step2=async()=>{body.innerHTML='<div class="onb-wait"><span class="sl-rm-spin big"></span><b>On cherche les groupes qui tournent en ce moment…</b><small>Quelques secondes</small></div>';
+  let items=[];try{items=(await api('/api/onboarding/suggestions?styles='+encodeURIComponent(JSON.stringify(picked)))).items||[]}catch(e){body.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div><button type="button" class="sl-news-ok" id="onbBack">← Revenir</button>`;$('onbBack').onclick=step1;return}
+  items=items.filter(x=>!A.some(a=>normUi(a.name)===normUi(x.name)));const on=new Set(items.map((_,i)=>i));
+  const actTxt=a=>!a||!a.total?'':a.france&&a.nextFrance?`🎤 en France le ${esc(shortDay(a.nextFrance.date))}${a.nextFrance.city?' · '+esc(a.nextFrance.city):''}`:`🎤 ${a.total} date${a.total>1?'s':''} à venir`;
+  body.innerHTML=`<p class="onb-intro">Voici <b>${items.length} groupes</b> pour démarrer. Décoche ceux que tu ne veux pas.</p><div id="onbList">${items.map((x,i)=>`<button type="button" class="sl-pick on" data-i="${i}"><span class="sl-fr-av">${esc(x.name.charAt(0).toUpperCase())}</span><span class="sl-pick-txt"><strong>${esc(x.name)}</strong><small>${esc(x.style)}${actTxt(x.activity)?' · '+actTxt(x.activity):''}</small></span><span class="sl-pick-check">✓</span></button>`).join('')}</div><button type="button" class="sl-news-ok" id="onbAdd"></button><button type="button" class="onb-skip" id="onbBack">← Changer de styles</button>`;
+  const sync=()=>{$('onbAdd').textContent=on.size?`Ajouter ces ${on.size} groupe${on.size>1?'s':''}`:'Aucun groupe coché';$('onbAdd').disabled=!on.size};
+  body.querySelectorAll('#onbList .sl-pick').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(on.has(i))on.delete(i);else on.add(i);b.classList.toggle('on',on.has(i));b.querySelector('.sl-pick-check').hidden=!on.has(i);sync()});
+  $('onbBack').onclick=step1;$('onbAdd').onclick=()=>step3(items.filter((_,i)=>on.has(i)));sync()};
+ const step3=async list=>{let ok=0;
+  for(let k=0;k<list.length;k++){const x=list[k];body.innerHTML=`<div class="onb-wait"><span class="sl-rm-spin big"></span><b>Ajout de ${esc(x.name)}…</b><small>${k+1} / ${list.length}</small><div class="onb-bar"><i style="width:${Math.round(100*k/list.length)}%"></i></div></div>`;
+   try{let id=null;try{id=(await api('/api/onboarding/resolve?name='+encodeURIComponent(x.name)+'&from='+encodeURIComponent(x.from||'')))?.artist}catch{}
+    const r=await api('/api/artists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:id?.name||x.name,mbid:id?.mbid||'',style:x.style,country:id?.country||'',disambiguation:id?.disambiguation||'',identitySource:'MusicBrainz',identityKey:id?.mbid?'mbid:'+id.mbid:'onboard|'+normUi(x.name),identityLocked:!!id?.mbid})});if(r?.artist){const e=A.findIndex(a=>Number(a.id)===Number(r.artist.id));if(e>=0)A[e]=r.artist;else A.push(r.artist);ok++}}catch{}}
+  render();closeOnboarding();slToast(ok?`${ok} groupe${ok>1?'s':''} ajouté${ok>1?'s':''} 🤘 Leurs actus et concerts arrivent dans quelques minutes.`:'Ajout impossible pour le moment : réessaie depuis Groupes.');
+  if(ok)setTimeout(()=>{try{load()}catch{}},45000)};
+ step1()}
 // "Suivre … sur STAYPIT" from a shared band page: /?follow=<mbid>&n=<name>.
 // The band is kept on this device until the person is logged in (new account
 // or existing one), then added to their bands automatically.
@@ -1799,7 +1838,7 @@ async function applyPendingFollow(){const p=pendingFollow();if(!p)return;try{loc
  const prev=currentDiscoverArtist;currentDiscoverArtist={name:p.name,mbid:p.mbid,id:p.mbid||'',source:'MusicBrainz'};
  try{await addDiscoverArtist()}finally{currentDiscoverArtist=prev}
  const f=A.find(a=>normUi(a.name)===normUi(p.name));
- if(f){slToast(`${f.name} ajouté à tes groupes 🤘`);try{openArtistProfile(f.id)}catch{}}else slToast(`Ajout de ${p.name} impossible pour le moment : cherche-le dans Groupes.`)}
+ if(f){slToast(`${f.name} ajouté à tes groupes 🤘`);try{openArtistProfile(f.id)}catch{}}else slToast(`Ajout de ${p.name} impossible pour le moment : cherche-le dans Groupes.`);if(A.length<=1)setTimeout(maybeOnboard,1200)}
 async function authBoot(){
  const params=new URLSearchParams(location.search),token=params.get('reset');
  captureFollowParam(params);
@@ -1837,7 +1876,8 @@ async function load(){
     render();
     if(!A.length){
       status('Prêt — ajoutez un groupe ou un artiste');
-      maybeShowTour();
+      // New member: styles + first bands (the shared band, if any, is added first).
+      if(!pendingFollow())maybeOnboard();
       return;
     }
     // Updated presentation (new features): shown once to existing users too.

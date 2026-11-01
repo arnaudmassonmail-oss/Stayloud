@@ -90,3 +90,4 @@ test("shared band page is public and rejects bad ids",async()=>{
   assert.equal((await fetch(B+"/groupe",{redirect:"manual"})).status,302);
   const r=await fetch(B+"/groupe?n=Gojira");assert.equal(r.status,200);const h=await r.text();assert.match(h,/og:title" content="Gojira/);assert.match(h,/Suivre Gojira sur STAYPIT/)});
 test("album previews need an artist and an album",async()=>{assert.equal((await fetch(B+"/api/public/album-tracks")).status,400)});
+test("onboarding suggestions need login",async()=>{assert.equal((await fetch(B+"/api/onboarding/suggestions?styles=%5B%5D")).status,401)});
