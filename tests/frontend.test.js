@@ -40,3 +40,5 @@ test("tour presents the current app (billets, setlists, clips feed, radio)",()=>
   for(const f of ["Agenda et billets","Tes concerts passés","setlist","Écouter : clips et radio","Actus et sorties","Ticketmaster"])assert.ok(t.includes(f),f);
   assert.ok(html.includes("'stayloud.tour5.'"));
 });
+test("shared band page: follow is remembered until login",()=>{const html=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
+  assert.ok(html.includes("captureFollowParam(params)"));assert.ok(html.includes("applyPendingFollow()"))});

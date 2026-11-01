@@ -232,7 +232,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.38.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.39.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -373,6 +373,24 @@ app.get("/api/music/album-tracks",async(req,res)=>{
   deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});
   res.json(data);
  }catch(e){res.status(502).json({error:e?.name==="AbortError"?"Deezer trop lent":e.message||"Erreur Deezer"})}
+});
+// Public band page (/groupe/…): 30 s Deezer previews of an album. Preview
+// links expire after a while, so the track list is only kept 10 minutes.
+const albumTracksCache=new Map();
+app.get("/api/public/album-tracks",async(req,res)=>{
+ try{
+  const artist=String(req.query.artist||"").trim().slice(0,120),album=String(req.query.album||"").trim().slice(0,200);
+  if(!artist||!album)return res.status(400).json({error:"artist et album requis"});
+  const key=normMusic(artist)+"|"+normMusic(album),hit=albumTracksCache.get(key);
+  if(hit&&hit.expires>Date.now())return res.json(hit.data);
+  const al=await findDeezerAlbum(artist,album,{sameArtist:true});
+  let data={ok:false,tracks:[]};
+  if(al?.id){const t=await deezerJsonLive(`https://api.deezer.com/album/${al.id}/tracks?limit=30`);
+   const tracks=(Array.isArray(t?.data)?t.data:[]).filter(x=>/^https:\/\//.test(String(x?.preview||""))).slice(0,15).map(x=>({title:String(x.title||""),preview:String(x.preview),duration:Number(x.duration)||0}));
+   data={ok:tracks.length>0,link:`https://www.deezer.com/album/${al.id}`,tracks}}
+  if(albumTracksCache.size>500)albumTracksCache.clear();
+  albumTracksCache.set(key,{expires:Date.now()+10*60*1000,data});res.set("Cache-Control","public, max-age=300");res.json(data);
+ }catch(e){res.status(502).json({error:"Extraits indisponibles"})}
 });
 app.get("/api/music/preview",async(req,res)=>{
  try{
