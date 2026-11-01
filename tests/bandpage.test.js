@@ -12,3 +12,9 @@ test("band page: preview tags, concerts, album, escaping, safe links",()=>{
   assert.match(bandPageHTML({},{base:"https://staypit.com"}),/og:image" content="https:\/\/staypit\.com\/icon-512\.png"/);
 });
 test("MusicBrainz ids only",()=>{assert.ok(MBID.test("5b11f4ce-a62d-471e-81fc-a69a8278c7da"));assert.ok(!MBID.test("../../x"))});
+test("band page: follow link and album previews section",()=>{
+  const h=bandPageHTML({name:"Gojira",mbid:"5b11f4ce-a62d-471e-81fc-a69a8278c7da",latestAlbum:{title:"Fortitude"}});
+  assert.match(h,/href="\/\?follow=5b11f4ce-a62d-471e-81fc-a69a8278c7da&amp;n=Gojira"/);
+  assert.match(h,/id="listen" data-artist="Gojira" data-album="Fortitude"/);assert.match(h,/\/api\/public\/album-tracks/);
+  assert.ok(!/id="listen"/.test(bandPageHTML({name:"X"})),"no album, no player");
+});

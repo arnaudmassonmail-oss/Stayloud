@@ -155,6 +155,7 @@
 .discover-act{margin-top:4px;font-size:13px;color:#9aa4ae}.discover-act b{color:#e8ebee}.act-on{color:#3ddc84}.act-off{color:#8b949e}.act-none{color:#8b949e}.act-wait{color:#5c6670}
 .sl-vid-share{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}.sl-share-btn{display:inline-flex;align-items:center;gap:8px;background:#d4141e;color:#fff;border:0;border-radius:12px;padding:10px 16px;font:700 14px Inter,Arial,sans-serif;cursor:pointer}.sl-share-btn svg{width:18px;height:18px}
 .sl-share-ext{width:100%;justify-content:center;margin-top:4px}
+.auth-follow{margin:0 0 12px;padding:10px 12px;border:1px solid #6b1016;border-radius:12px;background:rgba(212,20,30,.12);color:#f2d4d6;font-size:14px}.auth-follow b{color:#fff}
 .sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 </style><style id="sl-albums-v2">
 /* Albums & extract player (v7.18.12) */
@@ -1779,16 +1780,38 @@ async function accountSettings(){
  if(email===null)return;
  try{const d=await api('/api/auth/email',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});authUser=d.user;status('E-mail de récupération enregistré');alert('Adresse e-mail enregistrée. Tu pourras récupérer ton mot de passe avec « Mot de passe oublié ? ».');}catch(e){alert(e.message||'Impossible d’enregistrer l’adresse e-mail.')}
 }
+// "Suivre … sur STAYPIT" from a shared band page: /?follow=<mbid>&n=<name>.
+// The band is kept on this device until the person is logged in (new account
+// or existing one), then added to their bands automatically.
+const FOLLOW_KEY='staypit.pendingFollow';
+function pendingFollow(){try{const p=JSON.parse(localStorage.getItem(FOLLOW_KEY)||'null');return p&&p.name&&Date.now()-Number(p.at||0)<3*864e5?p:null}catch{return null}}
+function captureFollowParam(params){const n=String(params.get('n')||'').trim().slice(0,120);if(!params.has('follow')||!n)return;
+ const mbid=/^[0-9a-f-]{36}$/i.test(String(params.get('follow')||''))?params.get('follow'):'';
+ try{localStorage.setItem(FOLLOW_KEY,JSON.stringify({name:n,mbid,at:Date.now()}))}catch{}
+ try{history.replaceState(null,'',location.pathname)}catch{}}
+function showFollowInvite(){const p=pendingFollow(),box=document.querySelector('#authGate .auth-box');if(!box)return;let el=$('authFollow');
+ if(!p){if(el)el.remove();return}
+ if(!el){el=document.createElement('div');el.id='authFollow';el.className='auth-follow';box.insertBefore(el,box.firstChild)}
+ el.innerHTML=`🤘 <b>${esc(p.name)}</b> sera ajouté à tes groupes dès que tu ${authMode==='register'?'auras créé ton compte':'seras connecté'}.`}
+async function applyPendingFollow(){const p=pendingFollow();if(!p)return;try{localStorage.removeItem(FOLLOW_KEY)}catch{}
+ const already=A.find(a=>normUi(a.name)===normUi(p.name)||(p.mbid&&a.mbid===p.mbid));
+ if(already){slToast(`Tu suis déjà ${already.name} 🤘`);try{openArtistProfile(already.id)}catch{}return}
+ const prev=currentDiscoverArtist;currentDiscoverArtist={name:p.name,mbid:p.mbid,id:p.mbid||'',source:'MusicBrainz'};
+ try{await addDiscoverArtist()}finally{currentDiscoverArtist=prev}
+ const f=A.find(a=>normUi(a.name)===normUi(p.name));
+ if(f){slToast(`${f.name} ajouté à tes groupes 🤘`);try{openArtistProfile(f.id)}catch{}}else slToast(`Ajout de ${p.name} impossible pour le moment : cherche-le dans Groupes.`)}
 async function authBoot(){
  const params=new URLSearchParams(location.search),token=params.get('reset');
+ captureFollowParam(params);
  if(token){$('authGate').classList.add('hidden');$('resetGate').classList.remove('hidden');$('resetForm').onsubmit=async e=>{e.preventDefault();const a=$('resetPass').value,b=$('resetPass2').value;if(a!==b){$('resetError').textContent='Les deux mots de passe sont différents.';return}try{const r=await fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,password:a})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Lien invalide');$('resetError').textContent='Mot de passe modifié. Tu peux maintenant te connecter.';setTimeout(()=>{location.href=location.pathname},1200)}catch(e){$('resetError').textContent=e.message||'Erreur'}};return}
- try{const d=await fetch('/api/auth/me',{cache:'no-store'});if(d.ok){authUser=(await d.json()).user;hideAuthGate();await load();return}}catch{}
- showAuthGate();renderAuthMode();
+ try{const d=await fetch('/api/auth/me',{cache:'no-store'});if(d.ok){authUser=(await d.json()).user;hideAuthGate();await load();applyPendingFollow();return}}catch{}
+ if(pendingFollow())authMode='register';
+ showAuthGate();renderAuthMode();showFollowInvite();
 }
-$('authSwitch').onclick=()=>{authMode=authMode==='login'?'register':'login';hideForgotPassword();renderAuthMode();$('authPass').value='';$('authUser').focus()};
+$('authSwitch').onclick=()=>{authMode=authMode==='login'?'register':'login';hideForgotPassword();renderAuthMode();showFollowInvite();$('authPass').value='';$('authUser').focus()};
 $('authForm').addEventListener('submit',async e=>{
  e.preventDefault();const btn=$('authSubmit');btn.disabled=true;$('authError').textContent='';
- try{const body={username:$('authUser').value.trim(),password:$('authPass').value};if(authMode==='register')body.email=$('authEmail').value.trim();const r=await fetch(authMode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Connexion impossible');authUser=d.user;hideAuthGate();$('authPass').value='';await load();status('Connecté · '+authUser.username)}catch(e){$('authError').textContent=e.message||'Erreur';showAuthGate()}finally{btn.disabled=false}
+ try{const body={username:$('authUser').value.trim(),password:$('authPass').value};if(authMode==='register')body.email=$('authEmail').value.trim();const r=await fetch(authMode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Connexion impossible');authUser=d.user;hideAuthGate();$('authPass').value='';await load();status('Connecté · '+authUser.username);applyPendingFollow()}catch(e){$('authError').textContent=e.message||'Erreur';showAuthGate()}finally{btn.disabled=false}
 });
 async function logout(){ALERTS={albums:[],concerts:[],seen:{album:false,concert:false}};clearTimeout(alertTimer);setNavBadge('radar',0);setNavBadge('live',0);try{await fetch('/api/auth/logout',{method:'POST'});}catch{}authUser=null;authMode='login';renderUserBar();A=[];N=[];E=[];render();showAuthGate();renderAuthMode();$('authUser').value='';$('authPass').value='';$('authUser').focus()}
 let warmReloadTimer=null;
