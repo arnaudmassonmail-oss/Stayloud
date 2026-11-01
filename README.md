@@ -11,6 +11,7 @@ En ligne : https://staypit.com
 - `src/d1.js` : base Cloudflare D1 (comptes et données des utilisateurs) ; `src/db.js` : copie locale SQLite.
 - `src/providers/` : sources de données (MusicBrainz, Deezer, concerts : Concerts-Metal, Sueur de Metal, Songkick, Bandsintown ; radio : Radio Browser).
 - `src/apicache.js` : cache partagé des réponses des services extérieurs ; `src/health.js` : surveillance des sources de concerts ; `src/ratelimit.js` : protection contre les essais de mots de passe.
+- `public/rephoto/` : **Reprise**, application à part (sans lien avec STAYPIT) pour refaire une photo avec le même cadrage qu’une ancienne (avant / après), en ligne sur `/rephoto/`. `align.js` mesure l’écart de cadrage (testé dans `tests/rephoto.test.js`) ; les photos restent dans le téléphone.
 - `docs/notes/` : notes de chaque version.
 
 ## Lancer en local
