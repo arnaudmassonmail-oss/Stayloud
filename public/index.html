@@ -159,6 +159,7 @@
 .onb .onb-intro{margin:2px 2px 14px;color:#c9d0d6;font-size:14px}.onb .onb-intro b{color:#fff}
 .onb-styles{display:flex;flex-wrap:wrap;gap:8px}.onb-styles .sl-chip{padding:9px 14px;font-size:14px}.onb-styles .sl-chip.on{background:#d4141e;border-color:#d4141e;color:#fff}
 .onb-count{margin:12px 2px 4px;color:#9aa4ae;font-size:13px}.onb-skip{display:block;width:100%;margin-top:8px;background:none;border:0;color:#9aa4ae;font:14px Inter,Arial,sans-serif;padding:10px;cursor:pointer;text-decoration:underline}
+.onb-done{text-align:center;padding:6px 4px 4px}.onb-done-ic{font-size:40px}.onb-done h3{margin:6px 0 12px;font-size:20px}.onb-done p{text-align:left;color:#c9d0d6;font-size:14px;margin:0 0 12px;padding:10px 12px;border:1px solid #232a31;border-radius:12px;background:#0b0e12}.onb-done b{color:#fff}
 .onb-wait{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 10px;text-align:center}.onb-wait small{color:#9aa4ae}
 .onb-bar{width:80%;height:6px;border-radius:3px;background:#1b2128;overflow:hidden}.onb-bar i{display:block;height:100%;background:#d4141e}
 .sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
@@ -1808,7 +1809,7 @@ function openOnboarding(){
   let items=[];try{items=(await api('/api/onboarding/suggestions?styles='+encodeURIComponent(JSON.stringify(picked)))).items||[]}catch(e){body.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div><button type="button" class="sl-news-ok" id="onbBack">← Revenir</button>`;$('onbBack').onclick=step1;return}
   items=items.filter(x=>!A.some(a=>normUi(a.name)===normUi(x.name)));const on=new Set(items.map((_,i)=>i));
   const actTxt=a=>!a||!a.total?'':a.france&&a.nextFrance?`🎤 en France le ${esc(shortDay(a.nextFrance.date))}${a.nextFrance.city?' · '+esc(a.nextFrance.city):''}`:`🎤 ${a.total} date${a.total>1?'s':''} à venir`;
-  body.innerHTML=`<p class="onb-intro">Voici <b>${items.length} groupes</b> pour démarrer. Décoche ceux que tu ne veux pas.</p><div id="onbList">${items.map((x,i)=>`<button type="button" class="sl-pick on" data-i="${i}"><span class="sl-fr-av">${esc(x.name.charAt(0).toUpperCase())}</span><span class="sl-pick-txt"><strong>${esc(x.name)}</strong><small>${esc(x.style)}${actTxt(x.activity)?' · '+actTxt(x.activity):''}</small></span><span class="sl-pick-check">✓</span></button>`).join('')}</div><button type="button" class="sl-news-ok" id="onbAdd"></button><button type="button" class="onb-skip" id="onbBack">← Changer de styles</button>`;
+  body.innerHTML=`<p class="onb-intro">Voici <b>${items.length} groupes</b> pour démarrer. Décoche ceux que tu ne veux pas.<br><small>Leurs photos et infos mettront quelques minutes à arriver la première fois.</small></p><div id="onbList">${items.map((x,i)=>`<button type="button" class="sl-pick on" data-i="${i}"><span class="sl-fr-av">${esc(x.name.charAt(0).toUpperCase())}</span><span class="sl-pick-txt"><strong>${esc(x.name)}</strong><small>${esc(x.style)}${actTxt(x.activity)?' · '+actTxt(x.activity):''}</small></span><span class="sl-pick-check">✓</span></button>`).join('')}</div><button type="button" class="sl-news-ok" id="onbAdd"></button><button type="button" class="onb-skip" id="onbBack">← Changer de styles</button>`;
   const sync=()=>{$('onbAdd').textContent=on.size?`Ajouter ces ${on.size} groupe${on.size>1?'s':''}`:'Aucun groupe coché';$('onbAdd').disabled=!on.size};
   body.querySelectorAll('#onbList .sl-pick').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(on.has(i))on.delete(i);else on.add(i);b.classList.toggle('on',on.has(i));b.querySelector('.sl-pick-check').hidden=!on.has(i);sync()});
   $('onbBack').onclick=step1;$('onbAdd').onclick=()=>step3(items.filter((_,i)=>on.has(i)));sync()};
@@ -1816,8 +1817,14 @@ function openOnboarding(){
   for(let k=0;k<list.length;k++){const x=list[k];body.innerHTML=`<div class="onb-wait"><span class="sl-rm-spin big"></span><b>Ajout de ${esc(x.name)}…</b><small>${k+1} / ${list.length}</small><div class="onb-bar"><i style="width:${Math.round(100*k/list.length)}%"></i></div></div>`;
    try{let id=null;try{id=(await api('/api/onboarding/resolve?name='+encodeURIComponent(x.name)+'&from='+encodeURIComponent(x.from||'')))?.artist}catch{}
     const r=await api('/api/artists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:id?.name||x.name,mbid:id?.mbid||'',style:x.style,country:id?.country||'',disambiguation:id?.disambiguation||'',identitySource:'MusicBrainz',identityKey:id?.mbid?'mbid:'+id.mbid:'onboard|'+normUi(x.name),identityLocked:!!id?.mbid})});if(r?.artist){const e=A.findIndex(a=>Number(a.id)===Number(r.artist.id));if(e>=0)A[e]=r.artist;else A.push(r.artist);ok++}}catch{}}
-  render();closeOnboarding();slToast(ok?`${ok} groupe${ok>1?'s':''} ajouté${ok>1?'s':''} 🤘 Leurs actus et concerts arrivent dans quelques minutes.`:'Ajout impossible pour le moment : réessaie depuis Groupes.');
-  if(ok)setTimeout(()=>{try{load()}catch{}},45000)};
+  render();
+  if(!ok){closeOnboarding();slToast('Ajout impossible pour le moment : réessaie depuis Groupes.');return}
+  body.innerHTML=`<div class="onb-done"><div class="onb-done-ic">🤘</div><h3>${ok} groupe${ok>1?'s':''} ajouté${ok>1?'s':''} !</h3>
+   <p>⏳ <b>La première fois, c’est un peu long.</b> STAYPIT va chercher pour chaque groupe ses <b>photos</b>, ses <b>actus</b>, ses <b>albums</b>, ses <b>concerts</b> et ses <b>clips</b>. Ça peut prendre <b>quelques minutes</b> : les photos et les infos apparaissent petit à petit.</p>
+   <p>⚡ <b>Ensuite, tout est gardé en mémoire</b> : l’appli s’ouvre et se charge beaucoup plus vite. Pareil quand tu ajoutes un nouveau groupe : seul le premier chargement prend du temps.</p></div>
+   <button type="button" class="sl-news-ok" id="onbGo">C’est parti</button>`;
+  $('onbGo').onclick=closeOnboarding;
+  setTimeout(()=>{try{load()}catch{}},45000)};
  step1()}
 // "Suivre … sur STAYPIT" from a shared band page: /?follow=<mbid>&n=<name>.
 // The band is kept on this device until the person is logged in (new account
