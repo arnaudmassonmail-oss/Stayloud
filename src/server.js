@@ -5,7 +5,7 @@ import cron from "node-cron";
 import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1CalendarToken,d1UserByCalendarToken,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
-import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents} from "./db.js";
+import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents,keepArtistAddedAt} from "./db.js";
 import {d1GetBandCache,d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
 import {artistReleaseGroups,resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
@@ -46,6 +46,7 @@ async function restoreUserGroups(userId){
   if(mbid) keep.add(`mbid:${mbid}`);
   if(normalizedName) keep.add(`name:${normalizedName}`);
   const a=upsertArtist(g.name,g.mbid||null,g.style||null,{disambiguation:g.disambiguation||null,country:g.country||null,photoUrl:g.photo_url||null,identitySource:g.identity_source||null,identityKey:g.identity_key||null,identityLocked:Boolean(g.identity_locked),userId:Number(userId)});
+  try{keepArtistAddedAt(a?.id,g.created_at)}catch{}
   if(g.description!=null||g.bandsintown_url||g.infoconcert_url){
    updateArtist(a.id,{description:g.description||null});
    const {setArtistSourceUrls}=await import("./db.js");
@@ -233,7 +234,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.41.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.42.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});

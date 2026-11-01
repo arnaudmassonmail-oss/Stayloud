@@ -162,6 +162,7 @@
 .onb-done{text-align:center;padding:6px 4px 4px}.onb-done-ic{font-size:40px}.onb-done h3{margin:6px 0 12px;font-size:20px}.onb-done p{text-align:left;color:#c9d0d6;font-size:14px;margin:0 0 12px;padding:10px 12px;border:1px solid #232a31;border-radius:12px;background:#0b0e12}.onb-done b{color:#fff}
 .onb-wait{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 10px;text-align:center}.onb-wait small{color:#9aa4ae}
 .onb-bar{width:80%;height:6px;border-radius:3px;background:#1b2128;overflow:hidden}.onb-bar i{display:block;height:100%;background:#d4141e}
+.grp-sort{display:inline-flex;margin-left:auto;margin-right:10px;border:1px solid #2c343d;border-radius:999px;overflow:hidden;flex:none;align-self:center}.grp-sort button{background:none;border:0;color:#9aa4ae;font:600 12px Inter,Arial,sans-serif;padding:6px 11px;cursor:pointer}.grp-sort button.on{background:#d4141e;color:#fff}
 .sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 </style><style id="sl-albums-v2">
 /* Albums & extract player (v7.18.12) */
@@ -1016,6 +1017,14 @@ function setStylesListHTML(html){const el=$('stylesList');if(!el)return;
  if(!el.dataset.touchWired){el.dataset.touchWired='1';let t=null;const end=()=>{clearTimeout(t);t=setTimeout(()=>{stylesTouch=false;if(stylesPending!=null)setStylesListHTML(stylesPending)},700)};
   el.addEventListener('touchstart',()=>{clearTimeout(t);stylesTouch=true},{passive:true});el.addEventListener('touchend',end,{passive:true});el.addEventListener('touchcancel',end,{passive:true});
   el.addEventListener('scroll',e=>{if(e.target.classList?.contains('sl-hscroll')&&stylesTouch)end()},{capture:true,passive:true})}}
+// Groupes › each style: A-Z or most recently added first (one choice for all).
+function groupSortMode(){return uiPrefGet('groupSort','az')==='recent'?'recent':'az'}
+function sortGroups(list){const byName=(a,b)=>String(a.name||'').localeCompare(String(b.name||''),'fr',{sensitivity:'base'});
+ if(groupSortMode()!=='recent')return list.sort(byName);
+ const t=a=>Date.parse(a.created_at||'')||0;return list.sort((a,b)=>(t(b)-t(a))||(Number(b.id)-Number(a.id))||byName(a,b))}
+function groupSortHTML(){const m=groupSortMode();const b=(v,l)=>`<button type="button" class="${m===v?'on':''}" onclick="event.preventDefault();event.stopPropagation();setGroupSort('${v}')">${l}</button>`;
+ return `<span class="grp-sort" role="group" aria-label="Trier les groupes">${b('az','A-Z')}${b('recent','Récents')}</span>`}
+function setGroupSort(v){uiPrefSet('groupSort',v);renderStyles()}
 function renderStyles(){
  const counts={};A.forEach(a=>{const s=styleOf(a);counts[s]=(counts[s]||0)+1});
  if($('stylesHome'))$('stylesHome').innerHTML=styles.map((s,i)=>{
@@ -1023,11 +1032,11 @@ function renderStyles(){
    return `<div class="style-card" ${photoStyle(imgForArtist(group))} onclick="showStyle('${esc(s[0])}')"><div class="sname">${esc(s[0])}</div><div class="scount">${counts[s[0]]||0} groupe(s)</div></div>`;
  }).join('');
  const blocks=styles.map((s,i)=>{
-   const groups=A.filter(a=>styleOf(a).toLowerCase()===s[0].toLowerCase()).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'fr',{sensitivity:'base'}));
+   const groups=sortGroups(A.filter(a=>styleOf(a).toLowerCase()===s[0].toLowerCase()));
    const cards=groups.length?groups.map(a=>`<div class="style-group" role="button" tabindex="0" onclick="openArtistProfile(${a.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openArtistProfile(${a.id})}"><div class="style-group-img" ${photoStyle(imgForArtist(a))}><button type="button" class="style-group-del" aria-label="Supprimer ${esc(a.name)}" onclick="event.stopPropagation();removeA(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button></div><div class="style-group-body"><div class="style-group-name">${esc(a.name)}</div><div class="style-group-meta">${esc(s[0])}</div></div></div>`).join(''):'<div class="style-empty">Aucun groupe dans ce style.</div>';
-   return `<details class="style-row" id="style-${i}" data-style="${esc(s[0])}" ${styleClosed(s[0])?'':'open'}><summary class="style-summary"><div><h3>${esc(s[0])}</h3><p>${groups.length} groupe(s)</p></div></summary><div class="style-groups sl-hscroll">${cards}</div>${groups.length>2?'<div class="sl-swipe-hint">← glisser →</div>':''}</details>`;
+   return `<details class="style-row" id="style-${i}" data-style="${esc(s[0])}" ${styleClosed(s[0])?'':'open'}><summary class="style-summary"><div><h3>${esc(s[0])}</h3><p>${groups.length} groupe(s)</p></div>${groups.length>1?groupSortHTML():''}</summary><div class="style-groups sl-hscroll">${cards}</div>${groups.length>2?'<div class="sl-swipe-hint">← glisser →</div>':''}</details>`;
  }).join('');
- const un=A.filter(a=>styleOf(a)==='À classer').sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'fr',{sensitivity:'base'}));
+ const un=sortGroups(A.filter(a=>styleOf(a)==='À classer'));
  setStylesListHTML(blocks+`<details class="style-row" ${styleClosed('À classer')?'':'open'} id="style-unclassified" data-style="À classer"><summary class="style-summary"><div><h3>À classer</h3><p>${un.length} groupe(s) · classement manuel</p></div></summary><div class="style-groups sl-hscroll">${un.length?un.map(a=>`<div class="style-group" role="button" tabindex="0" onclick="openArtistProfile(${a.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openArtistProfile(${a.id})}"><div class="style-group-img" ${photoStyle(imgForArtist(a))}><button type="button" class="style-group-del" aria-label="Supprimer ${esc(a.name)}" onclick="event.stopPropagation();removeA(${a.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button></div><div class="style-group-body"><div class="style-group-name">${esc(a.name)}</div><div class="style-group-meta">À classer · touche pour le classer</div></div></div>`).join(''):'<div class="style-empty">Aucun groupe à classer.</div>'}</div>${un.length>2?'<div class="sl-swipe-hint">← glisser →</div>':''}</details>`);
 }
 function showStyle(s){show('styles');const i=styles.findIndex(x=>x[0]===s);setStyleClosed(s,false);setTimeout(()=>{const d=document.getElementById('style-'+i);if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},50)}
