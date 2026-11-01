@@ -214,6 +214,8 @@ export function getSession(token){
 }
 export function deleteSession(token){if(token)db.prepare("DELETE FROM sessions WHERE token_hash=?").run(hashToken(token))}
 export function getArtists(userId=null){return userId==null?db.prepare("SELECT * FROM artists ORDER BY name COLLATE NOCASE").all():db.prepare("SELECT * FROM artists WHERE user_id=? ORDER BY name COLLATE NOCASE").all(userId)}
+// When a band is restored from D1, keep the date it was really added.
+export function keepArtistAddedAt(id,t){if(id&&t)db.prepare("UPDATE artists SET created_at=? WHERE id=? AND created_at>?").run(String(t),Number(id),String(t))}
 export const getArtist=(id,userId=null)=>userId==null?db.prepare("SELECT * FROM artists WHERE id=?").get(id):db.prepare("SELECT * FROM artists WHERE id=? AND user_id=?").get(id,userId);
 
 export function upsertArtist(name,mbid=null,style=null,meta={}){
