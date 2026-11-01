@@ -97,6 +97,7 @@ h2{font-size:16px;margin:24px 0 10px;color:var(--muted);font-weight:600}
 #shutter{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.25);transition:background .2s}
 #shutter:active{background:#fff}
 #shutter.good{background:var(--accent);border-color:#fff}
+#shutter.counting{background:conic-gradient(#fff calc(var(--p,0) * 1turn),var(--accent) 0)}
 .round{width:48px;height:48px;border-radius:50%;background:rgba(255,255,255,.14);font-size:20px}
 #msg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;background:#000;color:var(--muted)}
 #camera.ref .matchonly{display:none!important}
@@ -113,6 +114,8 @@ h2{font-size:16px;margin:24px 0 10px;color:var(--muted);font-weight:600}
 .check input{width:22px;height:22px;accent-color:var(--accent)}
 #toast{position:fixed;left:50%;bottom:calc(24px + var(--safe-b));transform:translateX(-50%) translateY(30px);opacity:0;transition:.25s;background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:999px;z-index:20;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%)}
+#camera.on~#toast{bottom:auto;top:calc(84px + var(--safe-t))}
+#toast{border-radius:14px}
 </style>
 </head>
 <body>
@@ -130,7 +133,7 @@ h2{font-size:16px;margin:24px 0 10px;color:var(--muted);font-weight:600}
   <ol class="how">
     <li>Choisissez la photo « avant » (ou prenez-la ici : l’inclinaison, la direction et le lieu sont alors retenus).</li>
     <li>Plus tard, ouvrez-la et appuyez sur <b>Refaire cette photo</b> : elle s’affiche en transparence sur l’appareil.</li>
-    <li>Suivez les conseils jusqu’à ce que la jauge passe au vert, puis déclenchez.</li>
+    <li>Suivez les conseils jusqu’à ce que la jauge passe au vert : la photo se prend toute seule dès que le cadrage est parfait (bouton <b>Auto</b> pour déclencher vous-même).</li>
   </ol>
 </div></section>
 
@@ -167,7 +170,7 @@ h2{font-size:16px;margin:24px 0 10px;color:var(--muted);font-weight:600}
       <span aria-hidden="true">◐</span>
       <input type="range" id="opacity" min="0" max="100" value="50" aria-label="Transparence de l’ancienne photo">
       <button class="tog on" id="guideTog">Guidage</button>
-      <button class="tog" id="autoTog">Auto</button>
+      <button class="tog" id="autoTog" title="Prendre la photo toute seule dès que le cadrage est parfait">Auto</button>
     </div>
     <div class="shots">
       <button class="round" id="camClose" aria-label="Fermer">✕</button>
@@ -355,10 +358,14 @@ const CARD = ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ouest', 'ouest',
 const vid = $('#vid'), ov = $('#ov'), edges = $('#edges'), stage = $('#stage'), frameSvg = $('#frame');
 const cam = {
   mode: 'match', stream: null, facing: 'environment', aspect: 4 / 3,
-  view: 'ghost', guide: true, auto: false, raf: 0,
+  view: 'ghost', guide: true, auto: loadAuto(), raf: 0, perfectSince: 0,
   // analyse
   w: 0, h: 0, refF: null, p: { ...A.ZERO }, conf: 0, shown: null, lastT: 0, lastGlobal: -1e9, goodSince: 0, wasGood: false, busy: false,
 };
+function loadAuto() { try { return localStorage.getItem('reprise.auto') !== '0'; } catch { return true; } }
+$('#autoTog').classList.toggle('on', cam.auto);
+// Déclenchement automatique : cadrage quasi parfait (≥ AUTO_Q) tenu AUTO_HOLD ms sans bouger
+const AUTO_Q = 92, AUTO_HOLD = 700;
 const work = document.createElement('canvas');
 const wctx = work.getContext('2d', { willReadFrequently: true });
 
@@ -393,7 +400,8 @@ async function openCamera(mode) {
     cam.aspect = current.refW / current.refH;
     ov.src = blobUrl(current.id, current.ref);
     prepareReference(img);
-    cam.p = { ...A.ZERO }; cam.conf = 0; cam.shown = null; cam.lastGlobal = -1e9; cam.goodSince = 0; cam.wasGood = false;
+    cam.p = { ...A.ZERO }; cam.conf = 0; cam.shown = null; cam.lastGlobal = -1e9; cam.goodSince = 0; cam.wasGood = false; cam.perfectSince = 0;
+    setShutter(false, 0);
     setView(cam.view);
     $('#bubble').style.display = current.meta && current.meta.beta != null ? 'block' : 'none';
   } else {
@@ -496,7 +504,9 @@ $('#guideTog').onclick = () => {
 };
 $('#autoTog').onclick = () => {
   cam.auto = !cam.auto; $('#autoTog').classList.toggle('on', cam.auto);
-  toast(cam.auto ? 'La photo se prendra toute seule quand le cadrage sera bon' : 'Déclenchement automatique désactivé');
+  try { localStorage.setItem('reprise.auto', cam.auto ? '1' : '0'); } catch {}
+  cam.perfectSince = 0;
+  toast(cam.auto ? 'La photo se prendra toute seule dès que le cadrage sera parfait' : 'Déclenchement automatique désactivé : appuyez vous-même');
 };
 
 // Recadre l'image de la caméra au format de la photo d'origine (comme à l'écran)
@@ -542,8 +552,18 @@ function analyse(t) {
   const box = $('#advice');
   box.innerHTML = '';
   const good = adv.found && adv.quality >= 85;
-  if (good) {
-    box.innerHTML = '<div class="pill good">✓ Cadrage identique : déclenchez !</div>';
+  // « Parfait » : l'estimation lissée ET la mesure de cette image sont au-dessus du seuil, téléphone pas penché
+  const q = adv.found ? Math.min(adv.quality, A.quality(r.p)) : 0, level = tiltOk();
+  if (adv.found && q >= AUTO_Q && level) cam.perfectSince ||= t;
+  else if (!(adv.found && q >= AUTO_Q - 4 && level)) cam.perfectSince = 0; // petite marge : un tremblement ne relance pas tout
+  const counting = cam.auto && cam.perfectSince > 0;
+  const prog = counting ? Math.min(1, (t - cam.perfectSince) / AUTO_HOLD) : 0;
+  if (counting) {
+    box.innerHTML = '<div class="pill good">📸 Parfait, ne bougez plus…</div>';
+  } else if (good) {
+    box.innerHTML = cam.auto
+      ? `<div class="pill good">✓ Presque parfait${level ? ', ajustez à peine…' : ' : redressez le téléphone (bulle)'}</div>`
+      : '<div class="pill good">✓ Cadrage identique : déclenchez !</div>';
   } else {
     for (const it of adv.items.slice(0, 2)) {
       const d = document.createElement('div'); d.className = 'pill';
@@ -553,7 +573,7 @@ function analyse(t) {
     }
   }
   setGauge(adv.found ? adv.quality : null);
-  $('#shutter').classList.toggle('good', good);
+  setShutter(good, prog);
 
   // Cadre de l'ancienne photo tel qu'il se situe dans l'image actuelle
   const poly = frameSvg.querySelector('polygon');
@@ -565,8 +585,21 @@ function analyse(t) {
 
   if (good && !cam.wasGood && navigator.vibrate) navigator.vibrate(40);
   cam.wasGood = good;
-  if (good) { cam.goodSince ||= t; if (cam.auto && t - cam.goodSince > 800 && !cam.busy) capture(); }
-  else cam.goodSince = 0;
+  if (prog >= 1 && !cam.busy) { cam.perfectSince = 0; if (navigator.vibrate) navigator.vibrate([30, 40, 30]); capture(); }
+}
+
+function setShutter(good, prog) {
+  const b = $('#shutter');
+  b.classList.toggle('good', good);
+  b.classList.toggle('counting', prog > 0);
+  b.style.setProperty('--p', prog.toFixed(3));
+}
+
+// Téléphone tenu comme pour la photo d'origine (seulement si elle a été prise dans l'appli)
+function tiltOk() {
+  const m = current && current.meta;
+  if (!m || m.beta == null || sensors.beta == null || (m.angle || 0) !== screenAngle()) return true;
+  return Math.abs(sensors.beta - m.beta) < 2.5 && Math.abs(angDiff(sensors.gamma, m.gamma)) < 2.5;
 }
 
 function updateSensorsUi() {
