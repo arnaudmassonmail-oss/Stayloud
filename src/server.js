@@ -7,13 +7,14 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents,keepArtistAddedAt} from "./db.js";
 import {d1GetBandCache,d1Enabled,d1ConfigStatus,ensureD1Schema,d1CreateUser,d1AuthenticateUser,d1FindUserByEmail,d1UpdateUserEmail,d1CreateSession,d1GetSession,d1DeleteSession,d1CreatePasswordReset,d1ConsumePasswordReset,d1UpsertGroup,d1DeleteGroup,d1ListGroups,d1MigrateLocalUser} from "./d1.js";
-import {artistReleaseGroups,resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
+import {mb as mbLookup,artistReleaseGroups,resolve,resolveByMbid,searchArtistCandidates,fetchArtistProfile,discoverArtistPhoto,discoverArtistPhotos} from "./providers/musicbrainz.js";
 import {refreshArtist,refreshAll,refreshArtistNews,refreshArtistConcerts,enrichArtistNews,enrichNewsItems} from "./aggregator.js";
 import {bandsintownArtistId,resolveBandsintown,resolveInfoConcert} from "./providers/concert-web.js";
 import {cachedJson} from "./apicache.js";
 import {findTickets,ticketmasterConfigured,bandActivity} from "./providers/tickets.js";
 import {CLIP_ID,clipMeta,clipPageHTML} from "./clippage.js";
 import {MBID,bandPageHTML} from "./bandpage.js";
+import {albumPageHTML} from "./albumpage.js";
 import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding} from "./onboarding.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
@@ -234,7 +235,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.42.1",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.43.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -606,6 +607,16 @@ app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const out=await discoverManualCityConcerts(q);try{out.items=mergeCommunityConcerts(out.items,(await approvedCommunity()).filter(c=>normCity(c.city)===normCity(q)),NaN,NaN,0)}catch{}res.json(out);}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/resolve-city",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:`ville introuvable : ${q}`});res.json({city:q,resolvedCity:p.resolved_city||q,country:p.country||"France",lat:p.lat,lon:p.lon,display_name:p.display_name||`${q}, France`,resolvedCityVerified:true});}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/reverse",async(req,res)=>{const lat=Number(req.query.lat),lon=Number(req.query.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return res.status(400).json({error:"lat/lon requis"});try{const {reverseCity}=await import("./providers/discovery.js");res.json(await reverseCity(lat,lon))}catch(e){res.status(502).json({error:e.message})}});
+app.get(["/album","/album/:rg"],async(req,res)=>{const rg=String(req.params.rg||"");let artist=String(req.query.a||"").trim().slice(0,120),title=String(req.query.t||"").trim().slice(0,200);
+  if(rg&&!MBID.test(rg))return res.redirect(302,"/");if(!rg&&(!artist||!title))return res.redirect(302,"/");
+  const within=(job,ms)=>Promise.race([Promise.resolve(job).catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms))]);
+  const a={artist,title,date:"",type:"",coverUrl:"",artistMbid:""};
+  if(rg){const d=await within(mbLookup(`https://musicbrainz.org/ws/2/release-group/${rg}?inc=artist-credits&fmt=json`),5000);
+   if(d?.title){a.title=d.title;a.date=d["first-release-date"]||"";a.type=d["primary-type"]||"";const ac=d["artist-credit"]?.[0]?.artist;if(ac){a.artist=ac.name||a.artist;a.artistMbid=ac.id||""}}
+   a.coverUrl=`https://coverartarchive.org/release-group/${rg}/front-500`}
+  if(!a.coverUrl&&a.artist&&a.title){const dz=await within(findDeezerAlbum(a.artist,a.title,{sameArtist:true}),5000);if(dz){a.coverUrl=dz.cover_xl||dz.cover_big||"";a.date=a.date||String(dz.release_date||"")}}
+  const proto=String(req.headers["x-forwarded-proto"]||req.protocol||"https").split(",")[0];
+  res.set("Cache-Control","public, max-age=3600");res.type("html").send(albumPageHTML(a,{base:`${proto}://${req.get("host")}`,path:req.originalUrl}))});
 app.get(["/groupe","/groupe/:mbid"],async(req,res)=>{const mbid=String(req.params.mbid||"");const name=String(req.query.n||"").trim().slice(0,120);
   if(mbid&&!MBID.test(mbid))return res.redirect(302,"/");if(!mbid&&!name)return res.redirect(302,"/");
   const within=(job,ms)=>Promise.race([job.catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms))]);

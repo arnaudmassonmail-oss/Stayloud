@@ -46,7 +46,7 @@ p.txt{color:#c9d0d6;margin:0 0 14px}
 .listen li:first-child{border-top:0}.listen li button{flex:none;width:38px;height:38px;border-radius:50%;border:0;background:#d4141e;color:#fff;font-size:15px;cursor:pointer}
 .listen li.on button{background:#fff;color:#d4141e}.listen li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.listen li small{color:#9aa4ae}
 .listen .bar{height:3px;background:#1b2128;border-radius:2px;margin-top:4px;overflow:hidden}.listen .bar i{display:block;height:100%;width:0;background:#d4141e}
-.listen .dz{display:inline-block;margin:10px 4px 2px;color:#ff4b55;font-weight:700;text-decoration:none}
+.listen .dz{display:inline-block;margin:10px 4px 2px;color:#ff4b55;font-weight:700;text-decoration:none}.listen .dz[hidden]{display:none}
 .pitch{margin-top:22px;padding:14px;border:1px solid #232a31;border-radius:14px;background:#0d1116;color:#b8c0c8}.pitch b{color:#fff}
 </style></head><body>
 <a class="top" href="/"><img src="/staypit-banner.jpg" alt="STAYPIT · Radar Metal"></a>
