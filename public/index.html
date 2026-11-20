@@ -1302,7 +1302,7 @@ let AG={};const EVREG={};
 function agendaKey(x){const d=String(x?.date||'').slice(0,10);const v=normUi(x?.venue||'');return v?`${d}|${v}`:`${d}|${normUi(x?.city||'')}|${normUi(x?.artist||x?.title||'').slice(0,40)}`}
 const MARK_ICON={going:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',interested:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>',none:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>'};
 function markBtnHTML(x){const k=agendaKey(x);if(!k||k.startsWith('|'))return '';EVREG[k]=x;const st=AG[k]?.status||'none';return `<button type="button" class="sl-mark ${st}" data-k="${esc(k)}" onclick="event.stopPropagation();openMarkSheet(this.dataset.k)" aria-label="${st==='going'?'J’y vais':st==='interested'?'Intéressé':'Ajouter à mon agenda'}">${MARK_ICON[st]}</button>`}
-async function loadAgenda(){try{const d=await api('/api/agenda');AG={};for(const r of d.items||[])AG[r.key]={status:r.status,data:r.data};syncMarks();if(concertMode==='agenda')renderAgenda()}catch{}}
+async function loadAgenda(){try{const d=await api('/api/agenda');AG={};for(const r of d.items||[])AG[r.key]={status:r.status,data:r.data};syncMarks();if(concertMode==='agenda')renderAgenda();setTimeout(concertSoonNotice,2500)}catch{}}
 function openMarkSheet(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const cur=AG[k]?.status||'';const items=[{value:'going',label:'J’y vais',icon:'✓',sub:'Ajouté à ton agenda'},{value:'interested',label:'Intéressé',icon:'★',sub:'À garder en tête'}];if(cur)items.push({value:'remove',label:'Retirer de mon agenda',icon:'✕'});
  if(x.date&&String(x.date).slice(0,10)>=new Date().toISOString().slice(0,10))items.push({value:'cal',label:'Ajouter à mon calendrier',icon:'📅',sub:'iPhone, Android, Outlook…'},{value:'gcal',label:'Google Agenda',icon:'G',sub:'Ouvre Google Agenda'});
  openChoiceSheet({title:String(x.artist||x.title||'Concert').slice(0,60),items,current:cur,onPick:v=>v==='cal'?addToCalendar(x):v==='gcal'?window.open(googleCalUrl(x),'_blank','noopener'):setMark(k,v)})}
@@ -1529,6 +1529,19 @@ const CC_STATUS={pending:['⏳ En attente de validation','wait'],approved:['✓ 
 function ccItemHTML(c,admin){const d=c.date?new Date(c.date+'T12:00:00'):null;const day=d&&!isNaN(d)?d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'long',year:'numeric'}):c.date;const st=CC_STATUS[c.status]||CC_STATUS.pending;
  return `<div class="sl-help-msg sl-cc-item ${admin&&c.status==='pending'?'unread':''}"><div class="sl-help-meta">${admin?`<b>${esc(c.user?.username||'?')}</b> · `:''}envoyé le ${esc(helpDate(c.createdAt))}</div><div class="sl-cc-title">${esc(c.title)}</div>${c.bands&&c.bands!==c.title?`<div class="sl-cc-bands">${esc(c.bands)}</div>`:''}<div class="sl-cc-when">📅 ${esc(day)}${c.time?' · '+esc(c.time):''}</div><div class="sl-cc-when">📍 ${esc([c.venue,c.city].filter(Boolean).join(' · '))}</div>${c.url?`<a class="sl-cc-link" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.url.replace(/^https?:\/\//,'').slice(0,60))}</a>`:''}${c.note?`<div class="sl-help-text sl-cc-note">${esc(c.note)}</div>`:''}<div class="sl-cc-st ${st[1]}">${st[0]}</div>${admin?`<div class="sl-help-acts">${c.status!=='approved'?`<button type="button" class="ok" onclick="ccAdmin(${c.id},'approve')">Valider</button>`:''}${c.status!=='rejected'?`<button type="button" onclick="ccAdmin(${c.id},'reject')">${c.status==='approved'?'Retirer':'Refuser'}</button>`:''}<button type="button" onclick="ccAdmin(${c.id},'delete')">Supprimer</button></div>`:''}</div>`}
 async function ccAdmin(id,action){if(action==='delete'&&!confirm('Supprimer définitivement ce concert signalé ?'))return;try{await api(action==='delete'?`/api/community-concerts/${id}`:`/api/community-concerts/${id}/${action}`,{method:action==='delete'?'DELETE':'POST'});slToast(action==='approve'?'Concert validé : il est visible dans les concerts':action==='reject'?'Concert refusé':'Concert supprimé');helpGo('adminConcerts')}catch(e){slToast(e.message)}}
+// ---- Rappel la veille d'un concert (v7.44) ----
+let REMIND={enabled:true};
+async function loadReminderPref(){try{REMIND=await api('/api/me/reminders')}catch{}}
+async function toggleReminders(){const on=REMIND.enabled===false;
+ if(!on&&!confirm('Ne plus recevoir l’e-mail de rappel la veille de tes concerts ?'))return;
+ try{REMIND=await api('/api/me/reminders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:on})});slToast(on?'🔔 Rappels activés : un e-mail la veille de chaque concert où tu vas':'Rappels désactivés');if(helpView==='home')helpGo('home')}catch(e){slToast(e.message)}}
+// In the app too: "Demain : Gojira à Lyon" (or "Ce soir"), once a day.
+function concertSoonNotice(){try{const today=new Date(),d0=today.toISOString().slice(0,10),t=new Date(today.getTime()+864e5).toISOString().slice(0,10);
+ const k='staypit.soon.'+(authUser?.id||'')+'.'+d0;if(localStorage.getItem(k))return;
+ const soon=Object.values(AG||{}).filter(a=>a.status==='going'&&a.data&&[d0,t].includes(String(a.data.date||'').slice(0,10))).sort((a,b)=>String(a.data.date).localeCompare(String(b.data.date)));
+ if(!soon.length)return;const c=soon[0].data,when=String(c.date).slice(0,10)===d0?'Ce soir':'Demain';
+ const time=/^\d{2}:\d{2}/.test(String(c.time||''))?' · '+String(c.time).slice(0,5).replace(':','h'):'';
+ slToast(`🤘 ${when} : ${c.artist||c.title}${c.city?' à '+c.city:''}${c.venue?' ('+c.venue+time+')':time}`);localStorage.setItem(k,'1')}catch{}}
 async function helpGo(view){helpView=view;const box=$('helpBody'),title=$('helpTitle');if(!box)return;
  const back='<button type="button" class="sl-help-back" onclick="helpGo(\'home\')">← Mon compte</button>';
  if(view==='home'){title.textContent='Mon compte';const row=(fn,ic,t,sub,badge,cls='')=>`<button type="button" class="sl-pick ${cls}" onclick="${fn}"><span class="sl-pick-all">${ic}</span><span class="sl-pick-txt"><strong>${t}</strong>${sub?`<small>${sub}</small>`:''}</span>${badge?`<b class="sl-help-badge">${badge}</b>`:''}</button>`;const grp=t=>`<div class="sl-acc-grp">${t}</div>`;
@@ -1541,6 +1554,7 @@ async function helpGo(view){helpView=view;const box=$('helpBody'),title=$('helpT
    +row("helpGo('mine')",'💬','Mes messages',HELP.myUnreadReplies?'Nouvelle réponse !':'Tes messages et nos réponses',HELP.myUnreadReplies||0)
    +(HELP.isAdmin?grp('Administration')+row("helpGo('admin')",'🛠','Messages reçus','Messages et signalements des membres',HELP.adminUnread||0)+row("helpGo('adminConcerts')",'✅','Concerts signalés',HELP.communityPending?'À valider !':'Valider les concerts des membres',HELP.communityPending||0)+row("helpGo('sources')",'📡','État des sources','Concerts-Metal, Sueur de Metal, Songkick, Bandsintown'):'')
    +grp('Compte')
+   +row("toggleReminders()",'🔔','Rappels de concerts',REMIND.enabled===false?'Désactivés · touche pour les activer':(authUser?.email?'Un e-mail la veille de chaque concert où tu vas':'Ajoute un e-mail à ton compte pour les recevoir'),0,'',)
    +row("window.open('/confidentialite.html','_blank','noopener')",'🔒','Confidentialité','Les données gardées par STAYPIT et tes droits')
    +row("closeHelpSheet();logout()",'↩︎','Se déconnecter','')
    +row("helpGo('deleteAccount')",'🗑','Supprimer mon compte','Effacer ton compte et toutes tes données',0,'sl-acc-danger');return}
@@ -1910,7 +1924,7 @@ async function load(){
   status('Connexion au serveur…');
   try{
     const a=await api('/api/artists');
-    A=Array.isArray(a?.artists)?a.artists:[];loadAgenda();loadFriends();scheduleFriendsNews();loadHelpStatus();loadAlerts();setActusMode(uiPrefGet('actusMode','news'));
+    A=Array.isArray(a?.artists)?a.artists:[];loadAgenda();loadReminderPref();loadFriends();scheduleFriendsNews();loadHelpStatus();loadAlerts();setActusMode(uiPrefGet('actusMode','news'));
     N=[];E=[];
     render();
     if(!A.length){

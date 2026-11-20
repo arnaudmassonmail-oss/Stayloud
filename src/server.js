@@ -15,6 +15,7 @@ import {findTickets,ticketmasterConfigured,bandActivity} from "./providers/ticke
 import {CLIP_ID,clipMeta,clipPageHTML} from "./clippage.js";
 import {MBID,bandPageHTML} from "./bandpage.js";
 import {albumPageHTML} from "./albumpage.js";
+import {runConcertReminders,remindersEnabled,setRemindersEnabled} from "./reminders.js";
 import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding} from "./onboarding.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
@@ -237,7 +238,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.43.2",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.44.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -493,6 +494,10 @@ app.get("/api/support/mine",requireAuth,async(req,res)=>{try{const rows=await d1
 app.get("/api/admin/sources/find",requireAuth,requireAdmin,(req,res)=>res.json(findInSources(String(req.query.q||"").slice(0,80))));
 // Daily check of the sources and services (e-mail + message when something is wrong).
 app.get("/api/admin/monitor",requireAuth,requireAdmin,async(req,res)=>{try{res.json({last:await lastDailyCheck()})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/me/reminders",requireAuth,async(req,res)=>{try{res.json({enabled:await remindersEnabled(req.user.id),hasEmail:Boolean(req.user.email)})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/me/reminders",requireAuth,async(req,res)=>{try{await setRemindersEnabled(req.user.id,req.body?.enabled!==false);res.json({enabled:req.body?.enabled!==false})}catch(e){res.status(502).json({error:e.message})}});
+// Administrator: send my own reminders for a given day now (to test the e-mail).
+app.post("/api/admin/reminders/test",requireAuth,requireAdmin,async(req,res)=>{try{const day=/^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.day||""))?String(req.body.day):undefined;res.json(await runConcertReminders({day,force:true,onlyUser:req.user.id}))}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/admin/monitor/run",requireAuth,requireAdmin,async(req,res)=>{try{res.json({last:await runDailyCheck({force:true})})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources/test",requireAuth,requireAdmin,async(req,res)=>{try{res.json({results:await testSources()})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources",requireAuth,requireAdmin,async(req,res)=>{try{res.json({sources:await sourcesHealth()})}catch(e){res.status(502).json({error:e.message})}});
@@ -656,4 +661,5 @@ try{
 }catch(e){console.error("D1 bootstrap error:",e?.message||e)}
 app.listen(port,()=>{console.log(`Music Radar V2: http://localhost:${port}`);setTimeout(()=>refreshAll().catch(e=>console.error(e)),500)});
 cron.schedule(process.env.REFRESH_CRON||"7 */2 * * *",()=>refreshAll().catch(e=>console.error(e)));
+cron.schedule(process.env.REMINDER_CRON||"3 10 * * *",()=>runConcertReminders().then(r=>{if(r.sent)console.log(`Concert reminders ${r.day}: ${r.sent} sent`)}).catch(e=>console.error("Concert reminders:",e?.message||e)),{timezone:"Europe/Paris"});
 cron.schedule(process.env.MONITOR_CRON||"17 7 * * *",()=>runDailyCheck().catch(e=>console.error("Daily check:",e?.message||e)),{timezone:"Europe/Paris"});
