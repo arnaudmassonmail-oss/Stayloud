@@ -1,7 +1,7 @@
 {
   "name": "STAYPIT Radar Metal",
   "short_name": "STAYPIT",
-  "start_url": "/",
+  "start_url": "/?source=app",
   "display": "standalone",
   "background_color": "#060709",
   "theme_color": "#060709",
@@ -9,13 +9,26 @@
     {
       "src": "/icon-192.png?v=8",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png?v=8",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192.png?v=1",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png?v=1",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "id": "/",
@@ -27,5 +40,56 @@
   "categories": [
     "music",
     "entertainment"
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Concerts",
+      "short_name": "Concerts",
+      "description": "Les concerts de tes groupes et autour de toi",
+      "url": "/?go=live",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=8",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Actus",
+      "short_name": "Actus",
+      "description": "Actualités et sorties d’albums",
+      "url": "/?go=radar",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=8",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Écouter",
+      "short_name": "Écouter",
+      "description": "Clips et radio",
+      "url": "/?go=clips",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=8",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Groupes",
+      "short_name": "Groupes",
+      "description": "Mes groupes et découvrir",
+      "url": "/?go=styles",
+      "icons": [
+        {
+          "src": "/icon-192.png?v=8",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
 }

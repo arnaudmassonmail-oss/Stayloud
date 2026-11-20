@@ -238,7 +238,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.46.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.47.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -634,6 +634,17 @@ app.get("/api/discover/location",async(req,res)=>{try{const q=String(req.query.q
 app.get("/api/discover/city-concerts",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const out=await discoverManualCityConcerts(q);try{out.items=mergeCommunityConcerts(out.items,(await approvedCommunity()).filter(c=>normCity(c.city)===normCity(q)),NaN,NaN,0)}catch{}res.json(out);}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/resolve-city",async(req,res)=>{try{const q=String(req.query.q||"").trim();if(!q)return res.status(400).json({error:"q requis"});const p=await geocodeQuery(q);if(!p)return res.status(404).json({error:`ville introuvable : ${q}`});res.json({city:q,resolvedCity:p.resolved_city||q,country:p.country||"France",lat:p.lat,lon:p.lon,display_name:p.display_name||`${q}, France`,resolvedCityVerified:true});}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/discover/reverse",async(req,res)=>{const lat=Number(req.query.lat),lon=Number(req.query.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))return res.status(400).json({error:"lat/lon requis"});try{const {reverseCity}=await import("./providers/discovery.js");res.json(await reverseCity(lat,lon))}catch(e){res.status(502).json({error:e.message})}});
+// Android app (Trusted Web Activity from PWABuilder): proves that the app
+// and staypit.com belong together, so it opens full screen with no address
+// bar. Set on Render: ANDROID_PACKAGE (e.g. com.staypit.app) and
+// ANDROID_SHA256 (the SHA-256 fingerprint(s) from Play Console › App
+// integrity, comma separated).
+export function assetLinks(pkg,fingerprints){
+ const fp=String(fingerprints||"").split(/[,\s]+/).map(x=>x.trim().toUpperCase()).filter(x=>/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(x));
+ pkg=String(pkg||"").trim();if(!pkg||!fp.length)return [];
+ return [{relation:["delegate_permission/common.handle_all_urls"],target:{namespace:"android_app",package_name:pkg,sha256_cert_fingerprints:fp}}];
+}
+app.get("/.well-known/assetlinks.json",(req,res)=>{res.set("Cache-Control","public, max-age=300");res.json(assetLinks(process.env.ANDROID_PACKAGE,process.env.ANDROID_SHA256))});
 app.get(["/album","/album/:rg"],async(req,res)=>{const rg=String(req.params.rg||"");let artist=String(req.query.a||"").trim().slice(0,120),title=String(req.query.t||"").trim().slice(0,200);
   if(rg&&!MBID.test(rg))return res.redirect(302,"/");if(!rg&&(!artist||!title))return res.redirect(302,"/");
   const within=(job,ms)=>Promise.race([Promise.resolve(job).catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms))]);

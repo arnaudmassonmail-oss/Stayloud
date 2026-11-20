@@ -1972,18 +1972,23 @@ async function applyPendingFollow(){const p=pendingFollow();if(!p)return;try{loc
  try{await addDiscoverArtist()}finally{currentDiscoverArtist=prev}
  const f=A.find(a=>normUi(a.name)===normUi(p.name));
  if(f){slToast(`${f.name} ajouté à tes groupes 🤘`);try{openArtistProfile(f.id)}catch{}}else slToast(`Ajout de ${p.name} impossible pour le moment : cherche-le dans Groupes.`);if(A.length<=1)setTimeout(maybeOnboard,1200)}
+let PENDING_GO='';
+function goPending(){const g=PENDING_GO;PENDING_GO='';if(g)try{show(g)}catch{}}
 async function authBoot(){
  const params=new URLSearchParams(location.search),token=params.get('reset');
  captureFollowParam(params);
+ // App shortcuts (Android long press on the icon): /?go=live|radar|clips|styles|community
+ PENDING_GO=['live','radar','clips','styles','community'].includes(params.get('go'))?params.get('go'):'';
+ if(params.has('go')||params.has('source')){try{history.replaceState(null,'',location.pathname)}catch{}}
  if(token){$('authGate').classList.add('hidden');$('resetGate').classList.remove('hidden');$('resetForm').onsubmit=async e=>{e.preventDefault();const a=$('resetPass').value,b=$('resetPass2').value;if(a!==b){$('resetError').textContent='Les deux mots de passe sont différents.';return}try{const r=await fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token,password:a})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Lien invalide');$('resetError').textContent='Mot de passe modifié. Tu peux maintenant te connecter.';setTimeout(()=>{location.href=location.pathname},1200)}catch(e){$('resetError').textContent=e.message||'Erreur'}};return}
- try{const d=await fetch('/api/auth/me',{cache:'no-store'});if(d.ok){authUser=(await d.json()).user;hideAuthGate();await load();applyPendingFollow();return}}catch{}
+ try{const d=await fetch('/api/auth/me',{cache:'no-store'});if(d.ok){authUser=(await d.json()).user;hideAuthGate();await load();applyPendingFollow();goPending();return}}catch{}
  if(pendingFollow())authMode='register';
  showAuthGate();renderAuthMode();showFollowInvite();
 }
 $('authSwitch').onclick=()=>{authMode=authMode==='login'?'register':'login';hideForgotPassword();renderAuthMode();showFollowInvite();$('authPass').value='';$('authUser').focus()};
 $('authForm').addEventListener('submit',async e=>{
  e.preventDefault();const btn=$('authSubmit');btn.disabled=true;$('authError').textContent='';
- try{const body={username:$('authUser').value.trim(),password:$('authPass').value};if(authMode==='register')body.email=$('authEmail').value.trim();const r=await fetch(authMode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Connexion impossible');authUser=d.user;hideAuthGate();$('authPass').value='';await load();status('Connecté · '+authUser.username);applyPendingFollow()}catch(e){$('authError').textContent=e.message||'Erreur';showAuthGate()}finally{btn.disabled=false}
+ try{const body={username:$('authUser').value.trim(),password:$('authPass').value};if(authMode==='register')body.email=$('authEmail').value.trim();const r=await fetch(authMode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d?.error||'Connexion impossible');authUser=d.user;hideAuthGate();$('authPass').value='';await load();status('Connecté · '+authUser.username);applyPendingFollow();goPending()}catch(e){$('authError').textContent=e.message||'Erreur';showAuthGate()}finally{btn.disabled=false}
 });
 async function logout(){ALERTS={albums:[],concerts:[],seen:{album:false,concert:false}};clearTimeout(alertTimer);setNavBadge('radar',0);setNavBadge('live',0);try{await fetch('/api/auth/logout',{method:'POST'});}catch{}authUser=null;authMode='login';renderUserBar();A=[];N=[];E=[];render();showAuthGate();renderAuthMode();$('authUser').value='';$('authPass').value='';$('authUser').focus()}
 let warmReloadTimer=null;

@@ -47,3 +47,7 @@ test("concert listen button: bands split from the bill",()=>{const html=fs.readF
   const listenBands=new Function("normUi","cleanDiscoverText",src+";return listenBands")(s=>String(s).toLowerCase(),null);
   assert.deepEqual(listenBands({title:"Gojira w/ Mastodon, Lorna Shore | Fit For An Autopsy – Live 2026",artist:"Gojira"}),["Gojira","Mastodon","Lorna Shore","Fit For An Autopsy"]);
   assert.deepEqual(listenBands({title:"Hellfest Open Air 2027"}),[])});
+test("manifest ready for Android: maskable icons, shortcuts, start url",()=>{const m=JSON.parse(fs.readFileSync(new URL("../public/manifest.webmanifest",import.meta.url),"utf8"));
+  assert.ok(m.icons.some(i=>i.purpose==="maskable"&&i.sizes==="512x512"));assert.ok(m.icons.some(i=>i.purpose==="any"&&i.sizes==="512x512"));
+  assert.ok(m.shortcuts.every(s=>/^\/\?go=(live|radar|clips|styles)$/.test(s.url)));assert.equal(m.display,"standalone");
+  for(const i of m.icons)assert.ok(fs.existsSync(new URL("../public"+i.src.split("?")[0],import.meta.url)),i.src)});
