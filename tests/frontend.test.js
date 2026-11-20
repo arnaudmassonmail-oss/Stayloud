@@ -42,3 +42,8 @@ test("tour presents the current app (billets, setlists, clips feed, radio)",()=>
 });
 test("shared band page: follow is remembered until login",()=>{const html=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
   assert.ok(html.includes("captureFollowParam(params)"));assert.ok(html.includes("applyPendingFollow()"))});
+test("concert listen button: bands split from the bill",()=>{const html=fs.readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
+  const src=html.match(/function listenBands\(x\)\{[\s\S]*?\n return out\.slice\(0,6\)\}/)[0];
+  const listenBands=new Function("normUi","cleanDiscoverText",src+";return listenBands")(s=>String(s).toLowerCase(),null);
+  assert.deepEqual(listenBands({title:"Gojira w/ Mastodon, Lorna Shore | Fit For An Autopsy – Live 2026",artist:"Gojira"}),["Gojira","Mastodon","Lorna Shore","Fit For An Autopsy"]);
+  assert.deepEqual(listenBands({title:"Hellfest Open Air 2027"}),[])});

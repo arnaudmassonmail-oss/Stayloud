@@ -532,6 +532,20 @@ export async function d1DeleteCommunityConcert(id){
   await query("DELETE FROM community_concerts WHERE id=?",[Number(id)]);
 }
 // ---- Shared cache of outside services' answers (apicache.js) ----
+// Concert reminders: everyone who marked "J'y vais" for a concert on this day
+// (YYYY-MM-DD), with their e-mail, and the friends of one member.
+export async function d1GoingConcertsOn(day){
+  if(!d1ConfigStatus().configured)return [];
+  await ensureD1Schema();
+  const rows=(await query("SELECT c.user_id,u.username,u.email,c.ckey,c.data FROM user_concerts c JOIN users u ON u.id=c.user_id WHERE c.status='going' AND c.data LIKE ?",['%'+String(day)+'%'])).rows;
+  return rows.map(r=>{let d={};try{d=JSON.parse(r.data||"{}")}catch{}return {userId:Number(r.user_id),username:r.username,email:r.email||"",ckey:r.ckey,data:d}}).filter(r=>String(r.data?.date||"").slice(0,10)===String(day));
+}
+export async function d1FriendIds(userId){
+  if(!d1ConfigStatus().configured)return [];
+  await ensureD1Schema();
+  const id=Number(userId);
+  return (await query("SELECT CASE WHEN requester_id=? THEN addressee_id ELSE requester_id END AS id FROM friendships WHERE status='accepted' AND (requester_id=? OR addressee_id=?)",[id,id,id])).rows.map(r=>Number(r.id));
+}
 export async function d1ApiCacheGet(key){
   if(!d1ConfigStatus().configured)return null;
   await ensureD1Schema();

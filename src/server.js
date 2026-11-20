@@ -15,6 +15,7 @@ import {findTickets,ticketmasterConfigured,bandActivity} from "./providers/ticke
 import {CLIP_ID,clipMeta,clipPageHTML} from "./clippage.js";
 import {MBID,bandPageHTML} from "./bandpage.js";
 import {albumPageHTML} from "./albumpage.js";
+import {runConcertReminders,remindersEnabled,setRemindersEnabled} from "./reminders.js";
 import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding} from "./onboarding.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
@@ -224,7 +225,9 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
   const safeName=String(user.username||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const html=`<div style="background:#050607;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#e8ebee"><div style="max-width:480px;margin:0 auto;background:#0d1116;border:1px solid #2a333d;border-radius:14px;overflow:hidden">${base?`<img src="${base}/staypit-banner.png" alt="STAYPIT Radar Metal" width="480" style="display:block;width:100%;height:auto">`:''}<div style="padding:22px"><p style="margin:0 0 14px">Bonjour,</p><p style="margin:0 0 6px">Votre nom d’utilisateur STAYPIT :</p><p style="margin:0 0 18px;font-size:22px;font-weight:bold;color:#ff2733">${safeName}</p><p style="margin:0 0 16px">Pour choisir un nouveau mot de passe :</p><p style="margin:0 0 18px"><a href="${resetUrl}" style="display:inline-block;background:#e50914;color:#fff;text-decoration:none;font-weight:bold;padding:12px 18px;border-radius:10px">Choisir un nouveau mot de passe</a></p><p style="margin:0 0 8px;font-size:13px;color:#9aa3ad">Ce lien expire dans 30 minutes et ne peut être utilisé qu’une seule fois. Vous pouvez aussi vous connecter avec votre adresse e-mail à la place du nom d’utilisateur.</p><p style="margin:0;font-size:13px;color:#9aa3ad">Si vous n’êtes pas à l’origine de cette demande, ignorez simplement cet e-mail.</p></div></div></div>`;
   const rr=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({from,to:[user.email],subject:'STAYPIT — vos identifiants',html})});
-  if(!rr.ok)throw new Error('Envoi e-mail impossible'); return res.json({ok:true,message:generic});
+  // Keep Resend's reason in the server log (Render › Logs): unverified domain,
+  // API key limited to another domain, wrong EMAIL_FROM format…
+  if(!rr.ok){let why='';try{why=(await rr.text()).slice(0,300)}catch{}throw new Error(`Resend HTTP ${rr.status} ${why} (from: ${from})`)} return res.json({ok:true,message:generic});
  }catch(e){console.error('Password reset email:',e?.message||e);return res.status(502).json({error:'Impossible d’envoyer l’e-mail de récupération pour le moment.'})}
 });
 app.post('/api/auth/reset-password',async(req,res)=>{
@@ -235,7 +238,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.43.1",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.45.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -395,6 +398,26 @@ app.get("/api/public/album-tracks",async(req,res)=>{
   albumTracksCache.set(key,{expires:Date.now()+10*60*1000,data});res.set("Cache-Control","public, max-age=300");res.json(data);
  }catch(e){res.status(502).json({error:"Extraits indisponibles"})}
 });
+// "Écouter" on a concert: the most popular tracks of a band (30 s Deezer
+// previews), to discover the bands playing near you. The artist search is
+// cached 3 days; the preview links expire, so the top tracks only 10 minutes.
+const artistTopCache=new Map();
+export function bestDeezerArtist(rows,name){
+ const ok=(Array.isArray(rows)?rows:[]).filter(a=>a?.id&&artistMatch(a.name,name)>0);
+ return ok.sort((p,q)=>artistMatch(q.name,name)-artistMatch(p.name,name)||(Number(q.nb_fan||0)-Number(p.nb_fan||0)))[0]||null;
+}
+app.get("/api/music/artist-top",requireAuth,async(req,res)=>{
+ try{
+  const name=String(req.query.name||"").trim().slice(0,120);if(!name)return res.status(400).json({error:"name requis"});
+  const key=normMusic(name),hit=artistTopCache.get(key);if(hit&&hit.expires>Date.now())return res.json(hit.data);
+  const sa=await deezerJson(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=10`);
+  const a=bestDeezerArtist(sa?.data,name);let data={ok:false,name,tracks:[]};
+  if(a){const t=await deezerJsonLive(`https://api.deezer.com/artist/${a.id}/top?limit=5`);
+   const tracks=(Array.isArray(t?.data)?t.data:[]).filter(x=>/^https:\/\//.test(String(x?.preview||""))).map(x=>({title:String(x.title||""),preview:String(x.preview),album:String(x.album?.title||""),cover:String(x.album?.cover_medium||"")}));
+   data={ok:tracks.length>0,name:String(a.name||name),picture:String(a.picture_medium||""),fans:Number(a.nb_fan)||0,link:`https://www.deezer.com/artist/${a.id}`,tracks}}
+  if(artistTopCache.size>800)artistTopCache.clear();artistTopCache.set(key,{expires:Date.now()+10*60*1000,data});res.json(data);
+ }catch(e){res.status(502).json({error:"Extraits indisponibles pour le moment"})}
+});
 app.get("/api/music/preview",async(req,res)=>{
  try{
   const artist=String(req.query.artist||"").trim(),album=String(req.query.album||"").trim();
@@ -491,6 +514,10 @@ app.get("/api/support/mine",requireAuth,async(req,res)=>{try{const rows=await d1
 app.get("/api/admin/sources/find",requireAuth,requireAdmin,(req,res)=>res.json(findInSources(String(req.query.q||"").slice(0,80))));
 // Daily check of the sources and services (e-mail + message when something is wrong).
 app.get("/api/admin/monitor",requireAuth,requireAdmin,async(req,res)=>{try{res.json({last:await lastDailyCheck()})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/me/reminders",requireAuth,async(req,res)=>{try{res.json({enabled:await remindersEnabled(req.user.id),hasEmail:Boolean(req.user.email)})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/me/reminders",requireAuth,async(req,res)=>{try{await setRemindersEnabled(req.user.id,req.body?.enabled!==false);res.json({enabled:req.body?.enabled!==false})}catch(e){res.status(502).json({error:e.message})}});
+// Administrator: send my own reminders for a given day now (to test the e-mail).
+app.post("/api/admin/reminders/test",requireAuth,requireAdmin,async(req,res)=>{try{const day=/^\d{4}-\d{2}-\d{2}$/.test(String(req.body?.day||""))?String(req.body.day):undefined;res.json(await runConcertReminders({day,force:true,onlyUser:req.user.id}))}catch(e){res.status(502).json({error:e.message})}});
 app.post("/api/admin/monitor/run",requireAuth,requireAdmin,async(req,res)=>{try{res.json({last:await runDailyCheck({force:true})})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources/test",requireAuth,requireAdmin,async(req,res)=>{try{res.json({results:await testSources()})}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/admin/sources",requireAuth,requireAdmin,async(req,res)=>{try{res.json({sources:await sourcesHealth()})}catch(e){res.status(502).json({error:e.message})}});
@@ -654,4 +681,5 @@ try{
 }catch(e){console.error("D1 bootstrap error:",e?.message||e)}
 app.listen(port,()=>{console.log(`Music Radar V2: http://localhost:${port}`);setTimeout(()=>refreshAll().catch(e=>console.error(e)),500)});
 cron.schedule(process.env.REFRESH_CRON||"7 */2 * * *",()=>refreshAll().catch(e=>console.error(e)));
+cron.schedule(process.env.REMINDER_CRON||"3 10 * * *",()=>runConcertReminders().then(r=>{if(r.sent)console.log(`Concert reminders ${r.day}: ${r.sent} sent`)}).catch(e=>console.error("Concert reminders:",e?.message||e)),{timezone:"Europe/Paris"});
 cron.schedule(process.env.MONITOR_CRON||"17 7 * * *",()=>runDailyCheck().catch(e=>console.error("Daily check:",e?.message||e)),{timezone:"Europe/Paris"});

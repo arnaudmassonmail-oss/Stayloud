@@ -66,6 +66,7 @@ async function sendEmail(subject,text){
   if(!apiKey||!from||!to)return false;
   const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:640px"><h2 style="color:#c40010">STAYPIT · contrôle du jour</h2>${text.split("\n").map(l=>l?`<p style="margin:6px 0">${l.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p>`:"").join("")}</div>`;
   const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[to],subject,html})});
+  if(!r.ok){let why='';try{why=(await r.text()).slice(0,300)}catch{}console.error(`Monitor e-mail: Resend HTTP ${r.status} ${why}`)}
   return r.ok;
 }
 

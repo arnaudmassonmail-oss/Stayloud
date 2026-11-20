@@ -95,3 +95,18 @@ test("shared album page is public and rejects bad ids",async()=>{
   assert.equal((await fetch(B+"/album/nope",{redirect:"manual"})).status,302);
   assert.equal((await fetch(B+"/album?a=Gojira",{redirect:"manual"})).status,302);
   const r=await fetch(B+"/album?a=Gojira&t=Fortitude");assert.equal(r.status,200);assert.match(await r.text(),/Suivre Gojira sur STAYPIT/)});
+test("concert reminders: preference, and the day's 'J'y vais' concerts are found",async()=>{
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  assert.equal((await fetch(B+"/api/me/reminders")).status,401);
+  assert.equal((await (await fetch(B+"/api/me/reminders",{headers:{cookie:a}})).json()).enabled,true,"on by default");
+  const off=await fetch(B+"/api/me/reminders",{method:"POST",headers:{...J,cookie:a},body:JSON.stringify({enabled:false})});assert.equal((await off.json()).enabled,false);
+  assert.equal((await (await fetch(B+"/api/me/reminders",{headers:{cookie:a}})).json()).enabled,false);
+  await fetch(B+"/api/me/reminders",{method:"POST",headers:{...J,cookie:a},body:JSON.stringify({enabled:true})});
+  await fetch(B+"/api/agenda",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({key:"2099-12-24|lyon",status:"going",data:{title:"Gojira",artist:"Gojira",date:"2099-12-24",time:"20:00",venue:"Halle Tony Garnier",city:"Lyon"}})});
+  const r=await (await fetch(B+"/api/admin/reminders/test",{method:"POST",headers:{...J,cookie:a},body:JSON.stringify({day:"2099-12-24"})})).json();
+  assert.equal(r.concerts,1);assert.equal(r.sent,0,"no Resend key in tests");assert.match(r.errors[0],/RESEND_API_KEY/);
+  assert.equal((await fetch(B+"/api/admin/reminders/test",{method:"POST",headers:{...J,cookie:carl2}})).status,403)});
+test("band previews for a concert: login and a name needed",async()=>{
+  assert.equal((await fetch(B+"/api/music/artist-top?name=Gojira")).status,401);
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  assert.equal((await fetch(B+"/api/music/artist-top",{headers:{cookie:a}})).status,400)});
