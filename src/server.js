@@ -238,7 +238,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.44.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.45.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -397,6 +397,26 @@ app.get("/api/public/album-tracks",async(req,res)=>{
   if(albumTracksCache.size>500)albumTracksCache.clear();
   albumTracksCache.set(key,{expires:Date.now()+10*60*1000,data});res.set("Cache-Control","public, max-age=300");res.json(data);
  }catch(e){res.status(502).json({error:"Extraits indisponibles"})}
+});
+// "Écouter" on a concert: the most popular tracks of a band (30 s Deezer
+// previews), to discover the bands playing near you. The artist search is
+// cached 3 days; the preview links expire, so the top tracks only 10 minutes.
+const artistTopCache=new Map();
+export function bestDeezerArtist(rows,name){
+ const ok=(Array.isArray(rows)?rows:[]).filter(a=>a?.id&&artistMatch(a.name,name)>0);
+ return ok.sort((p,q)=>artistMatch(q.name,name)-artistMatch(p.name,name)||(Number(q.nb_fan||0)-Number(p.nb_fan||0)))[0]||null;
+}
+app.get("/api/music/artist-top",requireAuth,async(req,res)=>{
+ try{
+  const name=String(req.query.name||"").trim().slice(0,120);if(!name)return res.status(400).json({error:"name requis"});
+  const key=normMusic(name),hit=artistTopCache.get(key);if(hit&&hit.expires>Date.now())return res.json(hit.data);
+  const sa=await deezerJson(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=10`);
+  const a=bestDeezerArtist(sa?.data,name);let data={ok:false,name,tracks:[]};
+  if(a){const t=await deezerJsonLive(`https://api.deezer.com/artist/${a.id}/top?limit=5`);
+   const tracks=(Array.isArray(t?.data)?t.data:[]).filter(x=>/^https:\/\//.test(String(x?.preview||""))).map(x=>({title:String(x.title||""),preview:String(x.preview),album:String(x.album?.title||""),cover:String(x.album?.cover_medium||"")}));
+   data={ok:tracks.length>0,name:String(a.name||name),picture:String(a.picture_medium||""),fans:Number(a.nb_fan)||0,link:`https://www.deezer.com/artist/${a.id}`,tracks}}
+  if(artistTopCache.size>800)artistTopCache.clear();artistTopCache.set(key,{expires:Date.now()+10*60*1000,data});res.json(data);
+ }catch(e){res.status(502).json({error:"Extraits indisponibles pour le moment"})}
 });
 app.get("/api/music/preview",async(req,res)=>{
  try{

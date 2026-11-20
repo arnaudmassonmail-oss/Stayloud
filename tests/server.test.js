@@ -106,3 +106,7 @@ test("concert reminders: preference, and the day's 'J'y vais' concerts are found
   const r=await (await fetch(B+"/api/admin/reminders/test",{method:"POST",headers:{...J,cookie:a},body:JSON.stringify({day:"2099-12-24"})})).json();
   assert.equal(r.concerts,1);assert.equal(r.sent,0,"no Resend key in tests");assert.match(r.errors[0],/RESEND_API_KEY/);
   assert.equal((await fetch(B+"/api/admin/reminders/test",{method:"POST",headers:{...J,cookie:carl2}})).status,403)});
+test("band previews for a concert: login and a name needed",async()=>{
+  assert.equal((await fetch(B+"/api/music/artist-top?name=Gojira")).status,401);
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  assert.equal((await fetch(B+"/api/music/artist-top",{headers:{cookie:a}})).status,400)});
