@@ -238,7 +238,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.45.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.46.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -374,7 +374,7 @@ app.get("/api/music/album-tracks",async(req,res)=>{
   const td=await deezerJson(`https://api.deezer.com/album/${hit.id}/tracks?limit=100`);
   const tracks=(Array.isArray(td?.data)?td.data:[]).map((t,i)=>({id:t.id,title:t.title||`Piste ${i+1}`,preview:t.preview||null,trackUrl:t.link||null,artist:t.artist?.name||artist,album:t.album?.title||album}));
   if(!tracks.length)return res.status(502).json({error:"Pistes indisponibles pour le moment"});
-  const data={ok:true,album:hit.title||album,tracks};
+  const data={ok:true,album:hit.title||album,link:hit.id?`https://www.deezer.com/album/${hit.id}`:null,cover:hit.cover_xl||hit.cover_big||null,tracks:tracks.map((t,i)=>({...t,duration:Number(td.data[i]?.duration)||0}))};
   // Deezer preview URLs are signed and expire: keep them only a few minutes.
   deezerPreviewCache.set(key,{expires:Date.now()+10*60*1000,data});
   res.json(data);
