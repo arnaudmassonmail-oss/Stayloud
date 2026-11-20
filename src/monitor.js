@@ -62,7 +62,7 @@ async function serviceProblems(){
 
 async function sendEmail(subject,text){
   const apiKey=String(process.env.RESEND_API_KEY||"").trim(),from=String(process.env.EMAIL_FROM||"").trim();
-  const to=String(process.env.ALERT_EMAIL||"contact@stayloud-radar.online").trim();
+  const to=String(process.env.ALERT_EMAIL||"contact@staypit.com").trim();
   if(!apiKey||!from||!to)return false;
   const html=`<div style="font-family:Arial,Helvetica,sans-serif;color:#111;max-width:640px"><h2 style="color:#c40010">STAYPIT · contrôle du jour</h2>${text.split("\n").map(l=>l?`<p style="margin:6px 0">${l.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</p>`:"").join("")}</div>`;
   const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},body:JSON.stringify({from,to:[to],subject,html})});
