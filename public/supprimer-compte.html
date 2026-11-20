@@ -1,0 +1,49 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Supprimer mon compte – STAYPIT</title>
+<meta name="description" content="Supprimer ton compte STAYPIT Radar Metal et toutes tes données.">
+<link rel="icon" href="/favicon-32.png">
+<style>
+:root{--bg:#060709;--card:#0d1116;--line:#232a32;--text:#e8ebee;--muted:#8a939c;--red:#e50914}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,Arial,sans-serif}
+main{max-width:560px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:24px;letter-spacing:.04em;text-transform:uppercase;margin:0 0 14px;border-left:4px solid var(--red);padding-left:12px}
+section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px 18px 16px;margin-bottom:14px}
+ul{padding-left:20px;margin:6px 0}li{margin:4px 0}a{color:#ff5a64}
+.back{display:inline-block;margin-bottom:18px;color:#ff5a64;text-decoration:none;font-weight:700}
+label{display:block;margin:12px 0 4px;color:var(--muted);font-size:14px}
+input[type=text],input[type=password]{width:100%;padding:12px;border-radius:12px;border:1px solid #2c343d;background:#0b0e12;color:#fff;font:15px Inter,Arial,sans-serif}
+.chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0;color:#c9d0d6;font-size:14px}.chk input{margin-top:4px}
+button{width:100%;padding:13px;border:0;border-radius:12px;background:var(--red);color:#fff;font:700 15px Inter,Arial,sans-serif;cursor:pointer}button:disabled{opacity:.5;cursor:default}
+#msg{margin-top:12px;font-size:14px}#msg.ok{color:#7dffb0}#msg.err{color:#ff8a90}small{color:var(--muted)}
+</style></head><body><main>
+<a class="back" href="/">← Retour à STAYPIT</a>
+<h1>Supprimer mon compte</h1>
+<section>
+<p>Tu peux supprimer ton compte <b>STAYPIT Radar Metal</b> ici, ou depuis l’appli : <b>Mon compte › Supprimer mon compte</b>.</p>
+<p>La suppression est <b>immédiate et définitive</b>. Sont effacés :</p>
+<ul><li>ton compte (nom d’utilisateur, adresse e-mail, mot de passe) ;</li><li>tes groupes suivis, photos et descriptions choisies ;</li><li>ton agenda de concerts, tes amis, tes partages et tes messages.</li></ul>
+<p><small>Aucune donnée n’est conservée après la suppression. Une question : <a href="mailto:contact@staypit.com">contact@staypit.com</a>.</small></p>
+</section>
+<section>
+<form id="f" autocomplete="off">
+<label for="u">Nom d’utilisateur ou e-mail</label><input id="u" type="text" required autocomplete="username">
+<label for="p">Mot de passe</label><input id="p" type="password" required autocomplete="current-password">
+<div class="chk"><input id="c" type="checkbox"><label for="c" style="margin:0;color:inherit">Je comprends que mon compte et toutes mes données seront supprimés définitivement.</label></div>
+<button id="b" type="submit" disabled>Supprimer définitivement mon compte</button>
+<div id="msg" role="status"></div>
+</form>
+<p><small>Mot de passe oublié ? Ouvre <a href="/">STAYPIT</a> et touche « Identifiants oubliés », ou écris-nous.</small></p>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id),msg=(t,ok)=>{$('msg').textContent=t;$('msg').className=ok?'ok':'err'};
+$('c').onchange=()=>{$('b').disabled=!$('c').checked};
+$('f').onsubmit=async e=>{e.preventDefault();const username=$('u').value.trim(),password=$('p').value;if(!username||!password||!$('c').checked)return;
+ $('b').disabled=true;msg('Suppression en cours…',true);
+ try{const l=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});const ld=await l.json().catch(()=>({}));
+  if(!l.ok)throw new Error(ld.error||'Identifiants incorrects');
+  const d=await fetch('/api/auth/delete-account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});const dd=await d.json().catch(()=>({}));
+  if(!d.ok)throw new Error(dd.error||'Suppression impossible pour le moment');
+  $('f').innerHTML='<p style="color:#7dffb0;font-weight:700">✓ Ton compte et toutes tes données ont été supprimés. Merci d’avoir utilisé STAYPIT 🤘</p>'}
+ catch(err){msg(err.message||'Erreur',false);$('b').disabled=!$('c').checked}};
+</script></body></html>

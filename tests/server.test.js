@@ -110,3 +110,6 @@ test("band previews for a concert: login and a name needed",async()=>{
   assert.equal((await fetch(B+"/api/music/artist-top?name=Gojira")).status,401);
   const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
   assert.equal((await fetch(B+"/api/music/artist-top",{headers:{cookie:a}})).status,400)});
+test("Android app link file: empty until configured, public",async()=>{
+  const r=await fetch(B+"/.well-known/assetlinks.json");assert.equal(r.status,200);assert.deepEqual(await r.json(),[]);
+  const p=await fetch(B+"/supprimer-compte.html");assert.equal(p.status,200);assert.match(await p.text(),/Supprimer définitivement mon compte/)});
