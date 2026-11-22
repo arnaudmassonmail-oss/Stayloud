@@ -49,6 +49,7 @@ Contact : <a href="mailto:contact@staypit.com">contact@staypit.com</a></p>
 <li><b>Compte</b> : nom d’utilisateur, adresse e-mail, mot de passe (enregistré uniquement sous forme chiffrée, jamais en clair).</li>
 <li><b>Ton profil</b> (si tu le remplis) : prénom, nom, photo (facultative, réduite à 256 × 256 pixels), âge, ville et 3 styles préférés. Il est privé : seul toi le vois. La ville sert à calculer la distance des concerts ; l’âge vérifie que tu as au moins 15 ans. Modifiable à tout moment dans <b>Mon compte › Mon profil</b>, et effacé avec ton compte.</li>
 <li><b>Tes groupes suivis</b> et les styles associés. Ils restent privés : tes amis ne les voient pas.</li>
+<li><b>Tes vidéos de concert</b> (si tu en publies) : 30 secondes maximum, publiables jusqu’à 1 mois après un concert où tu as mis « J’y vais ». Elles sont visibles par les membres qui ont mis « J’y vais » ou « Intéressé » pour ce même concert, avec ton nom d’utilisateur. Elles sont <b>supprimées automatiquement 1 mois après le concert</b>, et tu peux les supprimer à tout moment. Une vidéo signalée peut être retirée par l’administrateur. Ne publie que des vidéos que tu as filmées toi-même.</li>
 <li><b>Ton agenda</b> : les concerts marqués « J’y vais » ou « Intéressé », y compris tes concerts passés. Ils sont visibles par tes amis acceptés.</li>
 <li><b>Amis</b> : demandes d’amis, amis acceptés, comptes bloqués.</li>
 <li><b>Partages</b> : les groupes que tu partages avec un ami et le message qui les accompagne.</li>
@@ -73,7 +74,8 @@ Contact : <a href="mailto:contact@staypit.com">contact@staypit.com</a></p>
 <ul>
 <li><b>Render</b> : hébergement du serveur de l’application.</li>
 <li><b>Cloudflare (D1)</b> : base de données où sont enregistrées les données ci-dessus.</li>
-<li><b>Resend</b> : envoi de l’e-mail de récupération de mot de passe, uniquement quand tu le demandes.</li>
+<li><b>Cloudflare (R2)</b> : stockage des vidéos de concert que tu publies.</li>
+<li><b>Resend</b> : envoi des e-mails (récupération de mot de passe, rappel la veille de tes concerts).</li>
 </ul>
 <p>Pour trouver les infos sur les groupes, les albums, les extraits et les concerts, le serveur interroge des services publics : MusicBrainz, Deezer, Wikipédia, TheAudioDB, Bandsintown, Songkick, Concerts-Metal, Sueur de Metal, Odesli, Ticketmaster (pour savoir si un concert y est en vente : seuls le groupe, la date et la ville sont envoyés). Seuls des noms de groupes, d’albums ou de villes leur sont envoyés, jamais tes données personnelles. Quand tu écoutes un extrait ou que tu ouvres un lien Deezer ou Spotify, c’est le service concerné qui fournit le contenu.</p>
 <p><b>Radio</b> : la liste des webradios vient de l’annuaire libre Radio Browser. Quand tu écoutes une radio, ton téléphone se connecte directement au serveur de cette radio, qui voit donc ton adresse IP, comme pour tout site web. Tes radios favorites sont enregistrées uniquement sur ton téléphone.</p>

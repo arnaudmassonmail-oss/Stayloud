@@ -119,3 +119,11 @@ test("profile: login needed, empty at first, checked before saving",async()=>{
   assert.equal((await (await fetch(B+"/api/me/profile",{headers:{cookie:a}})).json()).profile,null);
   const bad=await fetch(B+"/api/me/profile",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({firstName:"Arnaud",age:12,city:"Nantes",styles:["Rock"]})});
   assert.equal(bad.status,400);assert.match((await bad.json()).error,/15 ans/)});
+test("concert videos: only for those who went or were interested; off until R2 is set",async()=>{
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  assert.equal((await fetch(B+"/api/concert-videos?key=x")).status,401);
+  assert.equal((await fetch(B+"/api/concert-videos?key=2099-01-01|nowhere",{headers:{cookie:a}})).status,403,"not in my agenda");
+  await fetch(B+"/api/agenda",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({key:"2026-11-01|zenith",status:"going",data:{title:"Gojira",artist:"Gojira",date:"2026-11-01",venue:"Zénith",city:"Nantes"}})});
+  const r=await (await fetch(B+"/api/concert-videos?key="+encodeURIComponent("2026-11-01|zenith"),{headers:{cookie:a}})).json();assert.equal(r.enabled,false);assert.deepEqual(r.items,[]);
+  const up=await fetch(B+"/api/concert-videos",{method:"POST",headers:{...J,cookie:a},body:JSON.stringify({key:"2026-11-01|zenith",contentType:"video/mp4",size:1000,duration:10})});assert.equal(up.status,503);
+  assert.deepEqual((await (await fetch(B+"/api/concert-videos/counts",{method:"POST",headers:{...J,cookie:a},body:JSON.stringify({keys:["2026-11-01|zenith"]})})).json()).counts,{})});

@@ -150,6 +150,9 @@ export async function ensureD1Schema(){
       `CREATE TABLE IF NOT EXISTS calendar_tokens(user_id INTEGER PRIMARY KEY,token TEXT NOT NULL UNIQUE,created_at TEXT)`,
       // Shared answers of outside services (MusicBrainz, Deezer…), see apicache.js.
       `CREATE TABLE IF NOT EXISTS api_cache(key TEXT PRIMARY KEY,value TEXT NOT NULL,at INTEGER NOT NULL)`,
+      // Videos of a concert (≤ 30 s), stored in R2, deleted 1 month after the concert.
+      `CREATE TABLE IF NOT EXISTS concert_videos(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,ckey TEXT NOT NULL,concert_date TEXT NOT NULL,title TEXT,r2_key TEXT NOT NULL,content_type TEXT,size INTEGER,duration REAL,status TEXT NOT NULL,reports INTEGER DEFAULT 0,created_at TEXT NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS idx_concert_videos_ckey ON concert_videos(ckey)`,
       // "Signaler un concert": shows members add, visible once the admin approves.
       `CREATE TABLE IF NOT EXISTS community_concerts(id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL,title TEXT NOT NULL,bands TEXT,date TEXT NOT NULL,time TEXT,venue TEXT,city TEXT NOT NULL,lat REAL,lon REAL,url TEXT,note TEXT,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT,reviewed_at TEXT)`
     ];
@@ -546,6 +549,37 @@ export async function d1FriendIds(userId){
   const id=Number(userId);
   return (await query("SELECT CASE WHEN requester_id=? THEN addressee_id ELSE requester_id END AS id FROM friendships WHERE status='accepted' AND (requester_id=? OR addressee_id=?)",[id,id,id])).rows.map(r=>Number(r.id));
 }
+// ---- Concert videos ----
+export async function d1UserConcertStatus(userId,ckey){
+  await ensureD1Schema();
+  const r=(await query("SELECT status,data FROM user_concerts WHERE user_id=? AND ckey=?",[Number(userId),String(ckey)])).rows[0];
+  if(!r)return null;let data={};try{data=JSON.parse(r.data||"{}")}catch{}return {status:r.status,data};
+}
+export async function d1AddConcertVideo(v){
+  await ensureD1Schema();
+  const r=await query("INSERT INTO concert_videos(user_id,ckey,concert_date,title,r2_key,content_type,size,duration,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",[Number(v.userId),String(v.ckey),String(v.date),String(v.title||""),String(v.r2Key),String(v.contentType||""),Number(v.size)||0,Number(v.duration)||0,"pending",now()]);
+  return Number(r.meta?.last_row_id||r.lastRowId||0)||Number((await query("SELECT MAX(id) AS id FROM concert_videos WHERE user_id=?",[Number(v.userId)])).rows[0]?.id||0);
+}
+export async function d1GetConcertVideo(id){await ensureD1Schema();return (await query("SELECT * FROM concert_videos WHERE id=?",[Number(id)])).rows[0]||null}
+export async function d1SetConcertVideoStatus(id,status,size){await ensureD1Schema();await query("UPDATE concert_videos SET status=?,size=COALESCE(?,size) WHERE id=?",[String(status),size==null?null:Number(size),Number(id)])}
+export async function d1ConcertVideos(ckey,viewerId){
+  await ensureD1Schema();
+  return (await query("SELECT v.id,v.user_id,u.username,v.r2_key,v.content_type,v.duration,v.created_at FROM concert_videos v JOIN users u ON u.id=v.user_id WHERE v.ckey=? AND v.status='ready' AND v.user_id NOT IN (SELECT blocked_id FROM user_blocks WHERE user_id=? UNION SELECT user_id FROM user_blocks WHERE blocked_id=?) ORDER BY v.created_at DESC LIMIT 60",[String(ckey),Number(viewerId),Number(viewerId)])).rows;
+}
+export async function d1CountConcertVideos(ckeys){
+  await ensureD1Schema();if(!ckeys.length)return {};
+  const rows=(await query(`SELECT ckey,COUNT(*) AS n FROM concert_videos WHERE status='ready' AND ckey IN (${ckeys.map(()=>"?").join(",")}) GROUP BY ckey`,ckeys.map(String))).rows;
+  return Object.fromEntries(rows.map(r=>[r.ckey,Number(r.n)]));
+}
+export async function d1CountUserVideosSince(userId,sinceIso){await ensureD1Schema();return Number((await query("SELECT COUNT(*) AS n FROM concert_videos WHERE user_id=? AND created_at>?",[Number(userId),String(sinceIso)])).rows[0]?.n||0)}
+export async function d1ReportConcertVideo(id){await ensureD1Schema();await query("UPDATE concert_videos SET reports=reports+1 WHERE id=?",[Number(id)])}
+export async function d1DeleteConcertVideoRow(id){await ensureD1Schema();await query("DELETE FROM concert_videos WHERE id=?",[Number(id)])}
+// Videos to remove: concert older than `beforeDay`, unfinished uploads older than a day.
+export async function d1ExpiredConcertVideos(beforeDay,pendingBeforeIso){
+  await ensureD1Schema();
+  return (await query("SELECT id,r2_key FROM concert_videos WHERE concert_date<? OR (status='pending' AND created_at<?) LIMIT 500",[String(beforeDay),String(pendingBeforeIso)])).rows;
+}
+export async function d1UserVideoKeys(userId){await ensureD1Schema();return (await query("SELECT id,r2_key FROM concert_videos WHERE user_id=?",[Number(userId)])).rows}
 export async function d1ApiCacheGet(key){
   if(!d1ConfigStatus().configured)return null;
   await ensureD1Schema();
@@ -604,6 +638,7 @@ export async function d1DeleteAccount(userId){
     ["DELETE FROM sessions WHERE user_id=?",[id]],
     ["DELETE FROM api_cache WHERE key IN (?,?)",[`profile:${id}`,`pref:remind:${id}`]],
     ["DELETE FROM api_cache WHERE key LIKE ?",[`remind:sent:${id}:%`]],
+    ["DELETE FROM concert_videos WHERE user_id=?",[id]],
     ["DELETE FROM users WHERE id=?",[id]]
   ];
   for(const [sql,params] of steps)await query(sql,params);

@@ -170,7 +170,7 @@
 .onb-bar{width:80%;height:6px;border-radius:3px;background:#1b2128;overflow:hidden}.onb-bar i{display:block;height:100%;background:#d4141e}
 .grp-sort{display:inline-flex;margin-left:auto;margin-right:10px;border:1px solid #2c343d;border-radius:999px;overflow:hidden;flex:none;align-self:center}.grp-sort button{background:none;border:0;color:#9aa4ae;font:600 12px Inter,Arial,sans-serif;padding:6px 11px;cursor:pointer}.grp-sort button.on{background:#d4141e;color:#fff}
 .sl-shr{cursor:pointer;font:inherit}.sl-shr svg{width:16px;height:16px}.sl-rel-cal svg{width:18px;height:18px}
-.sl-listen{border:0;cursor:pointer;padding:0;background:linear-gradient(180deg,#2b7bff,#1456c9);box-shadow:0 2px 8px rgba(43,123,255,.35)}.sl-listen svg{width:15px;height:15px}
+.sl-news-pill.sl-listen{border:0;cursor:pointer;padding:0;background:linear-gradient(180deg,#2b7bff,#1456c9);box-shadow:0 2px 8px rgba(43,123,255,.35)}.sl-listen svg{width:15px;height:15px}
 .sl-listen-head{color:#9aa4ae;font-size:13px;margin:0 2px 10px}.sl-listen-note{color:#6f7a85;font-size:12px;margin:10px 2px 0}
 .sl-lb{border:1px solid #232a31;border-radius:14px;background:#0b0e12;padding:10px;margin-bottom:10px}
 .sl-lb-top{display:flex;align-items:center;gap:10px}.sl-lb-img{flex:none;width:44px;height:44px;border-radius:50%;background:#1b2128 center/cover no-repeat}
@@ -188,6 +188,12 @@
 .sl-alb-n{flex:none;width:22px;text-align:right;color:#6f7a85;font-size:13px}.sl-alb-t{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sl-alb-tracks small{color:#6f7a85;font-size:12px}
 .sl-alb-tracks button{flex:none;width:34px;height:34px;border-radius:50%;border:0;background:#d4141e;color:#fff;font-size:13px;cursor:pointer}.sl-alb-tracks li.on button{background:#fff;color:#d4141e}.sl-alb-tracks button:disabled{background:#2c343d;color:#6f7a85;cursor:default}
 .sl-alb-wait{justify-content:center;color:#9aa4ae;cursor:default}
+.sl-news-pill.sl-vidbtn{position:relative;border:0;cursor:pointer;padding:0;font-size:13px;background:linear-gradient(180deg,#8b3dff,#5a1fc0);box-shadow:0 2px 8px rgba(139,61,255,.35)}.sl-vidbtn b{position:absolute;top:-6px;right:-6px;min-width:16px;height:16px;border-radius:8px;background:#fff;color:#5a1fc0;font:800 10px/16px Inter,Arial,sans-serif;padding:0 3px}
+.cv-add{display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;margin-bottom:12px}.cv-add small{font-weight:400;opacity:.85}.cv-note{color:#9aa4ae;font-size:13px;margin:0 2px 12px}
+.cv-prog{margin:0 0 12px;color:#c9d0d6;font-size:14px}.cv-prog .onb-bar{width:100%;margin-top:6px}
+.cv-item{border:1px solid #232a31;border-radius:14px;overflow:hidden;background:#000;margin-bottom:12px}.cv-item video{display:block;width:100%;max-height:60vh;background:#000}
+.cv-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#0b0e12;font-size:13px;color:#c9d0d6}.cv-acts{display:flex;gap:6px}
+.cv-acts button{background:none;border:1px solid #2c343d;border-radius:999px;color:#c9d0d6;font:600 12px Inter,Arial,sans-serif;padding:5px 10px;cursor:pointer}.cv-acts button:disabled{opacity:.5}
 .sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 </style><style id="sl-albums-v2">
 /* Albums & extract player (v7.18.12) */
@@ -1353,7 +1359,7 @@ let AG={};const EVREG={};
 function agendaKey(x){const d=String(x?.date||'').slice(0,10);const v=normUi(x?.venue||'');return v?`${d}|${v}`:`${d}|${normUi(x?.city||'')}|${normUi(x?.artist||x?.title||'').slice(0,40)}`}
 const MARK_ICON={going:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>',interested:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>',none:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></svg>'};
 function markBtnHTML(x){const k=agendaKey(x);if(!k||k.startsWith('|'))return '';EVREG[k]=x;const st=AG[k]?.status||'none';return `<button type="button" class="sl-mark ${st}" data-k="${esc(k)}" onclick="event.stopPropagation();openMarkSheet(this.dataset.k)" aria-label="${st==='going'?'J’y vais':st==='interested'?'Intéressé':'Ajouter à mon agenda'}">${MARK_ICON[st]}</button>`}
-async function loadAgenda(){try{const d=await api('/api/agenda');AG={};for(const r of d.items||[])AG[r.key]={status:r.status,data:r.data};syncMarks();if(concertMode==='agenda')renderAgenda();setTimeout(concertSoonNotice,2500)}catch{}}
+async function loadAgenda(){try{const d=await api('/api/agenda');AG={};for(const r of d.items||[])AG[r.key]={status:r.status,data:r.data};syncMarks();if(concertMode==='agenda')renderAgenda();setTimeout(concertSoonNotice,2500);loadVideoCounts()}catch{}}
 function openMarkSheet(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;const cur=AG[k]?.status||'';const items=[{value:'going',label:'J’y vais',icon:'✓',sub:'Ajouté à ton agenda'},{value:'interested',label:'Intéressé',icon:'★',sub:'À garder en tête'}];if(cur)items.push({value:'remove',label:'Retirer de mon agenda',icon:'✕'});
  if(x.date&&String(x.date).slice(0,10)>=new Date().toISOString().slice(0,10))items.push({value:'cal',label:'Ajouter à mon calendrier',icon:'📅',sub:'iPhone, Android, Outlook…'},{value:'gcal',label:'Google Agenda',icon:'G',sub:'Ouvre Google Agenda'});
  openChoiceSheet({title:String(x.artist||x.title||'Concert').slice(0,60),items,current:cur,onPick:v=>v==='cal'?addToCalendar(x):v==='gcal'?window.open(googleCalUrl(x),'_blank','noopener'):setMark(k,v)})}
@@ -1386,6 +1392,42 @@ async function followBand(btn){const name=btn.dataset.name;if(!name||isFollowed(
   if(r?.artist){const e=A.findIndex(a=>Number(a.id)===Number(r.artist.id));if(e>=0)A[e]=r.artist;else A.push(r.artist)}
   btn.classList.add('done');btn.textContent='✓ Suivi';slToast(`${name} ajouté à tes groupes 🤘 Ses infos arrivent dans quelques minutes.`);try{render()}catch{}}
  catch(e){btn.disabled=false;btn.textContent='+ Suivre';slToast('Ajout impossible : '+(e.message||'réessaie plus tard'))}}
+// ---- 🎥 Vidéos de concert (v7.49) ----
+// After a concert: those who went post a ≤ 30 s video (up to 1 month later);
+// those who went or were interested watch them. Deleted 1 month after.
+let VIDCOUNT={};
+function todayYmd(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function videoEligible(x){const k=agendaKey(x),st=AG[k]?.status;if(!['going','interested'].includes(st))return false;const d=String(x?.date||'').slice(0,10),t=todayYmd();if(!d||d>t)return false;return (Date.parse(t)-Date.parse(d))/864e5<=30}
+function videoBtnHTML(x){if(!videoEligible(x))return '';const k=agendaKey(x);EVREG[k]=x;const n=VIDCOUNT[k]||0;
+ return `<button type="button" class="sl-news-pill sl-vidbtn" data-k="${esc(k)}" onclick="event.stopPropagation();openConcertVideos(this.dataset.k)" aria-label="Vidéos du concert">🎥${n?`<b>${n}</b>`:''}</button>`}
+async function loadVideoCounts(){const keys=Object.entries(AG||{}).filter(([k,a])=>a.data&&videoEligible(a.data)).map(([k])=>k);if(!keys.length)return;
+ try{VIDCOUNT=(await api('/api/concert-videos/counts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({keys})})).counts||{};document.querySelectorAll('.sl-vidbtn').forEach(b=>{const n=VIDCOUNT[b.dataset.k]||0;b.innerHTML='🎥'+(n?`<b>${n}</b>`:'')})}catch{}}
+function videoDuration(file){return new Promise(ok=>{const v=document.createElement('video'),u=URL.createObjectURL(file);v.preload='metadata';v.muted=true;v.onloadedmetadata=()=>{const d=v.duration;URL.revokeObjectURL(u);ok(Number.isFinite(d)?d:0)};v.onerror=()=>{URL.revokeObjectURL(u);ok(0)};v.src=u})}
+function videoType(file){const t=String(file.type||'').toLowerCase();if(/^video\/(mp4|quicktime|webm)$/.test(t))return t;const e=String(file.name||'').toLowerCase().split('.').pop();return {mp4:'video/mp4',m4v:'video/mp4',mov:'video/quicktime',webm:'video/webm'}[e]||t}
+async function openConcertVideos(k){const x=EVREG[k]||AG[k]?.data;if(!x)return;try{slStop()}catch{}try{if(radioAudio&&!radioAudio.paused)radioToggle()}catch{}
+ const band=x.artist||x.title||'Concert',where=[x.venue,x.city].filter(Boolean).join(' · ');
+ const {m}=slMiniSheet('videoListSheet','Vidéos du concert',`<div class="sl-listen-head"><b style="color:#fff">${esc(band)}</b>${where?' · '+esc(where):''} · ${esc(relDate?relDate(x.date):x.date)}</div><div id="cvBody"><div class="sl-pick-empty">⏳ Chargement…</div></div>`);
+ const body=m.querySelector('#cvBody');
+ const draw=async()=>{let r;try{r=await api('/api/concert-videos?key='+encodeURIComponent(k))}catch(e){body.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div>`;return}
+  if(!r.enabled){body.innerHTML='<div class="sl-pick-empty">Les vidéos de concert arrivent bientôt 🎥</div>';return}
+  VIDCOUNT[k]=r.items.length;document.querySelectorAll(`.sl-vidbtn[data-k="${CSS.escape(k)}"]`).forEach(b=>b.innerHTML='🎥'+(r.items.length?`<b>${r.items.length}</b>`:''));
+  const add=r.canPost?`<label class="sl-news-ok cv-add"><input type="file" accept="video/*" hidden id="cvFile">＋ Ajouter ma vidéo <small>(30 s max)</small></label>`:(AG[k]?.status==='interested'?'<div class="cv-note">Seuls ceux qui y sont allés (« J’y vais ») peuvent poster une vidéo.</div>':'');
+  body.innerHTML=add+'<div id="cvProg"></div>'+(r.items.length?r.items.map(v=>`<div class="cv-item" data-id="${v.id}"><video src="${esc(v.url)}" controls playsinline preload="metadata"></video><div class="cv-meta"><span>🎥 <b>${esc(v.by)}</b>${v.mine?' (toi)':''}</span><span class="cv-acts">${v.canDelete?`<button type="button" data-del="${v.id}">🗑 Supprimer</button>`:''}${v.mine?'':`<button type="button" data-rep="${v.id}">⚑ Signaler</button>`}</span></div></div>`).join(''):'<div class="sl-pick-empty">Pas encore de vidéo pour ce concert.'+(r.canPost?' Sois le premier à en poster une 🤘':'')+'</div>')
+   +`<p class="sl-listen-note">Visibles par ceux qui y sont allés ou étaient intéressés. Supprimées automatiquement 1 mois après le concert${r.daysLeft?` (dans ${r.daysLeft} jour${r.daysLeft>1?'s':''})`:''}.</p>`;
+  body.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('Supprimer cette vidéo ?'))return;try{await api('/api/concert-videos/'+b.dataset.del,{method:'DELETE'});slToast('Vidéo supprimée');draw()}catch(e){slToast(e.message)}});
+  body.querySelectorAll('[data-rep]').forEach(b=>b.onclick=async()=>{const reason=prompt('Pourquoi signales-tu cette vidéo ? (contenu choquant, hors sujet…)');if(reason===null)return;try{await api('/api/concert-videos/'+b.dataset.rep+'/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason})});slToast('Merci, la vidéo a été signalée');b.disabled=true}catch(e){slToast(e.message)}});
+  const f=body.querySelector('#cvFile');if(f)f.onchange=async()=>{const file=f.files?.[0];f.value='';if(!file)return;const prog=body.querySelector('#cvProg');
+   const type=videoType(file);if(!/^video\/(mp4|quicktime|webm)$/.test(type))return slToast('Format non pris en charge : choisis une vidéo MP4 ou MOV');
+   if(file.size>60*1024*1024)return slToast('Vidéo trop lourde (60 Mo maximum)');
+   const dur=await videoDuration(file);if(!dur)return slToast('Vidéo illisible');if(dur>30.9)return slToast(`Ta vidéo dure ${Math.round(dur)} s : 30 s maximum. Raccourcis-la avec l’éditeur de ton téléphone (Photos › Modifier), puis réessaie.`);
+   prog.innerHTML='<div class="cv-prog"><span>Envoi de la vidéo… <b id="cvPct">0 %</b></span><div class="onb-bar"><i id="cvBar" style="width:0%"></i></div></div>';
+   try{const up=await api('/api/concert-videos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k,contentType:type,size:file.size,duration:dur})});
+    await new Promise((ok,ko)=>{const xh=new XMLHttpRequest();xh.open('PUT',up.uploadUrl);xh.setRequestHeader('Content-Type',up.contentType);
+     xh.upload.onprogress=e=>{if(e.lengthComputable){const p=Math.round(100*e.loaded/e.total);const b=m.querySelector('#cvBar'),t=m.querySelector('#cvPct');if(b)b.style.width=p+'%';if(t)t.textContent=p+' %'}};
+     xh.onload=()=>xh.status<300?ok():ko(new Error('Envoi refusé ('+xh.status+')'));xh.onerror=()=>ko(new Error('Connexion perdue pendant l’envoi'));xh.send(file)});
+    await api('/api/concert-videos/'+up.id+'/done',{method:'POST'});slToast('Vidéo publiée 🤘');draw()}
+   catch(e){prog.innerHTML='';slToast(e.message||'Envoi impossible')}}};
+ draw()}
 function openConcertListen(k){const x=EVREG[k];if(!x)return;const bands=listenBands(x);
  try{slStop()}catch{}try{if(radioAudio&&!radioAudio.paused)radioToggle()}catch{}
  const html=`<div class="sl-listen-head">${esc([x.venue,x.city].filter(Boolean).join(' · '))}${x.date?' · '+esc(relDate?relDate(x.date):x.date):''}</div>`+bands.map((b,i)=>`<div class="sl-lb" id="lb${i}"><div class="sl-lb-top"><span class="sl-lb-img"></span><span class="sl-lb-name"><b>${esc(b)}</b><small>Recherche des extraits…</small></span>${followBtnHTML(b)}</div><ol class="sl-lb-tracks"></ol></div>`).join('')+'<p class="sl-listen-note">Extraits de 30 s (Deezer) des titres les plus écoutés de chaque groupe.</p>';
@@ -1782,7 +1824,7 @@ function concertCardHTML(x,{mine=false,geo=false,festival=false}={}){
  const km=geo?Number(x.distanceKm):(mine?mineDistance(x):NaN);const dist=(geo||mine)&&km!==null&&Number.isFinite(Number(km))?` · <b>${Number(km)<5?'&lt; 5':Math.round(Number(km))} km</b>`:'';
  const thumb=own?`<div class="sl-ev-img" ${photoStyle(imgForArtist(own))}></div>`:`<div class="sl-ev-img sl-ev-ph">${esc(String(band||'?').trim().charAt(0).toUpperCase())}</div>`;
  const frW=FAG[agendaKey(x)]?.who||[];
- return `<article class="sl-ev${frW.length?' sl-ev-fr':''}${frW.some(w=>w.status==='going')?' sl-ev-frgo':''}"><div class="sl-ev-date"><b>${day}</b><small>${esc(mon)}</small></div>${thumb}<div class="sl-ev-info"><div class="sl-ev-band">${esc(band)}${geo&&own?' <span class="sl-mine">Ton groupe</span>':''}${festival?' <span class="sl-fest">Festival</span>':''}${x.community?' <span class="sl-cc-tag">Signalé</span>':''}</div><div class="sl-ev-title">${esc(title)}${support?' <span class="support-tag">Première partie</span>':''}</div><div class="sl-ev-place">${place}${dist}</div>${friendsLineHTML(agendaKey(x))}</div><div class="sl-ev-acts">${markBtnHTML(x)}${ticketBtnHTML(x)}${listenBtnHTML(x)}</div></article>`}
+ return `<article class="sl-ev${frW.length?' sl-ev-fr':''}${frW.some(w=>w.status==='going')?' sl-ev-frgo':''}"><div class="sl-ev-date"><b>${day}</b><small>${esc(mon)}</small></div>${thumb}<div class="sl-ev-info"><div class="sl-ev-band">${esc(band)}${geo&&own?' <span class="sl-mine">Ton groupe</span>':''}${festival?' <span class="sl-fest">Festival</span>':''}${x.community?' <span class="sl-cc-tag">Signalé</span>':''}</div><div class="sl-ev-title">${esc(title)}${support?' <span class="support-tag">Première partie</span>':''}</div><div class="sl-ev-place">${place}${dist}</div>${friendsLineHTML(agendaKey(x))}</div><div class="sl-ev-acts">${markBtnHTML(x)}${ticketBtnHTML(x)}${listenBtnHTML(x)}${videoBtnHTML(x)}</div></article>`}
 function concertGeoSummary(place){const rows=[...discoverEventsData,...discoverFestivalsData];const mine=new Set(rows.map(x=>followedInText(`${x.title||''} ${x.artist||''}`)?.id).filter(Boolean)).size;return `Concerts métal autour de <strong>${esc(place)}</strong> · ${discoverRadius} km${mine?` · <strong>${mine}</strong> de vos groupes`:''}`}
 function syncRadiusChips(){const r=Number($('discoverRadius').value)||50;document.querySelectorAll('#geoTools .sl-chip').forEach(c=>c.classList.toggle('on',Number(c.dataset.r)===r))}
 function setConcertMode(m,{run=true}={}){
