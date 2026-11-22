@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1CalendarToken,d1UserByCalendarToken,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
+import {d1ApiCacheGet,d1ApiCachePut,d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1CalendarToken,d1UserByCalendarToken,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport,d1UserConcertStatus,d1AddConcertVideo,d1GetConcertVideo,d1SetConcertVideoStatus,d1ConcertVideos,d1CountConcertVideos,d1CountUserVideosSince,d1ReportConcertVideo,d1DeleteConcertVideoRow,d1ExpiredConcertVideos,d1UserVideoKeys} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents,keepArtistAddedAt} from "./db.js";
@@ -15,8 +15,9 @@ import {findTickets,ticketmasterConfigured,bandActivity} from "./providers/ticke
 import {CLIP_ID,clipMeta,clipPageHTML} from "./clippage.js";
 import {MBID,bandPageHTML} from "./bandpage.js";
 import {albumPageHTML} from "./albumpage.js";
-import {runConcertReminders,remindersEnabled,setRemindersEnabled} from "./reminders.js";
-import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding} from "./onboarding.js";
+import {runConcertReminders,remindersEnabled,setRemindersEnabled,parisDay} from "./reminders.js";
+import {r2Config,presign,r2Head,r2Delete} from "./r2.js";
+import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding,cleanProfile} from "./onboarding.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
@@ -186,6 +187,7 @@ app.post('/api/auth/delete-account',requireAuth,async(req,res)=>{
   const u=await d1AuthenticateUser(req.user.username,String(req.body?.password||''));
   if(!u||Number(u.id)!==Number(req.user.id)){deleteFails.add(dk);return res.status(403).json({error:'Mot de passe incorrect'})}
   const id=Number(req.user.id);
+  try{for(const v of await d1UserVideoKeys(id))await r2Delete(v.r2_key).catch(()=>{})}catch(e){console.error('Video cleanup:',e?.message||e)}
   await d1DeleteAccount(id);
   try{deleteLocalUser(id)}catch(e){console.error('Local account delete:',e?.message||e)}
   for(const [k,v] of sessionCache)if(Number(v?.user?.id)===id)sessionCache.delete(k);
@@ -238,7 +240,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.47.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.49.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -438,7 +440,47 @@ app.get("/api/music/preview",async(req,res)=>{
 app.get("/api/discover/profile",async(req,res)=>{try{const name=String(req.query.name||"").trim();const mbid=String(req.query.mbid||"").trim();if(!name&&!mbid)return res.status(400).json({error:"name ou mbid requis"});const p=await fetchArtistProfile({id:mbid||`discover-${name}`,name,mbid:mbid||null});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/onboarding/styles",requireAuth,(req,res)=>res.json({styles:Object.keys(ONBOARD_STYLES)}));
 app.get("/api/onboarding/resolve",requireAuth,async(req,res)=>{try{const name=String(req.query.name||"").trim().slice(0,120),from=String(req.query.from||"");if(!name)return res.status(400).json({error:"name requis"});res.json({artist:await resolveForOnboarding(name,from)})}catch(e){res.json({artist:null})}});
-app.get("/api/onboarding/suggestions",requireAuth,async(req,res)=>{try{let styles=[];try{styles=JSON.parse(String(req.query.styles||"[]"))}catch{}res.json(await onboardingSuggestions(styles))}catch(e){res.status(502).json({error:"Suggestions indisponibles"})}});
+// ---- Vidéos de concert (≤ 30 s), dans R2 ----
+// Posted by members who went ("J'y vais"), up to 1 month after the concert;
+// seen by those who went or were interested; deleted 1 month after the concert.
+const VIDEO_MAX_BYTES=60*1024*1024,VIDEO_MAX_SECONDS=30,VIDEO_DAYS=30,VIDEO_TYPES={"video/mp4":"mp4","video/quicktime":"mov","video/webm":"webm"};
+export function videoWindow(concertDay,today){const d=Date.parse(String(concertDay).slice(0,10)+"T12:00:00Z"),t=Date.parse(today+"T12:00:00Z");if(!Number.isFinite(d))return {open:false,daysLeft:0};const age=Math.round((t-d)/864e5);return {open:age>=0&&age<=VIDEO_DAYS,started:age>=0,daysLeft:Math.max(0,VIDEO_DAYS-age)}}
+async function videoAccess(userId,key){const st=await d1UserConcertStatus(userId,key);const day=String(st?.data?.date||"").slice(0,10);return {status:st?.status||null,data:st?.data||{},day,win:videoWindow(day,parisDay())}}
+app.get("/api/concert-videos",requireAuth,async(req,res)=>{try{const key=String(req.query.key||"").slice(0,200);const a=await videoAccess(req.user.id,key);
+  if(!["going","interested"].includes(a.status))return res.status(403).json({error:"Les vidéos sont réservées à ceux qui ont mis « J’y vais » ou « Intéressé » pour ce concert"});
+  const cfg=r2Config(),admin=await isAdmin(req.user).catch(()=>false);const rows=cfg?await d1ConcertVideos(key,req.user.id):[];
+  res.json({enabled:!!cfg,canPost:!!cfg&&a.status==="going"&&a.win.open,daysLeft:a.win.daysLeft,started:a.win.started,
+   items:rows.map(v=>({id:Number(v.id),by:v.username,mine:Number(v.user_id)===Number(req.user.id),canDelete:admin||Number(v.user_id)===Number(req.user.id),duration:Number(v.duration)||0,at:v.created_at,url:presign("GET",v.r2_key,{expires:3600}),type:v.content_type}))})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/concert-videos/counts",requireAuth,async(req,res)=>{try{const keys=(Array.isArray(req.body?.keys)?req.body.keys:[]).map(k=>String(k).slice(0,200)).slice(0,100);res.json({counts:r2Config()?await d1CountConcertVideos(keys):{}})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/concert-videos",requireAuth,async(req,res)=>{try{if(!r2Config())return res.status(503).json({error:"Les vidéos ne sont pas encore activées"});
+  const key=String(req.body?.key||"").slice(0,200),type=String(req.body?.contentType||"").toLowerCase().split(";")[0].trim(),size=Number(req.body?.size)||0,duration=Number(req.body?.duration)||0;
+  if(!VIDEO_TYPES[type])return res.status(400).json({error:"Format non pris en charge (MP4, MOV ou WebM)"});
+  if(!size||size>VIDEO_MAX_BYTES)return res.status(400).json({error:"Vidéo trop lourde (60 Mo maximum)"});
+  if(!(duration>0)||duration>VIDEO_MAX_SECONDS+0.9)return res.status(400).json({error:"30 secondes maximum : raccourcis ta vidéo"});
+  const a=await videoAccess(req.user.id,key);if(a.status!=="going")return res.status(403).json({error:"Seuls ceux qui y sont allés (« J’y vais ») peuvent poster une vidéo"});
+  if(!a.win.started)return res.status(400).json({error:"Le concert n’a pas encore eu lieu"});if(!a.win.open)return res.status(400).json({error:"Plus d’un mois après le concert : il n’est plus possible de poster"});
+  if(await d1CountUserVideosSince(req.user.id,new Date(Date.now()-864e5).toISOString())>=10)return res.status(429).json({error:"10 vidéos par jour maximum"});
+  const r2Key=`videos/${crypto.createHash("sha1").update(key).digest("hex").slice(0,16)}/${req.user.id}-${crypto.randomBytes(8).toString("hex")}.${VIDEO_TYPES[type]}`;
+  const id=await d1AddConcertVideo({userId:req.user.id,ckey:key,date:a.day,title:String(a.data?.artist||a.data?.title||"").slice(0,120),r2Key,contentType:type,size,duration});
+  res.status(201).json({id,uploadUrl:presign("PUT",r2Key,{expires:900,headers:{"content-type":type}}),contentType:type})}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/concert-videos/:id/done",requireAuth,async(req,res)=>{try{const v=await d1GetConcertVideo(req.params.id);if(!v||Number(v.user_id)!==Number(req.user.id))return res.status(404).json({error:"Vidéo introuvable"});
+  const h=await r2Head(v.r2_key).catch(()=>null);if(!h||h.size>VIDEO_MAX_BYTES){await r2Delete(v.r2_key).catch(()=>{});await d1DeleteConcertVideoRow(v.id);return res.status(400).json({error:"L’envoi de la vidéo n’a pas abouti, réessaie"})}
+  await d1SetConcertVideoStatus(v.id,"ready",h.size);res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+app.delete("/api/concert-videos/:id",requireAuth,async(req,res)=>{try{const v=await d1GetConcertVideo(req.params.id);if(!v)return res.status(404).json({error:"Vidéo introuvable"});
+  if(Number(v.user_id)!==Number(req.user.id)&&!(await isAdmin(req.user)))return res.status(403).json({error:"Tu ne peux supprimer que tes vidéos"});
+  await r2Delete(v.r2_key).catch(()=>{});await d1DeleteConcertVideoRow(v.id);res.status(204).end()}catch(e){res.status(502).json({error:e.message})}});
+app.post("/api/concert-videos/:id/report",requireAuth,async(req,res)=>{try{const v=await d1GetConcertVideo(req.params.id);if(!v)return res.status(404).json({error:"Vidéo introuvable"});
+  const a=await videoAccess(req.user.id,v.ckey);if(!["going","interested"].includes(a.status))return res.status(403).json({error:"Non autorisé"});
+  await d1ReportConcertVideo(v.id);await adminMessage("Vidéo signalée",`${req.user.username} signale la vidéo n°${v.id} (${v.title||"concert"} du ${v.concert_date}). Motif : ${String(req.body?.reason||"").slice(0,300)||"non précisé"}.\nPour la supprimer : ouvre ce concert dans l’appli (Agenda), vidéos, bouton Supprimer.`).catch(()=>{});
+  res.json({ok:true})}catch(e){res.status(502).json({error:e.message})}});
+export async function purgeConcertVideos(){if(!d1Enabled||!r2Config())return 0;const before=new Date(Date.parse(parisDay()+"T12:00:00Z")-VIDEO_DAYS*864e5).toISOString().slice(0,10);
+  const rows=await d1ExpiredConcertVideos(before,new Date(Date.now()-864e5).toISOString());let n=0;for(const v of rows){if(await r2Delete(v.r2_key).catch(()=>false)){await d1DeleteConcertVideoRow(v.id);n++}}return n}
+app.get("/api/me/profile",requireAuth,async(req,res)=>{try{res.json({profile:(await d1ApiCacheGet(`profile:${req.user.id}`))?.value||null})}catch(e){res.status(502).json({error:e.message})}});
+app.put("/api/me/profile",requireAuth,async(req,res)=>{try{const p=cleanProfile(req.body||{});if(p.error)return res.status(400).json({error:p.error});
+  const prev=(await d1ApiCacheGet(`profile:${req.user.id}`))?.value||null;let geo=prev&&prev.city===p.city&&Number.isFinite(prev.lat)?{lat:prev.lat,lon:prev.lon,place:prev.place}:null;
+  if(!geo){let g=null;try{g=await geocodeQuery(p.city)}catch{}if(!g||!Number.isFinite(Number(g.lat)))return res.status(400).json({error:`Ville introuvable : ${p.city}`});geo={lat:Number(g.lat),lon:Number(g.lon),place:String(g.city||g.name||p.city)}}
+  const profile={...p,...geo,updatedAt:new Date().toISOString()};await d1ApiCachePut(`profile:${req.user.id}`,profile,Date.now());res.json({profile})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/onboarding/suggestions",requireAuth,async(req,res)=>{try{let styles=[];try{styles=JSON.parse(String(req.query.styles||"[]"))}catch{}const per=Number(req.query.per)||0;res.json(await onboardingSuggestions(styles,{perStyle:per}))}catch(e){res.status(502).json({error:"Suggestions indisponibles"})}});
 app.post("/api/artists",requireAuth,async(req,res)=>{
  const name=String(req.body?.name||"").trim(),mbid=String(req.body?.mbid||"").trim(),photoUrl=String(req.body?.photoUrl||"").trim(),identitySource=String(req.body?.identitySource||"").trim(),identityKey=String(req.body?.identityKey||"").trim(),disambiguation=String(req.body?.disambiguation||"").trim(),country=String(req.body?.country||"").trim(),style=String(req.body?.style||"").trim(),identityLocked=Boolean(req.body?.identityLocked);if(!name&&!mbid)return res.status(400).json({error:"name ou mbid requis"});
  try{
@@ -692,5 +734,6 @@ try{
 }catch(e){console.error("D1 bootstrap error:",e?.message||e)}
 app.listen(port,()=>{console.log(`Music Radar V2: http://localhost:${port}`);setTimeout(()=>refreshAll().catch(e=>console.error(e)),500)});
 cron.schedule(process.env.REFRESH_CRON||"7 */2 * * *",()=>refreshAll().catch(e=>console.error(e)));
+cron.schedule(process.env.VIDEO_PURGE_CRON||"23 4 * * *",()=>purgeConcertVideos().then(n=>{if(n)console.log(`Concert videos: ${n} expired removed`)}).catch(e=>console.error("Video purge:",e?.message||e)),{timezone:"Europe/Paris"});
 cron.schedule(process.env.REMINDER_CRON||"3 10 * * *",()=>runConcertReminders().then(r=>{if(r.sent)console.log(`Concert reminders ${r.day}: ${r.sent} sent`)}).catch(e=>console.error("Concert reminders:",e?.message||e)),{timezone:"Europe/Paris"});
 cron.schedule(process.env.MONITOR_CRON||"17 7 * * *",()=>runDailyCheck().catch(e=>console.error("Daily check:",e?.message||e)),{timezone:"Europe/Paris"});
