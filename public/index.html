@@ -195,6 +195,7 @@
 .cv-item{border:1px solid #232a31;border-radius:14px;overflow:hidden;background:#000;margin-bottom:12px}.cv-item video{display:block;width:100%;max-height:60vh;background:#000}
 .cv-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#0b0e12;font-size:13px;color:#c9d0d6}.cv-acts{display:flex;gap:6px}
 .cv-acts button{background:none;border:1px solid #2c343d;border-radius:999px;color:#c9d0d6;font:600 12px Inter,Arial,sans-serif;padding:5px 10px;cursor:pointer}.cv-acts button:disabled{opacity:.5}
+.user-bar .sl-acc-btn.has-photo{background-size:cover;background-position:center;background-repeat:no-repeat;color:transparent}
 .sl-sort{margin-left:10px;white-space:nowrap}.sl-linkbtn.on{color:#fff;font-weight:700;text-decoration:none;cursor:default}.sl-linkbtn{background:none;border:0;padding:0;color:#ff4b55;font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 </style><style id="sl-albums-v2">
 /* Albums & extract player (v7.18.12) */
@@ -698,7 +699,7 @@ async function api(u,o){const r=await fetch(u,o);if(r.status===401){showAuthGate
 const IDLE_STATUS=/^(Données agrégées|Connecté\b|Prêt\b)/;
 function status(t){const el=$('status');el.innerHTML='<span class="dot"></span>'+esc(t);el.hidden=!t||IDLE_STATUS.test(String(t));renderUserBar()}
 function capitalizeName(n){const s=String(n||'').trim();return s?s.charAt(0).toLocaleUpperCase('fr-FR')+s.slice(1):s}
-function renderUserBar(){const el=$('userBar');if(!el)return;if(!authUser){el.hidden=true;el.innerHTML='';return}el.hidden=false;const nm=capitalizeName(authUser.username);el.innerHTML='<span class="user-dot"></span><strong>'+esc(nm)+'</strong><button type="button" class="sl-acc-btn" id="helpBtn" onclick="openHelpSheet()" aria-label="Mon compte" title="Mon compte">'+esc(nm.charAt(0)||'?')+'<b class="sl-help-badge" id="helpBadge" '+(helpCount()?'':'hidden')+'>'+(helpCount()||'')+'</b></button>'}
+function renderUserBar(){const el=$('userBar');if(!el)return;if(!authUser){el.hidden=true;el.innerHTML='';return}el.hidden=false;const nm=capitalizeName(authUser.username);const ph=(typeof PROFILE!=='undefined'&&PROFILE?.photo)||'',shown=(typeof PROFILE!=='undefined'&&PROFILE?.firstName)?capitalizeName(PROFILE.firstName):nm;el.innerHTML='<span class="user-dot"></span><strong>'+esc(shown)+'</strong><button type="button" class="sl-acc-btn'+(ph?' has-photo':'')+'" id="helpBtn" onclick="openHelpSheet()" aria-label="Mon compte" title="Mon compte"'+(ph?' style="background-image:url(\''+esc(ph)+'\')"':'')+'>'+(ph?'':esc(shown.charAt(0).toUpperCase()||'?'))+'<b class="sl-help-badge" id="helpBadge" '+(helpCount()?'':'hidden')+'>'+(helpCount()||'')+'</b></button>'}
 function imgFor(i=0){const a=A[i]||A[0];return a&&photos[a.id]||fallbackPhoto}
 function imgForArtist(a){return a&&(a.photo_url||photos[a.id]||albumCovers[a.id])||fallbackPhoto}
 function usableArticleImage(url){const s=String(url||'').trim();return !!s&&!/(news\.google\.|gstatic\.com|googleusercontent\.com|google\.com|favicon|placeholder|google-news)/i.test(s)}
@@ -1985,7 +1986,7 @@ function maybeOnboard(){if(onbSeen()||A.length>1||$('onbSheet')){maybeShowTour()
 function closeOnboarding(){$('onbSheet')?.remove();document.body.classList.remove('sl-sheet-open');onbDone();maybeShowTour()}
 // ---- Mon profil : prénom, nom, photo, âge, ville, 3 styles (v7.48) ----
 let PROFILE=null;
-async function loadProfile(){try{PROFILE=(await api('/api/me/profile')).profile||null}catch{}}
+async function loadProfile(){try{PROFILE=(await api('/api/me/profile')).profile||null;renderUserBar()}catch{}}
 function shrinkPhoto(file){return new Promise((ok,ko)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const S=256,c=document.createElement('canvas');c.width=c.height=S;const k=Math.max(S/img.width,S/img.height),w=img.width*k,h=img.height*k;
  c.getContext('2d').drawImage(img,(S-w)/2,(S-h)/2,w,h);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',.82))};img.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('Photo illisible'))};img.src=u})}
 function profileFormHTML(p,{cta='Valider mon profil',skip=''}={}){p=p||{};const st=p.styles||[];
@@ -2009,10 +2010,10 @@ function wireProfileForm(root,onSaved){const picked=[...(PROFILE?.styles||[])];l
   btn.disabled=true;const lbl=btn.textContent;btn.textContent='Enregistrement…';
   try{const prevCity=PROFILE?.city;const r=await api('/api/me/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});PROFILE=r.profile;
    const cp=loadConcertPrefs();if(!Number.isFinite(Number(cp.alertLat))||prevCity!==PROFILE.city)saveConcertPrefs({alertLat:PROFILE.lat,alertLon:PROFILE.lon,alertPlace:PROFILE.place||PROFILE.city});
-   onSaved&&onSaved(PROFILE)}catch(x){err.textContent=x.message||'Erreur';btn.disabled=false;btn.textContent=lbl}};
+   renderUserBar();onSaved&&onSaved(PROFILE)}catch(x){err.textContent=x.message||'Erreur';btn.disabled=false;btn.textContent=lbl}};
  sync()}
 function openProfileSheet(){const {m,close}=slMiniSheet('profileSheet','Mon profil',profileFormHTML(PROFILE,{cta:'Enregistrer'}));m.querySelector('.sl-sheet').classList.add('onb');
- wireProfileForm(m,()=>{close();slToast('Profil enregistré 🤘');if(helpView==='home'&&$('helpBody'))helpGo('home');try{if(concertMode==='mine')live()}catch{}})}
+ wireProfileForm(m,()=>{close();renderUserBar();slToast('Profil enregistré 🤘');if(helpView==='home'&&$('helpBody'))helpGo('home');try{if(concertMode==='mine')live()}catch{}})}
 function openOnboarding(){
  const m=document.createElement('div');m.id='onbSheet';m.className='sl-sheet-backdrop';const picked=[];
  m.innerHTML=`<div class="sl-sheet onb" role="dialog" aria-modal="true" aria-label="Bienvenue"><div class="sl-sheet-grip"></div><div class="sl-sheet-head"><span class="sl-sheet-title">Bienvenue 🤘</span><button type="button" class="sl-sheet-close" aria-label="Fermer">✕</button></div><div class="sl-sheet-list" id="onbBody"></div></div>`;
