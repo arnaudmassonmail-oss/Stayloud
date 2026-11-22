@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import express from "express";
 import compression from "compression";
 import cron from "node-cron";
-import {d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1CalendarToken,d1UserByCalendarToken,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
+import {d1ApiCacheGet,d1ApiCachePut,d1GetCacheValue,d1SetCacheValue,d1ListUserConcerts,d1SetUserConcert,d1DeleteUserConcert,d1FindUserByUsername,d1ListFriendships,d1RequestFriend,d1AcceptFriend,d1RemoveFriend,d1FriendsConcerts,d1GetFriendsSeen,d1SetFriendsSeen,d1ShareBand,d1SharesFor,d1SharesHistory,d1HideShare,d1CalendarToken,d1UserByCalendarToken,d1AlertSeenKeys,d1MarkAlertsSeen,d1BlockUser,d1UnblockUser,d1ListBlocks,d1BlockedBetween,d1DeleteAccount,d1AddCommunityConcert,d1CountRecentCommunity,d1MyCommunityConcerts,d1AllCommunityConcerts,d1ApprovedCommunityConcerts,d1CountPendingCommunity,d1SetCommunityStatus,d1DeleteCommunityConcert,d1FirstUserId,d1AddSupportMessage,d1CountRecentSupport,d1MySupportMessages,d1MarkRepliesSeen,d1AllSupportMessages,d1SupportCounts,d1MarkSupportRead,d1ReplySupport,d1DeleteSupport} from "./d1.js";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {getArtists,getArtist,upsertArtist,updateArtist,deleteArtist,newsList,eventList,runStatus,mergeArtistEvents,upsertLocalUserMirror,deleteLocalUser,localUsers,localArtistsForUser,bandKey,importArtistNews,importArtistEvents,keepArtistAddedAt} from "./db.js";
@@ -16,7 +16,7 @@ import {CLIP_ID,clipMeta,clipPageHTML} from "./clippage.js";
 import {MBID,bandPageHTML} from "./bandpage.js";
 import {albumPageHTML} from "./albumpage.js";
 import {runConcertReminders,remindersEnabled,setRemindersEnabled} from "./reminders.js";
-import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding} from "./onboarding.js";
+import {ONBOARD_STYLES,onboardingSuggestions,resolveForOnboarding,cleanProfile} from "./onboarding.js";
 import {findSetlist,searchSetlists,setlistConfigured} from "./providers/setlistfm.js";
 import {bandVideos,videoFeed,youtubeConfigured,PrefetchSkipped} from "./providers/youtube.js";
 import {makeLimiter,waitText} from "./ratelimit.js";
@@ -238,7 +238,7 @@ app.post('/api/auth/reset-password',async(req,res)=>{
  }catch(e){res.status(400).json({error:e.message})}
 });
 
-app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.47.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
+app.get("/api/health",(_,res)=>res.json({ok:true,version:"7.48.0",mode:"manual-city-source-selection",d1:d1ConfigStatus()}));
 app.get("/api/artists",requireAuth,(req,res)=>res.json({artists:getArtists(req.user.id)}));
 app.get("/api/artists/:id/profile",requireAuth,async(req,res)=>{try{
  const a=ownedArtist(req,req.params.id);if(!a)return res.status(404).json({error:"introuvable"});
@@ -438,7 +438,12 @@ app.get("/api/music/preview",async(req,res)=>{
 app.get("/api/discover/profile",async(req,res)=>{try{const name=String(req.query.name||"").trim();const mbid=String(req.query.mbid||"").trim();if(!name&&!mbid)return res.status(400).json({error:"name ou mbid requis"});const p=await fetchArtistProfile({id:mbid||`discover-${name}`,name,mbid:mbid||null});res.json(p)}catch(e){res.status(502).json({error:e.message})}});
 app.get("/api/onboarding/styles",requireAuth,(req,res)=>res.json({styles:Object.keys(ONBOARD_STYLES)}));
 app.get("/api/onboarding/resolve",requireAuth,async(req,res)=>{try{const name=String(req.query.name||"").trim().slice(0,120),from=String(req.query.from||"");if(!name)return res.status(400).json({error:"name requis"});res.json({artist:await resolveForOnboarding(name,from)})}catch(e){res.json({artist:null})}});
-app.get("/api/onboarding/suggestions",requireAuth,async(req,res)=>{try{let styles=[];try{styles=JSON.parse(String(req.query.styles||"[]"))}catch{}res.json(await onboardingSuggestions(styles))}catch(e){res.status(502).json({error:"Suggestions indisponibles"})}});
+app.get("/api/me/profile",requireAuth,async(req,res)=>{try{res.json({profile:(await d1ApiCacheGet(`profile:${req.user.id}`))?.value||null})}catch(e){res.status(502).json({error:e.message})}});
+app.put("/api/me/profile",requireAuth,async(req,res)=>{try{const p=cleanProfile(req.body||{});if(p.error)return res.status(400).json({error:p.error});
+  const prev=(await d1ApiCacheGet(`profile:${req.user.id}`))?.value||null;let geo=prev&&prev.city===p.city&&Number.isFinite(prev.lat)?{lat:prev.lat,lon:prev.lon,place:prev.place}:null;
+  if(!geo){let g=null;try{g=await geocodeQuery(p.city)}catch{}if(!g||!Number.isFinite(Number(g.lat)))return res.status(400).json({error:`Ville introuvable : ${p.city}`});geo={lat:Number(g.lat),lon:Number(g.lon),place:String(g.city||g.name||p.city)}}
+  const profile={...p,...geo,updatedAt:new Date().toISOString()};await d1ApiCachePut(`profile:${req.user.id}`,profile,Date.now());res.json({profile})}catch(e){res.status(502).json({error:e.message})}});
+app.get("/api/onboarding/suggestions",requireAuth,async(req,res)=>{try{let styles=[];try{styles=JSON.parse(String(req.query.styles||"[]"))}catch{}const per=Number(req.query.per)||0;res.json(await onboardingSuggestions(styles,{perStyle:per}))}catch(e){res.status(502).json({error:"Suggestions indisponibles"})}});
 app.post("/api/artists",requireAuth,async(req,res)=>{
  const name=String(req.body?.name||"").trim(),mbid=String(req.body?.mbid||"").trim(),photoUrl=String(req.body?.photoUrl||"").trim(),identitySource=String(req.body?.identitySource||"").trim(),identityKey=String(req.body?.identityKey||"").trim(),disambiguation=String(req.body?.disambiguation||"").trim(),country=String(req.body?.country||"").trim(),style=String(req.body?.style||"").trim(),identityLocked=Boolean(req.body?.identityLocked);if(!name&&!mbid)return res.status(400).json({error:"name ou mbid requis"});
  try{

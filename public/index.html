@@ -158,7 +158,13 @@
 .auth-follow{margin:0 0 12px;padding:10px 12px;border:1px solid #6b1016;border-radius:12px;background:rgba(212,20,30,.12);color:#f2d4d6;font-size:14px}.auth-follow b{color:#fff}
 .onb .onb-intro{margin:2px 2px 14px;color:#c9d0d6;font-size:14px}.onb .onb-intro b{color:#fff}
 .onb-styles{display:flex;flex-wrap:wrap;gap:8px}.onb-styles .sl-chip{padding:9px 14px;font-size:14px}.onb-styles .sl-chip.on{background:#d4141e;border-color:#d4141e;color:#fff}
-.onb-count{margin:12px 2px 4px;color:#9aa4ae;font-size:13px}.onb-skip{display:block;width:100%;margin-top:8px;background:none;border:0;color:#9aa4ae;font:14px Inter,Arial,sans-serif;padding:10px;cursor:pointer;text-decoration:underline}
+.onb-count{margin:12px 2px 4px;color:#9aa4ae;font-size:13px}.pf-photo{display:flex;align-items:center;gap:12px;margin:0 0 12px}.pf-photo b{display:block}.pf-photo small{display:block;color:#9aa4ae;font-size:12px}
+.pf-av{flex:none;width:64px;height:64px;border-radius:50%;border:2px dashed #3a434d;background:#0b0e12 center/cover no-repeat;display:grid;place-items:center;font-size:24px;cursor:pointer}
+.pf-link{background:none;border:0;padding:0;color:#ff4b55;font:600 12px Inter,Arial,sans-serif;cursor:pointer;text-decoration:underline}
+.pf-row{display:flex;gap:10px;margin-bottom:10px}.pf-row label{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;color:#9aa4ae;font-size:13px}.pf-row .pf-age{flex:0 0 86px}
+.pf-row input{width:100%;box-sizing:border-box;padding:11px 12px;border-radius:12px;border:1px solid #2c343d;background:#0b0e12;color:#fff;font:15px Inter,Arial,sans-serif;min-height:44px}
+.pf-lbl{color:#9aa4ae;font-size:13px;margin:6px 2px 8px}.pf-err{color:#ff8a90;font-size:14px;min-height:18px;margin:4px 2px 8px}.pf-note{color:#6f7a85;font-size:12px;margin:10px 2px 0}
+.onb-skip{display:block;width:100%;margin-top:8px;background:none;border:0;color:#9aa4ae;font:14px Inter,Arial,sans-serif;padding:10px;cursor:pointer;text-decoration:underline}
 .onb-done{text-align:center;padding:6px 4px 4px}.onb-done-ic{font-size:40px}.onb-done h3{margin:6px 0 12px;font-size:20px}.onb-done p{text-align:left;color:#c9d0d6;font-size:14px;margin:0 0 12px;padding:10px 12px;border:1px solid #232a31;border-radius:12px;background:#0b0e12}.onb-done b{color:#fff}
 .onb-wait{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 10px;text-align:center}.onb-wait small{color:#9aa4ae}
 .onb-bar{width:80%;height:6px;border-radius:3px;background:#1b2128;overflow:hidden}.onb-bar i{display:block;height:100%;background:#d4141e}
@@ -1626,7 +1632,7 @@ async function helpGo(view){helpView=view;const box=$('helpBody'),title=$('helpT
  const back='<button type="button" class="sl-help-back" onclick="helpGo(\'home\')">← Mon compte</button>';
  if(view==='home'){title.textContent='Mon compte';const row=(fn,ic,t,sub,badge,cls='')=>`<button type="button" class="sl-pick ${cls}" onclick="${fn}"><span class="sl-pick-all">${ic}</span><span class="sl-pick-txt"><strong>${t}</strong>${sub?`<small>${sub}</small>`:''}</span>${badge?`<b class="sl-help-badge">${badge}</b>`:''}</button>`;const grp=t=>`<div class="sl-acc-grp">${t}</div>`;
   const nm=capitalizeName(authUser?.username||'');const em=authUser?.email||'';
-  box.innerHTML=`<div class="sl-acc-me"><span class="sl-acc-big">${esc(nm.charAt(0)||'?')}</span><span><b>${esc(nm)}</b><small>${esc(em||'Aucune adresse e-mail')} · <button type="button" onclick="closeHelpSheet();accountSettings()">${em?'Modifier l’e-mail':'Ajouter un e-mail'}</button></small></span></div>`
+  box.innerHTML=`<div class="sl-acc-me"><span class="sl-acc-big" ${PROFILE?.photo?`style="background:center/cover no-repeat url('${esc(PROFILE.photo)}')"`:''}>${PROFILE?.photo?'':esc((PROFILE?.firstName||nm).charAt(0).toUpperCase()||'?')}</span><span><b>${esc(PROFILE?.firstName?[PROFILE.firstName,PROFILE.lastName].filter(Boolean).join(' '):nm)}</b>${PROFILE?.firstName?`<small>@${esc(nm)}</small>`:''}<small>${esc(em||'Aucune adresse e-mail')} · <button type="button" onclick="closeHelpSheet();accountSettings()">${em?'Modifier l’e-mail':'Ajouter un e-mail'}</button></small></span></div>`
    +grp('Aide')
    +row("closeHelpSheet();openTour()",'▶︎','Revoir la présentation','Toutes les fonctions de STAYPIT, étape par étape')
    +row("helpGo('install')",'📲','Mettre STAYPIT sur l’écran d’accueil',SL_STANDALONE?'✓ Déjà installé sur cet appareil':'Comme une vraie appli, sur iPhone et Android')
@@ -1634,6 +1640,7 @@ async function helpGo(view){helpView=view;const box=$('helpBody'),title=$('helpT
    +row("helpGo('mine')",'💬','Mes messages',HELP.myUnreadReplies?'Nouvelle réponse !':'Tes messages et nos réponses',HELP.myUnreadReplies||0)
    +(HELP.isAdmin?grp('Administration')+row("helpGo('admin')",'🛠','Messages reçus','Messages et signalements des membres',HELP.adminUnread||0)+row("helpGo('adminConcerts')",'✅','Concerts signalés',HELP.communityPending?'À valider !':'Valider les concerts des membres',HELP.communityPending||0)+row("helpGo('sources')",'📡','État des sources','Concerts-Metal, Sueur de Metal, Songkick, Bandsintown'):'')
    +grp('Compte')
+   +row("closeHelpSheet();openProfileSheet()",'👤','Mon profil',PROFILE?[PROFILE.firstName,PROFILE.city,(PROFILE.styles||[]).join(', ')].filter(Boolean).join(' · '):'Prénom, âge, ville, styles préférés',PROFILE?0:'!')
    +row("toggleReminders()",'🔔','Rappels de concerts',REMIND.enabled===false?'Désactivés · touche pour les activer':(authUser?.email?'Un e-mail la veille de chaque concert où tu vas':'Ajoute un e-mail à ton compte pour les recevoir'),0,'',)
    +row("window.open('/confidentialite.html','_blank','noopener')",'🔒','Confidentialité','Les données gardées par STAYPIT et tes droits')
    +row("closeHelpSheet();logout()",'↩︎','Se déconnecter','')
@@ -1921,21 +1928,49 @@ function onbSeen(){try{return localStorage.getItem(onbKey())==='1'}catch{return 
 function onbDone(){try{localStorage.setItem(onbKey(),'1')}catch{}}
 function maybeOnboard(){if(onbSeen()||A.length>1||$('onbSheet')){maybeShowTour();return}openOnboarding()}
 function closeOnboarding(){$('onbSheet')?.remove();document.body.classList.remove('sl-sheet-open');onbDone();maybeShowTour()}
+// ---- Mon profil : prénom, nom, photo, âge, ville, 3 styles (v7.48) ----
+let PROFILE=null;
+async function loadProfile(){try{PROFILE=(await api('/api/me/profile')).profile||null}catch{}}
+function shrinkPhoto(file){return new Promise((ok,ko)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const S=256,c=document.createElement('canvas');c.width=c.height=S;const k=Math.max(S/img.width,S/img.height),w=img.width*k,h=img.height*k;
+ c.getContext('2d').drawImage(img,(S-w)/2,(S-h)/2,w,h);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',.82))};img.onerror=()=>{URL.revokeObjectURL(u);ko(new Error('Photo illisible'))};img.src=u})}
+function profileFormHTML(p,{cta='Valider mon profil',skip=''}={}){p=p||{};const st=p.styles||[];
+ return `<form id="pfForm" class="pf" autocomplete="off" novalidate>
+ <div class="pf-photo"><label class="pf-av" id="pfAv" ${p.photo?`style="background-image:url('${esc(p.photo)}')"`:''}><input id="pfPhoto" type="file" accept="image/*" hidden><span>${p.photo?'':'📷'}</span></label><div><b>Photo</b><small>Facultative · touche le rond</small>${p.photo?'<button type="button" class="pf-link" id="pfNoPhoto">Retirer la photo</button>':''}</div></div>
+ <div class="pf-row"><label>Prénom *<input id="pfFirst" maxlength="40" value="${esc(p.firstName||'')}" autocomplete="given-name"></label><label>Nom<input id="pfLast" maxlength="40" value="${esc(p.lastName||'')}" autocomplete="family-name"></label></div>
+ <div class="pf-row"><label class="pf-age">Âge *<input id="pfAge" type="number" inputmode="numeric" min="15" max="110" value="${esc(p.age||'')}"></label><label>Ville *<input id="pfCity" maxlength="80" value="${esc(p.city||'')}" placeholder="ex. Nantes" autocomplete="address-level2"></label></div>
+ <div class="pf-lbl">Tes 3 styles préférés *</div><div class="onb-styles">${ONB_STYLES.map(x=>`<button type="button" class="sl-chip onb-st${st.includes(x)?' on':''}" data-s="${esc(x)}">${esc(x==='Groupes français'?'🇫🇷 Groupes français':x)}</button>`).join('')}</div>
+ <div class="onb-count" id="pfCount"></div><div class="pf-err" id="pfErr" role="alert"></div>
+ <button type="submit" class="sl-news-ok" id="pfSave">${cta}</button>${skip?`<button type="button" class="onb-skip" id="pfSkip">${skip}</button>`:''}
+ <p class="pf-note">🔒 Ton profil est privé : seul toi le vois. Ta ville sert à calculer la distance des concerts.</p></form>`}
+function wireProfileForm(root,onSaved){const picked=[...(PROFILE?.styles||[])];let photo=PROFILE?.photo||'';
+ const sync=()=>{root.querySelectorAll('.onb-st').forEach(b=>b.classList.toggle('on',picked.includes(b.dataset.s)));root.querySelector('#pfCount').textContent=picked.length?`${picked.length} / 3 : ${picked.join(', ')}`:'Aucun style choisi'};
+ root.querySelectorAll('.onb-st').forEach(b=>b.onclick=()=>{const k=picked.indexOf(b.dataset.s);if(k>=0)picked.splice(k,1);else{if(picked.length>=3){slToast('3 styles maximum : retire-en un d’abord');return}picked.push(b.dataset.s)}sync()});
+ const av=root.querySelector('#pfAv'),setAv=()=>{av.style.backgroundImage=photo?`url('${photo}')`:'';av.querySelector('span').textContent=photo?'':'📷'};
+ root.querySelector('#pfPhoto').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;try{photo=await shrinkPhoto(f);setAv()}catch(err){slToast(err.message)}};
+ const np=root.querySelector('#pfNoPhoto');if(np)np.onclick=()=>{photo='';setAv();np.remove()};
+ root.querySelector('#pfForm').onsubmit=async e=>{e.preventDefault();const err=root.querySelector('#pfErr'),btn=root.querySelector('#pfSave');err.textContent='';
+  const body={firstName:root.querySelector('#pfFirst').value,lastName:root.querySelector('#pfLast').value,age:root.querySelector('#pfAge').value,city:root.querySelector('#pfCity').value,styles:picked,photo};
+  if(!body.firstName.trim())return err.textContent='Indique ton prénom';if(!(Number(body.age)>=15))return err.textContent='STAYPIT est réservé aux 15 ans et plus : indique ton âge';if(!body.city.trim())return err.textContent='Indique ta ville';if(!picked.length)return err.textContent='Choisis au moins un style';
+  btn.disabled=true;const lbl=btn.textContent;btn.textContent='Enregistrement…';
+  try{const prevCity=PROFILE?.city;const r=await api('/api/me/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});PROFILE=r.profile;
+   const cp=loadConcertPrefs();if(!Number.isFinite(Number(cp.alertLat))||prevCity!==PROFILE.city)saveConcertPrefs({alertLat:PROFILE.lat,alertLon:PROFILE.lon,alertPlace:PROFILE.place||PROFILE.city});
+   onSaved&&onSaved(PROFILE)}catch(x){err.textContent=x.message||'Erreur';btn.disabled=false;btn.textContent=lbl}};
+ sync()}
+function openProfileSheet(){const {m,close}=slMiniSheet('profileSheet','Mon profil',profileFormHTML(PROFILE,{cta:'Enregistrer'}));m.querySelector('.sl-sheet').classList.add('onb');
+ wireProfileForm(m,()=>{close();slToast('Profil enregistré 🤘');if(helpView==='home'&&$('helpBody'))helpGo('home');try{if(concertMode==='mine')live()}catch{}})}
 function openOnboarding(){
  const m=document.createElement('div');m.id='onbSheet';m.className='sl-sheet-backdrop';const picked=[];
  m.innerHTML=`<div class="sl-sheet onb" role="dialog" aria-modal="true" aria-label="Bienvenue"><div class="sl-sheet-grip"></div><div class="sl-sheet-head"><span class="sl-sheet-title">Bienvenue 🤘</span><button type="button" class="sl-sheet-close" aria-label="Fermer">✕</button></div><div class="sl-sheet-list" id="onbBody"></div></div>`;
  document.body.appendChild(m);document.body.classList.add('sl-sheet-open');
  m.querySelector('.sl-sheet-close').onclick=closeOnboarding;
  const body=$('onbBody');
- const step1=()=>{body.innerHTML=`<p class="onb-intro">Choisis <b>jusqu’à 3 styles</b> : on t’ajoute une dizaine de groupes pour démarrer, en priorité ceux qui ont des <b>concerts prévus</b>. Tu pourras en ajouter ou en retirer quand tu veux.</p><div class="onb-styles">${ONB_STYLES.map(st=>`<button type="button" class="sl-chip onb-st${picked.includes(st)?' on':''}" data-s="${esc(st)}">${esc(st==='Groupes français'?'🇫🇷 Groupes français':st)}</button>`).join('')}</div><div class="onb-count" id="onbCount"></div><button type="button" class="sl-news-ok" id="onbNext">Voir les groupes →</button><button type="button" class="onb-skip" id="onbSkip">Passer, j’ajouterai mes groupes moi-même</button>`;
-  const sync=()=>{body.querySelectorAll('.onb-st').forEach(b=>b.classList.toggle('on',picked.includes(b.dataset.s)));$('onbCount').textContent=picked.length?`${picked.length} / 3 : ${picked.join(', ')}`:'Aucun style choisi';$('onbNext').disabled=!picked.length};
-  body.querySelectorAll('.onb-st').forEach(b=>b.onclick=()=>{const k=picked.indexOf(b.dataset.s);if(k>=0)picked.splice(k,1);else{if(picked.length>=3){slToast('3 styles maximum : retire-en un d’abord');return}picked.push(b.dataset.s)}sync()});
-  $('onbSkip').onclick=closeOnboarding;$('onbNext').onclick=step2;sync()};
+ const step1=()=>{body.innerHTML=`<p class="onb-intro">Présente-toi en quelques secondes. Avec tes <b>3 styles préférés</b>, on t’ajoute tout de suite <b>5 groupes connus par style</b>, en priorité ceux qui ont des <b>concerts prévus</b>. Tu pourras en retirer quand tu veux.</p>`+profileFormHTML(PROFILE,{cta:'Voir mes groupes →',skip:'Plus tard'});
+  body.querySelector('#pfSkip').onclick=closeOnboarding;wireProfileForm(body,p=>{picked.splice(0,picked.length,...p.styles);step2()})};
  const step2=async()=>{body.innerHTML='<div class="onb-wait"><span class="sl-rm-spin big"></span><b>On cherche les groupes qui tournent en ce moment…</b><small>Quelques secondes</small></div>';
-  let items=[];try{items=(await api('/api/onboarding/suggestions?styles='+encodeURIComponent(JSON.stringify(picked)))).items||[]}catch(e){body.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div><button type="button" class="sl-news-ok" id="onbBack">← Revenir</button>`;$('onbBack').onclick=step1;return}
+  let items=[];try{items=(await api('/api/onboarding/suggestions?per=5&styles='+encodeURIComponent(JSON.stringify(picked)))).items||[]}catch(e){body.innerHTML=`<div class="sl-pick-empty">${esc(e.message)}</div><button type="button" class="sl-news-ok" id="onbBack">← Revenir</button>`;$('onbBack').onclick=step1;return}
   items=items.filter(x=>!A.some(a=>normUi(a.name)===normUi(x.name)));const on=new Set(items.map((_,i)=>i));
   const actTxt=a=>!a||!a.total?'':a.france&&a.nextFrance?`🎤 en France le ${esc(shortDay(a.nextFrance.date))}${a.nextFrance.city?' · '+esc(a.nextFrance.city):''}`:`🎤 ${a.total} date${a.total>1?'s':''} à venir`;
-  body.innerHTML=`<p class="onb-intro">Voici <b>${items.length} groupes</b> pour démarrer. Décoche ceux que tu ne veux pas.<br><small>Leurs photos et infos mettront quelques minutes à arriver la première fois.</small></p><div id="onbList">${items.map((x,i)=>`<button type="button" class="sl-pick on" data-i="${i}"><span class="sl-fr-av">${esc(x.name.charAt(0).toUpperCase())}</span><span class="sl-pick-txt"><strong>${esc(x.name)}</strong><small>${esc(x.style)}${actTxt(x.activity)?' · '+actTxt(x.activity):''}</small></span><span class="sl-pick-check">✓</span></button>`).join('')}</div><button type="button" class="sl-news-ok" id="onbAdd"></button><button type="button" class="onb-skip" id="onbBack">← Changer de styles</button>`;
+  body.innerHTML=`<p class="onb-intro">${PROFILE?.firstName?esc(PROFILE.firstName)+', voici':'Voici'} <b>${items.length} groupes</b> pour démarrer (5 par style). Décoche ceux que tu ne veux pas.<br><small>Leurs photos et infos mettront quelques minutes à arriver la première fois.</small></p><div id="onbList">${items.map((x,i)=>`<button type="button" class="sl-pick on" data-i="${i}"><span class="sl-fr-av">${esc(x.name.charAt(0).toUpperCase())}</span><span class="sl-pick-txt"><strong>${esc(x.name)}</strong><small>${esc(x.style)}${actTxt(x.activity)?' · '+actTxt(x.activity):''}</small></span><span class="sl-pick-check">✓</span></button>`).join('')}</div><button type="button" class="sl-news-ok" id="onbAdd"></button><button type="button" class="onb-skip" id="onbBack">← Changer de styles</button>`;
   const sync=()=>{$('onbAdd').textContent=on.size?`Ajouter ces ${on.size} groupe${on.size>1?'s':''}`:'Aucun groupe coché';$('onbAdd').disabled=!on.size};
   body.querySelectorAll('#onbList .sl-pick').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;if(on.has(i))on.delete(i);else on.add(i);b.classList.toggle('on',on.has(i));b.querySelector('.sl-pick-check').hidden=!on.has(i);sync()});
   $('onbBack').onclick=step1;$('onbAdd').onclick=()=>step3(items.filter((_,i)=>on.has(i)));sync()};
@@ -2009,7 +2044,7 @@ async function load(){
   status('Connexion au serveur…');
   try{
     const a=await api('/api/artists');
-    A=Array.isArray(a?.artists)?a.artists:[];loadAgenda();loadReminderPref();loadFriends();scheduleFriendsNews();loadHelpStatus();loadAlerts();setActusMode(uiPrefGet('actusMode','news'));
+    A=Array.isArray(a?.artists)?a.artists:[];loadAgenda();loadReminderPref();await loadProfile();loadFriends();scheduleFriendsNews();loadHelpStatus();loadAlerts();setActusMode(uiPrefGet('actusMode','news'));
     N=[];E=[];
     render();
     if(!A.length){

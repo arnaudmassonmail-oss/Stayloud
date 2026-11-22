@@ -33,14 +33,14 @@ export function rankBands(names,activity){
 }
 async function within(job,ms){return Promise.race([job.catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms))])}
 
-export async function onboardingSuggestions(styles,{total=10,budgetMs=9000}={}){
+export async function onboardingSuggestions(styles,{perStyle=0,total=10,budgetMs=9000}={}){
  styles=[...new Set((Array.isArray(styles)?styles:[]).map(String).filter(s=>ONBOARD_STYLES[s]))].slice(0,3);
  if(!styles.length)return {items:[]};
  const all=[...new Set(styles.flatMap(s=>ONBOARD_STYLES[s]))];
  const activity={};const todo=[...all];
  const worker=async()=>{while(todo.length){const n=todo.shift();const a=await within(bandActivity(n),4000);if(a)activity[n]=a}};
  await within(Promise.all([worker(),worker(),worker(),worker(),worker()]),budgetMs);
- const q=quotas(styles.length,total),taken=new Set(),items=[];
+ const q=perStyle?styles.map(()=>Math.max(1,Math.min(10,perStyle))):quotas(styles.length,total),taken=new Set(),items=[];
  styles.forEach((s,k)=>{let n=0;for(const name of rankBands(ONBOARD_STYLES[s],activity)){if(n>=q[k])break;if(taken.has(name))continue;taken.add(name);n++;
   items.push({name,style:STYLE_OF[s]||s,from:s,activity:activity[name]||null})}});
  return {items};
@@ -64,4 +64,19 @@ export async function resolveForOnboarding(name,from){
  const d=await mb(`https://musicbrainz.org/ws/2/artist/?query=${encodeURIComponent('artist:"'+String(name).replace(/"/g,"")+'"')}&fmt=json&limit=25`);
  const a=pickArtist(d?.artists,name,from);
  return a?{name:a.name,mbid:a.id,country:a.country||"",disambiguation:a.disambiguation||""}:null;
+}
+
+// Member profile (first name, last name, optional photo, age, city, up to 3
+// favourite styles). Private: only the member sees it.
+export function cleanProfile(b={}){
+ const txt=(v,n)=>String(v??"").replace(/[\u0000-\u001f<>]/g,"").replace(/\s+/g," ").trim().slice(0,n);
+ const firstName=txt(b.firstName,40),lastName=txt(b.lastName,40),city=txt(b.city,80);
+ const age=Number.parseInt(b.age,10);
+ const styles=[...new Set((Array.isArray(b.styles)?b.styles:[]).map(String).filter(x=>ONBOARD_STYLES[x]))].slice(0,3);
+ let photo=String(b.photo||"");if(photo&&!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(photo))photo="";if(photo.length>120000)return {error:"Photo trop lourde"};
+ if(!firstName)return {error:"Indique ton prénom"};
+ if(!Number.isFinite(age)||age<15||age>110)return {error:"STAYPIT est réservé aux 15 ans et plus : indique ton âge"};
+ if(!city)return {error:"Indique ta ville"};
+ if(!styles.length)return {error:"Choisis au moins un style"};
+ return {firstName,lastName,age,city,styles,photo};
 }

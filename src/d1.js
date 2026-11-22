@@ -602,6 +602,8 @@ export async function d1DeleteAccount(userId){
     ["DELETE FROM groups WHERE user_id=?",[id]],
     ["DELETE FROM password_resets WHERE user_id=?",[id]],
     ["DELETE FROM sessions WHERE user_id=?",[id]],
+    ["DELETE FROM api_cache WHERE key IN (?,?)",[`profile:${id}`,`pref:remind:${id}`]],
+    ["DELETE FROM api_cache WHERE key LIKE ?",[`remind:sent:${id}:%`]],
     ["DELETE FROM users WHERE id=?",[id]]
   ];
   for(const [sql,params] of steps)await query(sql,params);

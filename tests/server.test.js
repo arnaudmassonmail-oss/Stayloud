@@ -113,3 +113,9 @@ test("band previews for a concert: login and a name needed",async()=>{
 test("Android app link file: empty until configured, public",async()=>{
   const r=await fetch(B+"/.well-known/assetlinks.json");assert.equal(r.status,200);assert.deepEqual(await r.json(),[]);
   const p=await fetch(B+"/supprimer-compte.html");assert.equal(p.status,200);assert.match(await p.text(),/Supprimer définitivement mon compte/)});
+test("profile: login needed, empty at first, checked before saving",async()=>{
+  assert.equal((await fetch(B+"/api/me/profile")).status,401);
+  const a=cookieOf(await post("/api/auth/login",{username:"arnaud",password:"secret123"}));
+  assert.equal((await (await fetch(B+"/api/me/profile",{headers:{cookie:a}})).json()).profile,null);
+  const bad=await fetch(B+"/api/me/profile",{method:"PUT",headers:{...J,cookie:a},body:JSON.stringify({firstName:"Arnaud",age:12,city:"Nantes",styles:["Rock"]})});
+  assert.equal(bad.status,400);assert.match((await bad.json()).error,/15 ans/)});

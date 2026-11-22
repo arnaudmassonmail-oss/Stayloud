@@ -10,3 +10,14 @@ test("homonyms: the band tagged with the style wins, French band for the French 
 test("unknown styles are ignored, at most 3 styles",async()=>{
   assert.deepEqual(await onboardingSuggestions(["Polka"]),{items:[]});
   assert.ok(Object.values(ONBOARD_STYLES).every(l=>l.length>=10),"each style has enough bands")});
+test("profile: cleaned and checked (first name, age 15+, city, 1 to 3 known styles, small photo)",async()=>{
+  const {cleanProfile,onboardingSuggestions}=await import("../src/onboarding.js");
+  const ok=cleanProfile({firstName:" Arnaud <b> ",lastName:"Masson",age:"44",city:"Nantes",styles:["Metalcore","Polka","Deathcore","Hardcore","Punk"],photo:"data:image/jpeg;base64,AAAA"});
+  assert.equal(ok.firstName,"Arnaud b");assert.equal(ok.age,44);assert.deepEqual(ok.styles,["Metalcore","Deathcore","Hardcore"]);assert.equal(ok.photo,"data:image/jpeg;base64,AAAA");
+  assert.match(cleanProfile({firstName:"A",age:14,city:"X",styles:["Rock"]}).error,/15 ans/);
+  assert.match(cleanProfile({firstName:"A",age:20,city:"",styles:["Rock"]}).error,/ville/);
+  assert.match(cleanProfile({firstName:"A",age:20,city:"X",styles:[]}).error,/style/);
+  assert.equal(cleanProfile({firstName:"A",age:20,city:"X",styles:["Rock"],photo:"javascript:alert(1)"}).photo,"");
+  assert.match(cleanProfile({firstName:"A",age:20,city:"X",styles:["Rock"],photo:"data:image/png;base64,"+"A".repeat(130000)}).error,/lourde/);
+  const r=await onboardingSuggestions(["Metalcore","Deathcore","Hardcore"],{perStyle:5,budgetMs:1});
+  assert.equal(r.items.length,15,"5 bands per style");});
