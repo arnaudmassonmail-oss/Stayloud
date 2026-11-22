@@ -174,7 +174,7 @@
 .sl-listen-head{color:#9aa4ae;font-size:13px;margin:0 2px 10px}.sl-listen-note{color:#6f7a85;font-size:12px;margin:10px 2px 0}
 .sl-lb{border:1px solid #232a31;border-radius:14px;background:#0b0e12;padding:10px;margin-bottom:10px}
 .sl-lb-top{display:flex;align-items:center;gap:10px}.sl-lb-img{flex:none;width:44px;height:44px;border-radius:50%;background:#1b2128 center/cover no-repeat}
-.sl-lb-name{display:flex;flex-direction:column;min-width:0}.sl-lb-name b{font-size:16px}.sl-lb-name small{color:#9aa4ae;font-size:12px}.sl-lb-name a{color:#ff4b55;text-decoration:none;font-weight:700}
+.sl-lb-name{display:flex;flex-direction:column;min-width:0;flex:1}.sl-lb-follow{flex:none;border:1px solid #d4141e;background:#d4141e;color:#fff;border-radius:999px;padding:7px 12px;font:700 13px Inter,Arial,sans-serif;cursor:pointer;white-space:nowrap}.sl-lb-follow.done{background:transparent;border-color:#2c343d;color:#7dffb0;cursor:default}.sl-lb-follow:disabled:not(.done){opacity:.6}.sl-lb-name b{font-size:16px}.sl-lb-name small{color:#9aa4ae;font-size:12px}.sl-lb-name a{color:#ff4b55;text-decoration:none;font-weight:700}
 .sl-lb-tracks{list-style:none;margin:8px 0 0;padding:0}.sl-lb-tracks li{--p:0%;display:flex;align-items:center;gap:10px;padding:6px 2px;border-top:1px solid #1b2128;background:linear-gradient(90deg,rgba(212,20,30,.18) var(--p),transparent var(--p))}
 .sl-lb-tracks li button{flex:none;width:34px;height:34px;border-radius:50%;border:0;background:#d4141e;color:#fff;cursor:pointer;font-size:13px}.sl-lb-tracks li.on button{background:#fff;color:#d4141e}
 .sl-lb-tracks li span{display:flex;flex-direction:column;min-width:0;font-size:14px}.sl-lb-tracks li small{color:#8b949e;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1377,9 +1377,18 @@ function listenBtnHTML(x){const k=agendaKey(x);if(k&&!k.startsWith('|'))EVREG[k]
  return `<button type="button" class="sl-news-pill sl-listen" data-k="${esc(k)}" onclick="event.stopPropagation();openConcertListen(this.dataset.k)" aria-label="Écouter les groupes">${HEAD_ICON}</button>`}
 let LISTEN_AUDIO=null;
 function listenAudio(){if(!LISTEN_AUDIO){LISTEN_AUDIO=new Audio();LISTEN_AUDIO.preload='none'}return LISTEN_AUDIO}
+// "+ Suivre" a band straight from the listen sheet (or any band name).
+function isFollowed(name){const n=normUi(name);return A.some(a=>normUi(a.name)===n)}
+function followBtnHTML(name){return isFollowed(name)?'<button type="button" class="sl-lb-follow done" disabled>✓ Suivi</button>':`<button type="button" class="sl-lb-follow" data-name="${esc(name)}" onclick="event.stopPropagation();followBand(this)">+ Suivre</button>`}
+async function followBand(btn){const name=btn.dataset.name;if(!name||isFollowed(name))return;btn.disabled=true;btn.textContent='Ajout…';
+ try{let id=null;try{id=(await api('/api/onboarding/resolve?name='+encodeURIComponent(name)+'&from='))?.artist}catch{}
+  const r=await api('/api/artists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:id?.name||name,mbid:id?.mbid||'',country:id?.country||'',disambiguation:id?.disambiguation||'',identitySource:'MusicBrainz',identityKey:id?.mbid?'mbid:'+id.mbid:'listen|'+normUi(name),identityLocked:!!id?.mbid})});
+  if(r?.artist){const e=A.findIndex(a=>Number(a.id)===Number(r.artist.id));if(e>=0)A[e]=r.artist;else A.push(r.artist)}
+  btn.classList.add('done');btn.textContent='✓ Suivi';slToast(`${name} ajouté à tes groupes 🤘 Ses infos arrivent dans quelques minutes.`);try{render()}catch{}}
+ catch(e){btn.disabled=false;btn.textContent='+ Suivre';slToast('Ajout impossible : '+(e.message||'réessaie plus tard'))}}
 function openConcertListen(k){const x=EVREG[k];if(!x)return;const bands=listenBands(x);
  try{slStop()}catch{}try{if(radioAudio&&!radioAudio.paused)radioToggle()}catch{}
- const html=`<div class="sl-listen-head">${esc([x.venue,x.city].filter(Boolean).join(' · '))}${x.date?' · '+esc(relDate?relDate(x.date):x.date):''}</div>`+bands.map((b,i)=>`<div class="sl-lb" id="lb${i}"><div class="sl-lb-top"><span class="sl-lb-img"></span><span class="sl-lb-name"><b>${esc(b)}</b><small>Recherche des extraits…</small></span></div><ol class="sl-lb-tracks"></ol></div>`).join('')+'<p class="sl-listen-note">Extraits de 30 s (Deezer) des titres les plus écoutés de chaque groupe.</p>';
+ const html=`<div class="sl-listen-head">${esc([x.venue,x.city].filter(Boolean).join(' · '))}${x.date?' · '+esc(relDate?relDate(x.date):x.date):''}</div>`+bands.map((b,i)=>`<div class="sl-lb" id="lb${i}"><div class="sl-lb-top"><span class="sl-lb-img"></span><span class="sl-lb-name"><b>${esc(b)}</b><small>Recherche des extraits…</small></span>${followBtnHTML(b)}</div><ol class="sl-lb-tracks"></ol></div>`).join('')+'<p class="sl-listen-note">Extraits de 30 s (Deezer) des titres les plus écoutés de chaque groupe.</p>';
  const {m}=slMiniSheet('listenSheet','Écouter les groupes',html);const audio=listenAudio();let cur=null;
  const stop=()=>{audio.pause();if(cur){cur.classList.remove('on');cur.querySelector('button').textContent='▶';cur=null}};
  new MutationObserver((_,o)=>{if(!m.isConnected){stop();o.disconnect()}}).observe(document.body,{childList:true});
