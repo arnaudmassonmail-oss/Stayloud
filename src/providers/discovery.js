@@ -551,7 +551,9 @@ function fetchErrorLabel(e){const m=String(e?.message||e||'');if(/abort/i.test(m
 // city) are kept 12 h in memory and in D1 (agendas change slowly, and every
 // page read through the relay costs Jina tokens). When a source refuses us (429/403)
 // the last good copy is used instead of showing nothing.
-const SOURCE_TTL=12*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
+// Agendas change slowly: a page is read again after 2 days (ScraperAPI free
+// plan = 1 000 credits a month).
+const SOURCE_TTL=48*60*60*1000;const sourceMem=new Map();const sourceInflight=new Map();
 async function cachedSourceRows(key,fetcher,ttl=SOURCE_TTL){
   // The prefix changes when a parser changes (src2: Concerts-Metal cells read
   // line by line), so rows saved in D1 with the old reading are not reused.
@@ -596,9 +598,24 @@ export function relayRequest(url,{render=false}={}){
     return {name:'ScraperAPI',target:`https://api.scraperapi.com/?${p}`,headers:{Accept:'text/html'},timeout:60000}}
   return {name:'Jina',target:`https://r.jina.ai/${url}`,headers:{Accept:'text/plain, text/markdown, text/html','User-Agent':'Mozilla/5.0 STAYPIT/1.0',...JINA_HEADERS()},timeout:0};
 }
+// ScraperAPI daily budget (SCRAPERAPI_DAILY_CREDITS, 30 by default: about
+// 1 000 a month). A page with render costs 10 credits, otherwise 1 (10 with
+// premium). Over the budget, or once ScraperAPI says the credits are used up,
+// the relay rests until the next day and the last saved concerts are shown.
+const relayBudget={day:'',used:0,blockedDay:''};
+const parisDayStr=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Paris'}).format(new Date());
+export function relayCost(opts={}){return opts.render||process.env.SCRAPERAPI_PREMIUM==='1'?10:1}
+export function relaySpend(cost,{day=parisDayStr(),max=Number(process.env.SCRAPERAPI_DAILY_CREDITS)||30}={}){
+  if(relayBudget.day!==day){relayBudget.day=day;relayBudget.used=0}
+  if(relayBudget.blockedDay===day)throw new Error('relais ScraperAPI au repos (crédits épuisés)');
+  if(relayBudget.used+cost>max)throw new Error(`relais ScraperAPI : budget du jour atteint (${relayBudget.used}/${max} crédits)`);
+  relayBudget.used+=cost;return relayBudget.used}
+export function relayBudgetStatus(){return {...relayBudget}}
 async function fetchDiscoveryProxy(url,timeout=18000,opts={}){
   const r=relayRequest(url,opts);
-  const go=()=>fetchText(r.target,{headers:r.headers},Math.max(timeout,r.timeout));
+  const go=async()=>{if(r.name==='ScraperAPI')relaySpend(relayCost(opts));
+    try{return await fetchText(r.target,{headers:r.headers},Math.max(timeout,r.timeout))}
+    catch(e){if(r.name==='ScraperAPI'&&/HTTP 403/.test(String(e?.message)))relayBudget.blockedDay=parisDayStr();throw e}};
   // The relay allows a few requests per minute: on "too many requests" wait
   // a moment and try once more. The same page asked twice within 12 h (city
   // searches, several regions sharing a page) is read once.
@@ -1051,7 +1068,7 @@ async function fetchSueurDeMetalLive(region,errs=null){
 }
 // Its timeline is built by JavaScript: read with rendering (10 ScraperAPI
 // credits instead of 1), so it is kept 24 h.
-function fetchSueurDeMetal(region,errs=null){return cachedSourceRows('sdm:'+region.slug,()=>fetchSueurDeMetalLive(region,errs),24*60*60*1000).then(r=>({...r,region}))}
+function fetchSueurDeMetal(region,errs=null){return cachedSourceRows('sdm:'+region.slug,()=>fetchSueurDeMetalLive(region,errs),72*60*60*1000).then(r=>({...r,region}))}
 async function discoverSueurDeMetal(lat,lon,radiusKm,diag={}){
   const selected=SDM_REGIONS.map(r=>({...r,distance:distanceKm(lat,lon,r.lat,r.lon)})).sort((a,b)=>a.distance-b.distance).filter((r,i)=>i===0||r.distance<=Math.max(radiusKm+150,200)).slice(0,2);
   const errs=[];const results=await Promise.all(selected.map(r=>fetchSueurDeMetal(r,errs)));

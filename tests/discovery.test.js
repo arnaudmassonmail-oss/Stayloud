@@ -57,3 +57,9 @@ test("Concerts-Metal HTML: date line and bands in the same cell are kept apart",
   assert.doesNotMatch(rows[0].title,/2026|Zinor/);assert.match(rows[0].title,/In Your Face/);
   assert.equal(rows[1].city,"Nantes");assert.equal(rows[1].venue,"Le Ferrailleur");assert.match(rows[1].title,/Cage Fight/);
 });
+test("ScraperAPI daily budget: 30 credits by default, render costs 10, resets the next day",async()=>{
+  const {relaySpend,relayCost}=await import("../src/providers/discovery.js");
+  assert.equal(relayCost({render:true}),10);assert.equal(relayCost({}),1);
+  relaySpend(10,{day:"2099-01-01"});relaySpend(10,{day:"2099-01-01"});relaySpend(10,{day:"2099-01-01"});
+  assert.throws(()=>relaySpend(1,{day:"2099-01-01"}),/budget du jour/);
+  assert.equal(relaySpend(1,{day:"2099-01-02"}),1,"new day, new budget")});

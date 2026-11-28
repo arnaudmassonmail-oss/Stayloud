@@ -6,6 +6,7 @@
 // administrator (plus a message in "Messages reçus") when something is
 // wrong. The same problems are not sent again for 3 days.
 import {testSources} from "./providers/discovery.js";
+import {sourcesHealth} from "./health.js";
 import {d1ApiCacheGet,d1ApiCachePut} from "./d1.js";
 
 const KEY="monitor:last",RESEND_AFTER=3*24*3600e3;
@@ -71,10 +72,14 @@ async function sendEmail(subject,text){
 }
 
 export async function runDailyCheck({force=false,now=Date.now()}={}){
-  let results=[],srcErr="";
-  try{results=await testSources()}catch(e){srcErr=String(e?.message||e)}
+  // Reading the agendas through ScraperAPI costs credits (free plan: 1 000 a
+  // month): the full source test runs on Mondays (or on demand); the other
+  // days rely on the health of the real reads (health.js).
+  let results=[],srcErr="",weekly=force||new Date(now).toLocaleDateString("en-GB",{timeZone:"Europe/Paris",weekday:"short"})==="Mon";
+  if(weekly){try{results=await testSources()}catch(e){srcErr=String(e?.message||e)}}
+  else{try{for(const h of await sourcesHealth(now))if(h.status==="down"&&h.id!=="bi"&&h.id!=="tm")srcErr+=(srcErr?" · ":"")+`${h.name} ne renvoie plus de concert depuis le ${new Date(h.lastOk).toLocaleDateString("fr-FR",{timeZone:"Europe/Paris"})} (${h.lastError})`}catch{}}
   const svc=await serviceProblems();
-  const problems=[...(srcErr?[`Test des sources impossible : ${srcErr}`]:[]),...sourceProblems(results),...svc.problems];
+  const problems=[...(srcErr?[weekly?`Test des sources impossible : ${srcErr}`:`Sources : ${srcErr}`]:[]),...sourceProblems(results),...svc.problems];
   const summary=results.map(r=>{const best=(r.attempts||[]).reduce((b,a)=>a.rows>(b?.rows||0)?a:b,null);return `${r.name} : ${best?.rows||0}`}).join(" · ");
   const sig=problems.map(p=>p.split(" :")[0]).sort().join("|");
   let prev=null;try{prev=(await d1ApiCacheGet(KEY))?.value}catch{}
